@@ -2,8 +2,8 @@
 
 > **Generated from**: docs/12_PRD_REALTIME_RELAY.md (v3.1)
 > **Created**: 2026-02-13
-> **Updated**: 2026-02-13 (React Native + Fastify 아키텍처 반영)
-> **Status**: pending
+> **Updated**: 2026-02-14 (Phase 1 Relay Server — Python/uv 기반 구현 완료)
+> **Status**: in_progress
 
 ## Execution Config
 
@@ -13,53 +13,61 @@
 | `commit_per_phase` | true | Phase별 중간 커밋 |
 | `quality_gate` | true | /auto-commit 품질 검사 |
 
+## Tech Stack (uv 적응)
+
+| Component | PRD 원본 | 실제 구현 |
+|-----------|---------|----------|
+| Relay Server | Fastify + @fastify/websocket | **FastAPI + websockets + uvicorn** |
+| 패키지 매니저 | npm/pnpm | **uv** |
+| 언어 | TypeScript | **Python 3.12+** |
+
 ## Phases
 
-### Phase 1: Core Relay (MVP) — Relay Server + React Native + Push-to-Talk
+### Phase 1: Core Relay (MVP) — Relay Server + Push-to-Talk
 
-#### 1A. Relay Server 초기화 (Fastify)
-- [ ] Fastify + @fastify/websocket 프로젝트 셋업 (`apps/relay-server/`)
-- [ ] 환경변수 관리 (`src/config.ts`)
-- [ ] 공유 타입 정의 (`src/types.ts`)
-- [ ] Twilio SDK 설치 + 환경변수 설정
+#### 1A. Relay Server 초기화 (FastAPI + uv)
+- [x] FastAPI + uvicorn + websockets 프로젝트 셋업 (`apps/relay-server/`)
+- [x] 환경변수 관리 (`src/config.py`)
+- [x] 공유 타입 정의 — Pydantic models (`src/types.py`)
+- [x] Twilio SDK 설치 + 환경변수 설정
 
 #### 1B. Twilio 연동
-- [ ] Twilio Outbound Call REST API 발신 (`src/twilio/outbound.ts`)
-- [ ] Twilio TwiML webhook 엔드포인트 (`src/routes/twilio-webhook.ts`)
-- [ ] Twilio Media Stream WebSocket 핸들러 (`src/twilio/media-stream.ts`)
-- [ ] Twilio status callback 엔드포인트
+- [x] Twilio Outbound Call REST API 발신 (`src/twilio/outbound.py`)
+- [x] Twilio TwiML webhook 엔드포인트 (`src/routes/twilio_webhook.py`)
+- [x] Twilio Media Stream WebSocket 핸들러 (`src/twilio/media_stream.py`)
+- [x] Twilio status callback 엔드포인트
 
 #### 1C. OpenAI Realtime API 연결
-- [ ] OpenAI Realtime API WebSocket 연결 관리 (`src/realtime/session-manager.ts`)
-- [ ] Session A 구현: 텍스트 입력 → targetLanguage TTS → Twilio (`src/realtime/session-a.ts`)
-- [ ] Session B 구현: Twilio 오디오 → STT → sourceLanguage 번역 (`src/realtime/session-b.ts`)
-- [ ] 오디오 라우터: Twilio ↔ OpenAI 양방향 포워딩 (`src/realtime/audio-router.ts`)
+- [x] OpenAI Realtime API WebSocket 연결 관리 (`src/realtime/session_manager.py`)
+- [x] Session A 구현: User 입력 → targetLanguage TTS → Twilio (`src/realtime/session_a.py`)
+- [x] Session B 구현: Twilio 오디오 → STT → sourceLanguage 번역 (`src/realtime/session_b.py`)
+- [x] 오디오 라우터: Twilio ↔ OpenAI 양방향 포워딩 (`src/realtime/audio_router.py`)
 
 #### 1D. v3 프롬프트 시스템
-- [ ] v3 System Prompt 생성기 — Relay/Agent 모드별 (`src/prompt/generator-v3.ts`)
-- [ ] 언어별 프롬프트 템플릿 (`src/prompt/templates.ts`)
-- [ ] First Message Strategy 구현 — AI 고지 + 수신자 인사 대기 (`src/realtime/first-message.ts`)
+- [x] v3 System Prompt 생성기 — Relay/Agent 모드별 (`src/prompt/generator_v3.py`)
+- [x] 언어별 프롬프트 템플릿 (`src/prompt/templates.py`)
+- [x] First Message Strategy 구현 — AI 고지 + 수신자 인사 대기 (`src/realtime/first_message.py`)
 
 #### 1E. Relay Server API 엔드포인트
-- [ ] 통화 시작 API (`POST /relay/calls/start`)
-- [ ] WebSocket 스트리밍 엔드포인트 (`WS /relay/calls/:id/stream`)
-- [ ] Health Check 엔드포인트 (`GET /health`) [M-8]
-- [ ] 최대 통화 시간 제한 (10분 자동 종료 + 8분 경고) [M-3]
-- [ ] 통화 종료 + 결과 DB 저장 (Supabase)
-- [ ] Feature Flag 분기 (CALL_MODE=realtime | elevenlabs)
+- [x] 통화 시작 API (`POST /relay/calls/start`)
+- [x] WebSocket 스트리밍 엔드포인트 (`WS /relay/calls/{id}/stream`)
+- [x] Health Check 엔드포인트 (`GET /health`) [M-8]
+- [x] 최대 통화 시간 제한 (10분 자동 종료 + 8분 경고) [M-3]
+- [x] 통화 종료 API (`POST /relay/calls/{id}/end`)
+- [x] Feature Flag 분기 (CALL_MODE=realtime | elevenlabs)
 
 #### 1H. Turn Overlap / Interrupt 처리 [M-1]
-- [ ] 수신자 발화 감지 시 Session A TTS 중단 (response.cancel)
-- [ ] Interrupt 우선순위 로직 (수신자 > User > AI)
-- [ ] 동시 발화 시 User 앱 시각적 알림 ("상대방이 말하고 있습니다")
+- [x] 수신자 발화 감지 시 Session A TTS 중단 (response.cancel)
+- [x] Interrupt 우선순위 로직 (수신자 > User > AI)
+- [x] 동시 발화 시 User 앱 시각적 알림 ("상대방이 말하고 있습니다")
 
-#### 1F. React Native 앱 초기화
+#### 1F. React Native 앱 초기화 (미구현 — Phase 1.5)
 - [ ] Expo 프로젝트 셋업 (`apps/mobile/`)
 - [ ] Supabase Auth 연동 (기존 로직 이식)
 - [ ] 기본 네비게이션 구조 (Expo Router)
 - [ ] Relay Server WebSocket 연결 훅 (`hooks/useRelayWebSocket.ts`)
 
-#### 1G. React Native 통화 UI
+#### 1G. React Native 통화 UI (미구현 — Phase 1.5)
 - [ ] 기본 실시간 자막 UI (`components/call/LiveCaptionPanel.tsx`)
 - [ ] Push-to-Talk 입력 UI (`components/call/PushToTalkInput.tsx`)
 - [ ] 통화 뷰 컴포넌트 (`components/call/RealtimeCallView.tsx`)
@@ -82,7 +90,7 @@
 
 ### Phase 3: Non-blocking Pipeline + Recovery
 
-- [ ] Ring Buffer 구현 — 30초 오디오 보관 (`relay-server/src/realtime/ring-buffer.ts`)
+- [ ] Ring Buffer 구현 — 30초 오디오 보관 (`relay-server/src/realtime/ring_buffer.py`)
 - [ ] 시퀀스 번호 추적 (lastSent, lastReceived)
 - [ ] Session 장애 감지 (WebSocket close/error, heartbeat timeout)
 - [ ] Session 자동 재연결 (exponential backoff)
@@ -94,10 +102,10 @@
 
 ### Phase 4: Guardrail + Fallback LLM
 
-- [ ] Guardrail Level 분류 로직 — 텍스트 델타 검사 기반 (`relay-server/src/guardrail/checker.ts`) [M-2]
-- [ ] 규칙 기반 필터 — 반말, 욕설, 비격식 감지 (`relay-server/src/guardrail/filter.ts`) [M-2]
-- [ ] 금지어/교정 사전 (`relay-server/src/guardrail/dictionary.ts`)
-- [ ] Fallback LLM 교정 호출 — GPT-4o-mini (`relay-server/src/guardrail/fallback-llm.ts`)
+- [ ] Guardrail Level 분류 로직 — 텍스트 델타 검사 기반 (`relay-server/src/guardrail/checker.py`) [M-2]
+- [ ] 규칙 기반 필터 — 반말, 욕설, 비격식 감지 (`relay-server/src/guardrail/filter.py`) [M-2]
+- [ ] 금지어/교정 사전 (`relay-server/src/guardrail/dictionary.py`)
+- [ ] Fallback LLM 교정 호출 — GPT-4o-mini (`relay-server/src/guardrail/fallback_llm.py`)
 - [ ] Level 1: 자동 PASS (추가 처리 없음)
 - [ ] Level 2: 비동기 검증 (TTS 출력 후 백그라운드 교정)
 - [ ] Level 3: 동기 차단 (필러 오디오 + 교정 후 재전송)
@@ -119,12 +127,17 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 0/65 |
-| Current Phase | - |
-| Status | pending |
+| Total Tasks | 22/65 |
+| Current Phase | Phase 1 (Relay Server 완료, React Native 미착수) |
+| Status | in_progress |
 
 ## Execution Log
 
 | Timestamp | Phase | Task | Status |
 |-----------|-------|------|--------|
-| - | - | - | - |
+| 2026-02-14 | Phase 1 | 1A. Relay Server 초기화 (uv + FastAPI) | completed |
+| 2026-02-14 | Phase 1 | 1B. Twilio 연동 | completed |
+| 2026-02-14 | Phase 1 | 1C. OpenAI Realtime API 연결 | completed |
+| 2026-02-14 | Phase 1 | 1D. v3 프롬프트 시스템 | completed |
+| 2026-02-14 | Phase 1 | 1E. API 엔드포인트 | completed |
+| 2026-02-14 | Phase 1 | 1H. Turn Overlap / Interrupt 처리 | completed |
