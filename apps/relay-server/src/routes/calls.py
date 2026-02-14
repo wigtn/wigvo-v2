@@ -17,8 +17,10 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from src.config import settings
+from src.db.supabase_client import persist_call
 from src.prompt.generator_v3 import generate_session_a_prompt, generate_session_b_prompt
 from src.realtime.session_manager import DualSessionManager
+from src.tools.definitions import get_tools_for_mode
 from src.twilio.outbound import make_call
 from src.types import (
     ActiveCall,
@@ -77,15 +79,19 @@ async def start_call(req: CallStartRequest):
         target_language=req.target_language,
     )
 
-    # 3. OpenAI Dual Session 생성
+    # 3. OpenAI Dual Session 생성 (vad_mode 전달 — PRD 4.2)
     dual_session = DualSessionManager(
         mode=req.mode,
         source_language=req.source_language,
         target_language=req.target_language,
+        vad_mode=req.vad_mode,
     )
 
+    # Agent Mode: Function Calling 도구 설정
+    tools_a = get_tools_for_mode(req.mode.value)
+
     try:
-        await dual_session.connect(prompt_a, prompt_b)
+        await dual_session.connect(prompt_a, prompt_b, tools_a=tools_a)
     except Exception as e:
         logger.error("Failed to create OpenAI sessions: %s", e)
         raise HTTPException(status_code=502, detail="Failed to create AI sessions")
@@ -151,6 +157,12 @@ async def end_call(call_id: str, req: CallEndRequest | None = None):
         client.calls(call.call_sid).update(status="completed")
     except Exception as e:
         logger.warning("Failed to terminate Twilio call: %s", e)
+
+    # Phase 5: DB에 통화 데이터 저장
+    try:
+        await persist_call(call)
+    except Exception as e:
+        logger.warning("Failed to persist call data: %s", e)
 
     # Active call 제거
     active_calls.pop(call_id, None)

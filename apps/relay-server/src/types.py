@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # --- Enums ---
@@ -26,6 +26,29 @@ class VadMode(str, Enum):
     CLIENT = "client"
     SERVER = "server"
     PUSH_TO_TALK = "push_to_talk"
+
+
+class SessionState(str, Enum):
+    """OpenAI Realtime 세션 상태."""
+
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+    RECONNECTING = "reconnecting"
+    DEGRADED = "degraded"
+
+
+class RecoveryEventType(str, Enum):
+    """Recovery 이벤트 유형."""
+
+    SESSION_DISCONNECTED = "session_disconnected"
+    RECONNECT_ATTEMPT = "reconnect_attempt"
+    RECONNECT_SUCCESS = "reconnect_success"
+    RECONNECT_FAILED = "reconnect_failed"
+    CATCHUP_STARTED = "catchup_started"
+    CATCHUP_COMPLETED = "catchup_completed"
+    DEGRADED_MODE_ENTERED = "degraded_mode_entered"
+    DEGRADED_MODE_EXITED = "degraded_mode_exited"
+    NORMAL_RESTORED = "normal_restored"
 
 
 # --- Request / Response ---
@@ -65,9 +88,13 @@ class WsMessageType(str, Enum):
 
     # Relay → App
     CAPTION = "caption"
+    CAPTION_ORIGINAL = "caption.original"       # 원문 자막 (즉시)
+    CAPTION_TRANSLATED = "caption.translated"    # 번역 자막 (0.5초 후)
     RECIPIENT_AUDIO = "recipient_audio"
     CALL_STATUS = "call_status"
     INTERRUPT_ALERT = "interrupt_alert"
+    SESSION_RECOVERY = "session.recovery"
+    GUARDRAIL_TRIGGERED = "guardrail.triggered"
     ERROR = "error"
 
 
@@ -87,6 +114,7 @@ class SessionConfig(BaseModel):
     input_audio_format: str = "pcm16"
     output_audio_format: str = "g711_ulaw"
     vad_mode: VadMode = VadMode.SERVER
+    input_audio_transcription: dict[str, str] | None = None  # e.g. {"model": "whisper-1"}
 
 
 # --- Twilio Media Stream Events ---
@@ -104,6 +132,46 @@ class TwilioMediaEvent(BaseModel):
 # --- Active Call State ---
 
 
+class RecoveryEvent(BaseModel):
+    """Recovery 이벤트 로그 항목."""
+
+    type: RecoveryEventType
+    session_label: str = ""
+    gap_ms: int = 0
+    attempt: int = 0
+    status: str = ""
+    timestamp: float = 0.0
+    detail: str = ""
+
+
+class TranscriptEntry(BaseModel):
+    """양쪽 언어 트랜스크립트 항목 (transcript_bilingual)."""
+    role: str  # "user" | "recipient" | "ai"
+    original_text: str = ""
+    translated_text: str = ""
+    language: str = ""  # source language code
+    timestamp: float = 0.0
+
+
+class CostTokens(BaseModel):
+    """OpenAI Realtime API 토큰 사용량 추적."""
+    audio_input: int = 0
+    audio_output: int = 0
+    text_input: int = 0
+    text_output: int = 0
+
+    def add(self, other: "CostTokens") -> None:
+        """다른 CostTokens를 더한다."""
+        self.audio_input += other.audio_input
+        self.audio_output += other.audio_output
+        self.text_input += other.text_input
+        self.text_output += other.text_output
+
+    @property
+    def total(self) -> int:
+        return self.audio_input + self.audio_output + self.text_input + self.text_output
+
+
 class ActiveCall(BaseModel):
     call_id: str
     call_sid: str = ""
@@ -117,3 +185,16 @@ class ActiveCall(BaseModel):
     collected_data: dict[str, Any] = {}
     started_at: float = 0.0
     first_message_sent: bool = False
+    # Phase 3: Recovery
+    session_a_state: SessionState = SessionState.CONNECTED
+    session_b_state: SessionState = SessionState.CONNECTED
+    recovery_events: list[RecoveryEvent] = Field(default_factory=list)
+    transcript_history: list[dict[str, str]] = Field(default_factory=list)
+    # Phase 5: Transcript & Cost
+    transcript_bilingual: list[TranscriptEntry] = Field(default_factory=list)
+    cost_tokens: CostTokens = Field(default_factory=CostTokens)
+    call_result: str = ""
+    call_result_data: dict[str, Any] = Field(default_factory=dict)
+    auto_ended: bool = False
+    function_call_logs: list[dict[str, Any]] = Field(default_factory=list)
+    guardrail_events_log: list[dict[str, Any]] = Field(default_factory=list)

@@ -1,17 +1,22 @@
-"""Session A: User → 수신자 (Outbound Translation).
+"""Session A: User -> 수신자 (Outbound Translation).
 
 PRD 3.2:
   Input:  User 음성 (sourceLanguage) 또는 텍스트
-  Process: STT → Translation (source→target) → Guardrail → TTS
-  Output: targetLanguage 음성 → Twilio → 수신자
-  Side:   번역된 텍스트 → App 자막
+  Process: STT -> Translation (source->target) -> Guardrail -> TTS
+  Output: targetLanguage 음성 -> Twilio -> 수신자
+  Side:   번역된 텍스트 -> App 자막
 """
 
+import asyncio
 import base64
 import logging
+import time
 from typing import Any, Callable, Coroutine
 
+from src.guardrail.checker import GuardrailChecker, GuardrailLevel
 from src.realtime.session_manager import RealtimeSession
+from src.tools.executor import FunctionExecutor
+from src.types import ActiveCall, CallMode, CostTokens, TranscriptEntry
 
 logger = logging.getLogger(__name__)
 
@@ -22,22 +27,54 @@ class SessionAHandler:
     def __init__(
         self,
         session: RealtimeSession,
+        call: ActiveCall | None = None,
         on_tts_audio: Callable[[bytes], Coroutine] | None = None,
         on_caption: Callable[[str, str], Coroutine] | None = None,
         on_response_done: Callable[[], Coroutine] | None = None,
+        guardrail: GuardrailChecker | None = None,
+        on_guardrail_filler: Callable[[str], Coroutine] | None = None,
+        on_guardrail_corrected_tts: Callable[[str], Coroutine] | None = None,
+        on_guardrail_event: Callable[[dict], Coroutine] | None = None,
+        on_function_call_result: Callable[[str, dict], Coroutine] | None = None,
     ):
         """
         Args:
             session: Session A RealtimeSession
-            on_tts_audio: TTS 오디오 청크 콜백 (g711_ulaw bytes → Twilio로 전달)
-            on_caption: 자막 콜백 (role, text → App에 전달)
+            call: ActiveCall 인스턴스 (transcript/cost 추적용)
+            on_tts_audio: TTS 오디오 청크 콜백 (g711_ulaw bytes -> Twilio로 전달)
+            on_caption: 자막 콜백 (role, text -> App에 전달)
             on_response_done: 응답 완료 콜백
+            guardrail: GuardrailChecker 인스턴스 (None이면 guardrail 비활성화)
+            on_guardrail_filler: Level 3 시 필러 텍스트 콜백 ("잠시만요")
+            on_guardrail_corrected_tts: Level 3 교정 완료 시 교정된 텍스트 -> 재TTS 콜백
+            on_guardrail_event: Guardrail 이벤트 로그 콜백 (App에 디버그 알림)
+            on_function_call_result: Function Call 결과 콜백 (Agent Mode, result + args)
         """
         self.session = session
+        self._call = call
         self._on_tts_audio = on_tts_audio
         self._on_caption = on_caption
         self._on_response_done = on_response_done
+        self._guardrail = guardrail
+        self._on_guardrail_filler = on_guardrail_filler
+        self._on_guardrail_corrected_tts = on_guardrail_corrected_tts
+        self._on_guardrail_event = on_guardrail_event
         self._is_generating = False
+
+        # 현재 응답의 전체 transcript (Level 2/3 교정용)
+        self._current_transcript: str = ""
+
+        # Function Calling (Agent Mode only)
+        self._function_executor: FunctionExecutor | None = None
+        if call and call.mode == CallMode.AGENT:
+            self._function_executor = FunctionExecutor(
+                call=call,
+                on_call_result=on_function_call_result,
+            )
+        # 현재 진행 중인 function call의 인자 누적 버퍼
+        self._fc_call_id: str = ""
+        self._fc_name: str = ""
+        self._fc_arguments: str = ""
 
         self._register_handlers()
 
@@ -51,6 +88,16 @@ class SessionAHandler:
         )
         self.session.on(
             "input_audio_buffer.speech_stopped", self._handle_user_speech_stopped
+        )
+
+        # Function Calling 이벤트 (Agent Mode)
+        self.session.on(
+            "response.function_call_arguments.delta",
+            self._handle_function_call_arguments_delta,
+        )
+        self.session.on(
+            "response.function_call_arguments.done",
+            self._handle_function_call_arguments_done,
         )
 
     @property
@@ -74,33 +121,122 @@ class SessionAHandler:
     async def cancel(self) -> None:
         """진행 중인 TTS를 중단한다 (Interrupt)."""
         self._is_generating = False
+        if self._guardrail:
+            self._guardrail.reset()
+        self._current_transcript = ""
         await self.session.cancel_response()
 
     # --- 이벤트 핸들러 ---
 
     async def _handle_audio_delta(self, event: dict[str, Any]) -> None:
-        """Session A TTS 오디오 청크 → Twilio로 전달."""
+        """Session A TTS 오디오 청크 -> Twilio로 전달.
+
+        PRD M-2: Level 3인 경우 오디오를 Twilio로 전달하지 않음.
+        """
         self._is_generating = True
         delta_b64 = event.get("delta", "")
-        if delta_b64 and self._on_tts_audio:
-            audio_bytes = base64.b64decode(delta_b64)
-            await self._on_tts_audio(audio_bytes)
+        if not delta_b64 or not self._on_tts_audio:
+            return
+
+        # Guardrail Level 3: TTS 오디오 차단
+        if self._guardrail and self._guardrail.is_blocking:
+            return
+
+        audio_bytes = base64.b64decode(delta_b64)
+        await self._on_tts_audio(audio_bytes)
 
     async def _handle_transcript_delta(self, event: dict[str, Any]) -> None:
-        """번역된 텍스트 스트리밍 → App 자막."""
+        """번역된 텍스트 스트리밍 -> Guardrail 검사 + App 자막.
+
+        PRD M-2: 텍스트 델타가 오디오보다 먼저 도착하므로,
+        텍스트를 검사하여 오디오 차단 여부를 결정할 수 있다.
+        """
         delta = event.get("delta", "")
-        if delta and self._on_caption:
+        if not delta:
+            return
+
+        self._current_transcript += delta
+
+        # Guardrail 텍스트 델타 검사
+        if self._guardrail:
+            prev_level = self._guardrail.current_level
+            level = self._guardrail.check_text_delta(delta)
+
+            # Level 3으로 에스컬레이션 시 필러 오디오 재생
+            if level == GuardrailLevel.LEVEL_3 and prev_level < GuardrailLevel.LEVEL_3:
+                logger.warning(
+                    "[SessionA] Guardrail Level 3 triggered — blocking TTS audio"
+                )
+                if self._on_guardrail_filler:
+                    filler = self._guardrail.check_full_text(self._current_transcript).filler_text
+                    await self._on_guardrail_filler(filler)
+
+        # 자막은 항상 전달 (Level 3에서도 App에는 자막 표시)
+        if self._on_caption:
             await self._on_caption("assistant", delta)
 
     async def _handle_transcript_done(self, event: dict[str, Any]) -> None:
-        """번역 텍스트 완료."""
+        """번역 텍스트 완료 -> Level 2/3 교정 처리 + 양방향 transcript 저장."""
         transcript = event.get("transcript", "")
-        if transcript:
-            logger.info("[SessionA] Translation complete: %s", transcript[:80])
+        if not transcript:
+            return
+
+        logger.info("[SessionA] Translation complete: %s", transcript[:80])
+
+        # 양방향 transcript 저장 (Session A: user 발화 → 번역)
+        if self._call:
+            self._call.transcript_bilingual.append(
+                TranscriptEntry(
+                    role="user",
+                    original_text=transcript,
+                    translated_text=transcript,  # Session A output은 이미 번역된 텍스트
+                    language=self._call.source_language,
+                    timestamp=time.time(),
+                )
+            )
+
+        if not self._guardrail:
+            return
+
+        level = self._guardrail.current_level
+
+        if level == GuardrailLevel.LEVEL_2:
+            # Level 2: 비동기 교정 (TTS는 이미 전달됨, 백그라운드에서 교정 로그)
+            asyncio.create_task(self._handle_level2_correction(transcript))
+
+        elif level == GuardrailLevel.LEVEL_3:
+            # Level 3: 동기 교정 (TTS는 차단됨, 교정 후 재전송)
+            await self._handle_level3_correction(transcript)
 
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
-        """Session A 응답 완료."""
+        """Session A 응답 완료 + cost token 추적."""
         self._is_generating = False
+
+        # Cost token 추적
+        if self._call:
+            response = event.get("response", {})
+            usage = response.get("usage", {})
+            if usage:
+                input_details = usage.get("input_token_details", {})
+                output_details = usage.get("output_token_details", {})
+                tokens = CostTokens(
+                    audio_input=input_details.get("audio_tokens", 0),
+                    text_input=input_details.get("text_tokens", 0),
+                    audio_output=output_details.get("audio_tokens", 0),
+                    text_output=output_details.get("text_tokens", 0),
+                )
+                self._call.cost_tokens.add(tokens)
+                logger.debug(
+                    "[SessionA] Tokens — audio_in=%d text_in=%d audio_out=%d text_out=%d (total=%d)",
+                    tokens.audio_input, tokens.text_input,
+                    tokens.audio_output, tokens.text_output,
+                    self._call.cost_tokens.total,
+                )
+
+        # 다음 응답을 위해 guardrail 상태 초기화
+        if self._guardrail:
+            self._guardrail.reset()
+        self._current_transcript = ""
         if self._on_response_done:
             await self._on_response_done()
 
@@ -111,3 +247,97 @@ class SessionAHandler:
     async def _handle_user_speech_stopped(self, event: dict[str, Any]) -> None:
         """Server VAD가 User 발화 종료를 감지."""
         logger.debug("[SessionA] User speech stopped")
+
+    # --- Function Calling 핸들러 (Agent Mode) ---
+
+    async def _handle_function_call_arguments_delta(self, event: dict[str, Any]) -> None:
+        """Function Call 인자가 스트리밍으로 도착한다 (delta).
+
+        OpenAI Realtime API는 function call의 인자를 청크 단위로 전송하므로,
+        모든 delta를 누적하여 완성된 JSON을 만든다.
+        """
+        if not self._function_executor:
+            return
+
+        delta = event.get("delta", "")
+        call_id = event.get("call_id", "")
+        name = event.get("name", "")
+
+        # 새로운 function call 시작 시 버퍼 초기화
+        if call_id and call_id != self._fc_call_id:
+            self._fc_call_id = call_id
+            self._fc_name = name
+            self._fc_arguments = ""
+
+        self._fc_arguments += delta
+
+    async def _handle_function_call_arguments_done(self, event: dict[str, Any]) -> None:
+        """Function Call 인자 수신 완료 -> 실행 + 결과 전송.
+
+        1. FunctionExecutor로 함수를 실행한다.
+        2. 결과를 conversation.item.create (function_call_output)로 OpenAI에 전송한다.
+        3. response.create로 AI가 다음 응답을 생성하도록 한다.
+        """
+        if not self._function_executor:
+            return
+
+        call_id = event.get("call_id", self._fc_call_id)
+        name = event.get("name", self._fc_name)
+        arguments = event.get("arguments", self._fc_arguments)
+
+        if not call_id or not name:
+            logger.warning("[SessionA] Function call done but missing call_id or name")
+            return
+
+        logger.info("[SessionA] Function call complete: %s (call_id=%s)", name, call_id)
+
+        # 함수 실행
+        output = await self._function_executor.execute(
+            function_name=name,
+            arguments=arguments,
+            call_id=call_id,
+        )
+
+        # OpenAI에 결과 전송 + 새 응답 요청
+        await self.session.send_function_call_output(call_id, output)
+
+        # 버퍼 초기화
+        self._fc_call_id = ""
+        self._fc_name = ""
+        self._fc_arguments = ""
+
+    # --- Guardrail 교정 ---
+
+    async def _handle_level2_correction(self, transcript: str) -> None:
+        """Level 2 비동기 교정 (백그라운드)."""
+        if not self._guardrail:
+            return
+
+        await self._guardrail.correct_async(transcript)
+
+        # App에 guardrail 이벤트 알림 (디버그용)
+        if self._on_guardrail_event:
+            await self._on_guardrail_event({
+                "level": 2,
+                "original": transcript,
+            })
+
+    async def _handle_level3_correction(self, transcript: str) -> None:
+        """Level 3 동기 교정 (차단 후 교정된 텍스트로 재TTS)."""
+        if not self._guardrail:
+            return
+
+        result = await self._guardrail.correct_text(transcript)
+
+        # App에 guardrail 이벤트 알림
+        if self._on_guardrail_event:
+            await self._on_guardrail_event({
+                "level": 3,
+                "original": transcript,
+                "corrected": result.corrected_text,
+                "correction_time_ms": result.correction_time_ms,
+            })
+
+        # 교정된 텍스트로 새 TTS 생성 요청
+        if result.corrected_text and self._on_guardrail_corrected_tts:
+            await self._on_guardrail_corrected_tts(result.corrected_text)
