@@ -17,6 +17,7 @@ import asyncio
 import base64
 import io
 import logging
+import struct
 import time
 from typing import Any, Callable, Coroutine
 
@@ -79,9 +80,15 @@ class SessionRecoveryManager:
         # 세션에 에러/종료 핸들러 등록
         self.session.on("error", self._on_session_error)
         self.session.on("session.created", self._on_heartbeat)
+        self.session.on("session.updated", self._on_heartbeat)
         self.session.on("response.done", self._on_heartbeat)
         self.session.on("response.audio.delta", self._on_heartbeat)
+        self.session.on("response.audio_transcript.delta", self._on_heartbeat)
+        self.session.on("response.text.delta", self._on_heartbeat)
         self.session.on("input_audio_buffer.speech_started", self._on_heartbeat)
+        self.session.on("input_audio_buffer.speech_stopped", self._on_heartbeat)
+        self.session.on("input_audio_buffer.committed", self._on_heartbeat)
+        self.session.on("conversation.item.input_audio_transcription.completed", self._on_heartbeat)
 
     async def stop(self) -> None:
         """모니터링과 복구 작업을 중지한다."""
@@ -420,9 +427,10 @@ class SessionRecoveryManager:
         if self._openai_client is None:
             self._openai_client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
 
-        # g711_ulaw 원본을 그대로 전송 — Whisper가 다양한 포맷 지원
-        audio_file = io.BytesIO(audio_bytes)
-        audio_file.name = "audio.raw"
+        # PCM16 raw bytes를 WAV 형식으로 감싸서 전송
+        wav_bytes = self._pcm16_to_wav(audio_bytes, sample_rate=8000)
+        audio_file = io.BytesIO(wav_bytes)
+        audio_file.name = "audio.wav"
 
         try:
             result = await self._openai_client.audio.transcriptions.create(
@@ -434,6 +442,33 @@ class SessionRecoveryManager:
         except Exception as e:
             logger.error("[%s] Whisper transcription error: %s", self.session.label, e)
             return None
+
+    @staticmethod
+    def _pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
+        """PCM16 raw bytes에 WAV 헤더를 붙여서 Whisper가 인식할 수 있게 한다."""
+        num_channels = 1
+        bits_per_sample = 16
+        byte_rate = sample_rate * num_channels * bits_per_sample // 8
+        block_align = num_channels * bits_per_sample // 8
+        data_size = len(pcm_bytes)
+
+        header = struct.pack(
+            "<4sI4s4sIHHIIHH4sI",
+            b"RIFF",
+            36 + data_size,
+            b"WAVE",
+            b"fmt ",
+            16,                 # chunk size
+            1,                  # PCM format
+            num_channels,
+            sample_rate,
+            byte_rate,
+            block_align,
+            bits_per_sample,
+            b"data",
+            data_size,
+        )
+        return header + pcm_bytes
 
     def _update_session_state(self, state: SessionState) -> None:
         """ActiveCall의 세션 상태를 업데이트한다."""

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     recovery_backoff_multiplier: float = 2.0
     recovery_timeout_s: float = 10.0  # 10초 초과 시 Degraded Mode
     heartbeat_interval_s: float = 5.0
-    heartbeat_timeout_s: float = 5.0
+    heartbeat_timeout_s: float = 15.0
     ring_buffer_capacity_slots: int = 1500  # 30초 / 20ms
 
     # Whisper fallback (Degraded Mode)

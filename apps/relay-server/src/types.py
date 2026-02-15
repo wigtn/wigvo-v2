@@ -3,7 +3,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Enums ---
@@ -62,6 +64,13 @@ class CallStartRequest(BaseModel):
     target_language: str = "ko"
     collected_data: dict[str, Any] | None = None
     vad_mode: VadMode = VadMode.CLIENT
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, v: str) -> str:
+        if not re.match(r"^\+[1-9]\d{1,14}$", v):
+            raise ValueError("Phone number must be in E.164 format (e.g., +14155552671)")
+        return v
 
 
 class CallStartResponse(BaseModel):

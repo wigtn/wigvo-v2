@@ -16,12 +16,12 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from src.call_manager import call_manager
 from src.config import settings
-from src.db.supabase_client import persist_call
 from src.prompt.generator_v3 import generate_session_a_prompt, generate_session_b_prompt
 from src.realtime.session_manager import DualSessionManager
 from src.tools.definitions import get_tools_for_mode
-from src.twilio.outbound import make_call
+from src.twilio.outbound import make_call_async
 from src.types import (
     ActiveCall,
     CallEndRequest,
@@ -37,9 +37,7 @@ logger = logging.getLogger(__name__)
 @router.post("/calls/start", response_model=CallStartResponse)
 async def start_call(req: CallStartRequest):
     """전화 발신을 시작하고 OpenAI Dual Session을 생성한다."""
-    from src.main import active_calls
-
-    if req.call_id in active_calls:
+    if call_manager.get_call(req.call_id):
         raise HTTPException(status_code=409, detail="Call already in progress")
 
     # Feature flag 확인
@@ -96,23 +94,26 @@ async def start_call(req: CallStartRequest):
         logger.error("Failed to create OpenAI sessions: %s", e)
         raise HTTPException(status_code=502, detail="Failed to create AI sessions")
 
+    # 즉시 session 등록 (Twilio 실패 시 cleanup_call로 정리)
+    call_manager.register_session(req.call_id, dual_session)
+
     call.session_a_id = dual_session.session_a.session_id
     call.session_b_id = dual_session.session_b.session_id
 
-    # 4. Twilio 발신
+    # 4. Twilio 발신 (async)
     try:
-        call_sid = make_call(
+        call_sid = await make_call_async(
             phone_number=req.phone_number,
             call_id=req.call_id,
         )
         call.call_sid = call_sid
     except Exception as e:
         logger.error("Failed to make Twilio call: %s", e)
-        await dual_session.close()
+        await call_manager.cleanup_call(req.call_id, reason="twilio_failed")
         raise HTTPException(status_code=502, detail="Failed to initiate phone call")
 
     # 5. Active call 등록
-    active_calls[req.call_id] = call
+    call_manager.register_call(req.call_id, call)
 
     # WebSocket URL 생성
     ws_base = settings.relay_server_url.replace("http", "ws")
@@ -139,13 +140,10 @@ async def start_call(req: CallStartRequest):
 @router.post("/calls/{call_id}/end")
 async def end_call(call_id: str, req: CallEndRequest | None = None):
     """통화를 종료한다."""
-    from src.main import active_calls
-
-    call = active_calls.get(call_id)
+    call = call_manager.get_call(call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
 
-    call.status = CallStatus.ENDED
     reason = req.reason if req else "user_hangup"
     logger.info("Ending call: id=%s, reason=%s", call_id, reason)
 
@@ -158,13 +156,7 @@ async def end_call(call_id: str, req: CallEndRequest | None = None):
     except Exception as e:
         logger.warning("Failed to terminate Twilio call: %s", e)
 
-    # Phase 5: DB에 통화 데이터 저장
-    try:
-        await persist_call(call)
-    except Exception as e:
-        logger.warning("Failed to persist call data: %s", e)
-
-    # Active call 제거
-    active_calls.pop(call_id, None)
+    # 중앙 정리 (DB persist 포함)
+    await call_manager.cleanup_call(call_id, reason=reason)
 
     return {"status": "ended", "call_id": call_id, "reason": reason}

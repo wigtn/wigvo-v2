@@ -36,8 +36,10 @@ class RealtimeSession:
         self._on_connection_lost: Callable[[], Coroutine] | None = None
 
     def on(self, event_type: str, handler: Callable[..., Coroutine]) -> None:
-        """이벤트 핸들러 등록."""
-        self._handlers.setdefault(event_type, []).append(handler)
+        """이벤트 핸들러 등록 (중복 방지)."""
+        handlers = self._handlers.setdefault(event_type, [])
+        if handler not in handlers:
+            handlers.append(handler)
 
     def set_on_connection_lost(self, handler: Callable[[], Coroutine]) -> None:
         """연결 종료 콜백 등록 (Recovery에서 사용)."""
@@ -278,10 +280,14 @@ class DualSessionManager:
             tools_a: Session A Function Calling 도구 (Agent Mode)
             tools_b: Session B Function Calling 도구 (Agent Mode)
         """
-        await asyncio.gather(
-            self.session_a.connect(prompt_a, tools=tools_a),
-            self.session_b.connect(prompt_b, tools=tools_b),
-        )
+        try:
+            await asyncio.gather(
+                self.session_a.connect(prompt_a, tools=tools_a),
+                self.session_b.connect(prompt_b, tools=tools_b),
+            )
+        except Exception:
+            await self.close()
+            raise
 
     async def close(self) -> None:
         """양쪽 세션을 종료한다."""

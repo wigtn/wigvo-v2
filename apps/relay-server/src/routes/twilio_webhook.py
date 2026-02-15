@@ -1,15 +1,15 @@
 """Twilio webhook — TwiML 응답 + Media Stream 연결 + status callback."""
 
 import asyncio
+import json
 import logging
 
 from fastapi import APIRouter, Form, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 
+from src.call_manager import call_manager
 from src.config import settings
-from src.prompt.generator_v3 import generate_session_a_prompt, generate_session_b_prompt
 from src.realtime.audio_router import AudioRouter
-from src.realtime.session_manager import DualSessionManager
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import WsMessage, WsMessageType
 
@@ -47,7 +47,11 @@ async def twilio_status_callback(
     CallSid: str = Form(""),
     CallDuration: str = Form(""),
 ):
-    """Twilio 통화 상태 변경 콜백."""
+    """Twilio 통화 상태 변경 콜백.
+
+    수신자가 전화를 끊으면 completed/busy/no-answer 등이 오며,
+    이때 cleanup_call()로 자동 정리한다.
+    """
     logger.info(
         "Twilio status callback: call_id=%s, status=%s, sid=%s, duration=%s",
         call_id,
@@ -56,22 +60,10 @@ async def twilio_status_callback(
         CallDuration,
     )
 
-    # Active call 상태 업데이트는 main.py의 active_calls를 통해 처리
-    from src.main import active_calls
-    from src.types import CallStatus as CallStatusEnum
-
-    if call_id in active_calls:
-        call = active_calls[call_id]
-        status_map = {
-            "completed": CallStatusEnum.ENDED,
-            "busy": CallStatusEnum.FAILED,
-            "no-answer": CallStatusEnum.FAILED,
-            "failed": CallStatusEnum.FAILED,
-            "canceled": CallStatusEnum.FAILED,
-        }
-        if CallStatus in status_map:
-            call.status = status_map[CallStatus]
-            logger.info("Call %s status updated to %s", call_id, call.status)
+    # 통화 종료 상태면 자동 정리
+    terminal_statuses = {"completed", "failed", "busy", "no-answer", "canceled"}
+    if CallStatus in terminal_statuses:
+        await call_manager.cleanup_call(call_id, reason=f"twilio_{CallStatus}")
 
     return {"status": "ok"}
 
@@ -82,67 +74,56 @@ async def twilio_media_stream(ws: WebSocket, call_id: str):
 
     TwiML <Stream>이 연결하는 엔드포인트.
     수신자 오디오 → Session B, Session A TTS → Twilio.
-    """
-    from src.main import active_calls
-    from src.routes.stream import _routers, _sessions
 
+    DualSession은 calls.py start_call()에서 이미 생성되어 있으므로
+    call_manager에서 가져와 재사용한다.
+    """
     await ws.accept()
     logger.info("Twilio Media Stream connected (call=%s)", call_id)
 
-    call = active_calls.get(call_id)
+    call = call_manager.get_call(call_id)
     if not call:
         logger.error("Twilio Media Stream: call %s not found", call_id)
+        await ws.close()
+        return
+
+    # DualSession은 start_call()에서 이미 생성됨 — 재사용
+    dual_session = call_manager.get_session(call_id)
+    if not dual_session:
+        logger.error("Twilio Media Stream: session for call %s not found", call_id)
         await ws.close()
         return
 
     # Twilio handler 생성
     twilio_handler = TwilioMediaStreamHandler(ws=ws, call=call)
 
-    # DualSession 생성 (아직 없으면)
-    if call_id not in _sessions:
-        dual_session = DualSessionManager(
-            mode=call.mode,
-            source_language=call.source_language,
-            target_language=call.target_language,
-        )
-        prompt_a = generate_session_a_prompt(
-            mode=call.mode,
-            source_language=call.source_language,
-            target_language=call.target_language,
-            collected_data=call.collected_data,
-        )
-        prompt_b = generate_session_b_prompt(
-            source_language=call.source_language,
-            target_language=call.target_language,
-        )
-        await dual_session.connect(prompt_a, prompt_b)
-        _sessions[call_id] = dual_session
-    else:
-        dual_session = _sessions[call_id]
-
-    # App WebSocket에 메시지를 보내는 함수 (stream.py의 app_websocket이 처리)
-    app_ws_queue: asyncio.Queue[WsMessage] = asyncio.Queue()
-
+    # App WS로 메시지 전송 — call_manager를 통해 직접 전송
     async def send_to_app(msg: WsMessage) -> None:
-        await app_ws_queue.put(msg)
+        await call_manager.send_to_app(call_id, msg)
 
-    # AudioRouter 생성
+    # AudioRouter 생성 + 등록
     audio_router = AudioRouter(
         call=call,
         dual_session=dual_session,
         twilio_handler=twilio_handler,
         app_ws_send=send_to_app,
     )
-    _routers[call_id] = audio_router
+    call_manager.register_router(call_id, audio_router)
     await audio_router.start()
 
-    # OpenAI 세션 리스닝 시작 (백그라운드)
+    # OpenAI 세션 리스닝 시작 (백그라운드) + 등록
     listen_task = asyncio.create_task(dual_session.listen_all())
+    call_manager.register_listen_task(call_id, listen_task)
 
     try:
         while True:
             raw = await ws.receive_text()
-            parsed = await twilio_handler.handle_message(raw)
+
+            try:
+                parsed = await twilio_handler.handle_message(raw)
+            except json.JSONDecodeError:
+                logger.warning("Invalid JSON from Twilio (call=%s)", call_id)
+                continue
 
             if parsed and parsed.event == "media":
                 audio = twilio_handler.extract_audio(parsed)
@@ -157,5 +138,4 @@ async def twilio_media_stream(ws: WebSocket, call_id: str):
     except Exception as e:
         logger.error("Twilio Media Stream error (call=%s): %s", call_id, e)
     finally:
-        listen_task.cancel()
-        await audio_router.stop()
+        await call_manager.cleanup_call(call_id, reason="twilio_disconnected")

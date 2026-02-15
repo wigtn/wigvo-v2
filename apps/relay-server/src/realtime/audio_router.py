@@ -143,6 +143,10 @@ class AudioRouter:
         """오디오 라우팅을 중지한다."""
         if self._call_timer_task:
             self._call_timer_task.cancel()
+            try:
+                await self._call_timer_task
+            except asyncio.CancelledError:
+                pass
 
         # Phase 3: Recovery 중지
         await self.recovery_a.stop()
@@ -185,8 +189,18 @@ class AudioRouter:
 
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """Twilio에서 받은 수신자 오디오를 Session B로 전달."""
+        # Phase 3: Ring Buffer B에 기록 (handle_user_audio와 대칭)
+        seq = self.ring_buffer_b.write(audio_bytes)
+
+        if self.recovery_b.is_recovering:
+            return  # 복구 중에는 버퍼에만 기록
+
+        if self.recovery_b.is_degraded:
+            return  # Degraded 모드에서는 버퍼에만 기록
+
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
+        self.ring_buffer_b.mark_sent(seq)
 
     # --- Session A 콜백: TTS -> Twilio ---
 

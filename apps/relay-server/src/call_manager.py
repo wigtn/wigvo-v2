@@ -1,0 +1,180 @@
+"""중앙 집중화된 통화 라이프사이클 관리.
+
+모든 통화 상태(active_calls, sessions, routers, app_ws)를 하나의 싱글톤에서 관리하고,
+idempotent cleanup_call()로 모든 정리를 처리한다.
+
+핵심 문제 해결:
+  - 리소스 누수: 분산된 정리 로직 → 하나의 cleanup_call()
+  - Race condition: asyncio.Lock으로 동시 호출 방지
+  - 수신자 전화 끊기 미감지: Twilio status-callback에서 cleanup_call() 호출
+"""
+
+import asyncio
+import logging
+from typing import TYPE_CHECKING
+
+from src.types import ActiveCall, CallStatus, WsMessage, WsMessageType
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
+
+    from src.realtime.audio_router import AudioRouter
+    from src.realtime.session_manager import DualSessionManager
+
+logger = logging.getLogger(__name__)
+
+
+class CallManager:
+    """통화 라이프사이클을 중앙에서 관리하는 싱글톤."""
+
+    def __init__(self) -> None:
+        self._calls: dict[str, ActiveCall] = {}
+        self._sessions: dict[str, "DualSessionManager"] = {}
+        self._routers: dict[str, "AudioRouter"] = {}
+        self._app_ws: dict[str, "WebSocket"] = {}
+        self._listen_tasks: dict[str, asyncio.Task] = {}
+        self._cleanup_locks: dict[str, asyncio.Lock] = {}
+
+    # --- Register ---
+
+    def register_call(self, call_id: str, call: ActiveCall) -> None:
+        self._calls[call_id] = call
+
+    def register_session(self, call_id: str, session: "DualSessionManager") -> None:
+        self._sessions[call_id] = session
+
+    def register_router(self, call_id: str, router: "AudioRouter") -> None:
+        self._routers[call_id] = router
+
+    def register_app_ws(self, call_id: str, ws: "WebSocket") -> None:
+        self._app_ws[call_id] = ws
+
+    def register_listen_task(self, call_id: str, task: asyncio.Task) -> None:
+        self._listen_tasks[call_id] = task
+
+    # --- Get (읽기 전용) ---
+
+    def get_call(self, call_id: str) -> ActiveCall | None:
+        return self._calls.get(call_id)
+
+    def get_session(self, call_id: str) -> "DualSessionManager | None":
+        return self._sessions.get(call_id)
+
+    def get_router(self, call_id: str) -> "AudioRouter | None":
+        return self._routers.get(call_id)
+
+    def get_app_ws(self, call_id: str) -> "WebSocket | None":
+        return self._app_ws.get(call_id)
+
+    @property
+    def active_call_count(self) -> int:
+        return len(self._calls)
+
+    # --- App WS 메시지 전송 ---
+
+    async def send_to_app(self, call_id: str, msg: WsMessage) -> None:
+        """App WebSocket으로 메시지 전송 (연결되어 있으면)."""
+        ws = self._app_ws.get(call_id)
+        if ws:
+            try:
+                await ws.send_json(msg.model_dump())
+            except Exception:
+                logger.warning("Failed to send message to App WS (call=%s)", call_id)
+
+    # --- 중앙 정리 (핵심) ---
+
+    async def cleanup_call(self, call_id: str, reason: str = "unknown") -> None:
+        """통화 리소스를 정리한다 (idempotent).
+
+        어디서든 호출 가능:
+          - stream.py finally (App WS 끊김)
+          - twilio_webhook.py finally (Twilio 끊김)
+          - twilio_status_callback (수신자 전화 끊기)
+          - calls.py end_call (유저 수동 종료)
+          - shutdown_all (서버 종료)
+
+        순서:
+          1. AudioRouter stop
+          2. Listen task cancel
+          3. DualSession close
+          4. App WS 알림 + 닫기
+          5. DB persist
+          6. active_calls에서 제거
+        """
+        if call_id not in self._cleanup_locks:
+            self._cleanup_locks[call_id] = asyncio.Lock()
+
+        lock = self._cleanup_locks[call_id]
+
+        async with lock:
+            # Idempotent: 이미 정리된 경우
+            if (
+                call_id not in self._calls
+                and call_id not in self._sessions
+                and call_id not in self._routers
+            ):
+                return
+
+            logger.info("Cleaning up call %s (reason: %s)", call_id, reason)
+
+            # 1. AudioRouter stop
+            router = self._routers.pop(call_id, None)
+            if router:
+                try:
+                    await router.stop()
+                except Exception as e:
+                    logger.warning("Error stopping router (call=%s): %s", call_id, e)
+
+            # 2. Listen task cancel
+            listen_task = self._listen_tasks.pop(call_id, None)
+            if listen_task:
+                listen_task.cancel()
+                try:
+                    await listen_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+            # 3. DualSession close
+            session = self._sessions.pop(call_id, None)
+            if session:
+                try:
+                    await session.close()
+                except Exception as e:
+                    logger.warning("Error closing session (call=%s): %s", call_id, e)
+
+            # 4. App WS 알림 + 닫기
+            app_ws = self._app_ws.pop(call_id, None)
+            if app_ws:
+                try:
+                    await app_ws.send_json(
+                        WsMessage(
+                            type=WsMessageType.CALL_STATUS,
+                            data={"status": "ended", "reason": reason},
+                        ).model_dump()
+                    )
+                    await app_ws.close()
+                except Exception:
+                    pass
+
+            # 5. DB persist + active_calls 제거
+            call = self._calls.pop(call_id, None)
+            if call:
+                call.status = CallStatus.ENDED
+                try:
+                    from src.db.supabase_client import persist_call
+
+                    await persist_call(call)
+                except Exception as e:
+                    logger.warning("Failed to persist call %s: %s", call_id, e)
+
+            logger.info("Cleanup complete for call %s", call_id)
+
+    async def shutdown_all(self) -> None:
+        """서버 종료 시 모든 활성 통화를 정리한다."""
+        call_ids = list(self._calls.keys())
+        logger.info("Shutting down %d active calls", len(call_ids))
+        for call_id in call_ids:
+            await self.cleanup_call(call_id, reason="server_shutdown")
+
+
+call_manager = CallManager()

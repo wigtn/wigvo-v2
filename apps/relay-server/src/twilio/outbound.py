@@ -1,5 +1,6 @@
 """Twilio outbound call — REST API를 사용하여 전화 발신."""
 
+import asyncio
 import logging
 
 from twilio.rest import Client
@@ -45,3 +46,11 @@ def make_call(
 
     logger.info("Twilio call created: sid=%s", call.sid)
     return call.sid
+
+
+async def make_call_async(
+    phone_number: str,
+    call_id: str,
+) -> str:
+    """make_call의 async 래퍼 — 이벤트 루프를 블로킹하지 않는다."""
+    return await asyncio.to_thread(make_call, phone_number=phone_number, call_id=call_id)

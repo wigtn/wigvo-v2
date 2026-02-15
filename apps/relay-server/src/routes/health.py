@@ -4,6 +4,8 @@ import time
 
 from fastapi import APIRouter
 
+from src.call_manager import call_manager
+
 router = APIRouter(tags=["health"])
 
 _start_time = time.time()
@@ -11,10 +13,8 @@ _start_time = time.time()
 
 @router.get("/health")
 async def health_check():
-    from src.main import active_calls
-
     return {
         "status": "ok",
-        "active_sessions": len(active_calls),
+        "active_sessions": call_manager.active_call_count,
         "uptime": round(time.time() - _start_time),
     }

@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WIGVO - Test Console</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0b0f; color: #e4e4e7; height: 100vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      background: #111218; border-bottom: 1px solid #1e1f2a;
+      padding: 10px 20px; display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+    .badge { background: #3b82f6; color: #fff; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+    .status-pill {
+      display: flex; align-items: center; gap: 5px; font-size: 11px; color: #9ca3af;
+      background: #1a1b25; padding: 4px 10px; border-radius: 20px;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .dot.red { background: #ef4444; } .dot.yellow { background: #eab308; }
+    .dot.green { background: #22c55e; } .dot.blue { background: #3b82f6; }
+    .dot.gray { background: #4b5563; }
+
+    /* ===== Setup Panel (collapsible) ===== */
+    .setup-panel {
+      background: #111218; border-bottom: 1px solid #1e1f2a;
+      flex-shrink: 0; overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+    .setup-panel.collapsed { max-height: 0; padding: 0 20px; }
+    .setup-panel:not(.collapsed) { max-height: 200px; padding: 12px 20px; }
+    .setup-toggle {
+      background: none; border: none; color: #6b7280; font-size: 11px;
+      cursor: pointer; display: flex; align-items: center; gap: 4px;
+    }
+    .setup-toggle:hover { color: #e4e4e7; }
+    .setup-toggle .chevron { transition: transform 0.3s; font-size: 9px; }
+    .setup-toggle .chevron.open { transform: rotate(90deg); }
+    .setup-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .form-group { display: flex; flex-direction: column; gap: 3px; }
+    .form-group label { font-size: 10px; color: #6b7280; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    input, select {
+      background: #0a0b0f; border: 1px solid #2a2b38; color: #e4e4e7;
+      padding: 6px 9px; border-radius: 5px; font-size: 12px; outline: none;
+    }
+    input:focus, select:focus { border-color: #3b82f6; }
+
+    /* ===== Buttons ===== */
+    .btn {
+      padding: 6px 14px; border-radius: 5px; font-size: 12px; font-weight: 500;
+      border: none; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #dc2626; }
+    .btn-outline { background: transparent; border: 1px solid #2a2b38; color: #9ca3af; }
+    .btn-outline:hover:not(:disabled) { background: #1a1b25; color: #e4e4e7; }
+    .btn-recording { background: #ef4444; color: #fff; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    /* ===== Conversation Area (main) ===== */
+    .conversation-area {
+      flex: 1; display: flex; flex-direction: column; min-height: 0;
+      background: #0a0b0f;
+    }
+    .conversation-scroll {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .conversation-scroll::-webkit-scrollbar { width: 4px; }
+    .conversation-scroll::-webkit-scrollbar-thumb { background: #2a2b38; border-radius: 2px; }
+
+    .msg {
+      max-width: 70%; padding: 10px 14px; border-radius: 12px;
+      font-size: 13px; line-height: 1.5; position: relative;
+    }
+    .msg .meta {
+      font-size: 10px; font-weight: 600; margin-bottom: 3px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .msg .text { word-break: break-word; }
+
+    /* User (right-aligned, blue) */
+    .msg.user {
+      align-self: flex-end; background: #1e3a5f; border-bottom-right-radius: 4px;
+    }
+    .msg.user .meta { color: #60a5fa; }
+
+    /* Recipient (left-aligned, green) */
+    .msg.recipient {
+      align-self: flex-start; background: #162416; border-bottom-left-radius: 4px;
+    }
+    .msg.recipient .meta { color: #4ade80; }
+    .msg.recipient .stage-tag {
+      font-size: 9px; background: #1a3a1a; color: #6ee7a0; padding: 1px 5px;
+      border-radius: 3px; font-weight: 400;
+    }
+
+    /* System (center, compact) */
+    .msg.system {
+      align-self: center; max-width: 85%; background: #1a1820;
+      border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #a1a1aa;
+      border-left: 2px solid #eab308;
+    }
+    .msg.system .meta { color: #eab308; }
+
+    .empty-state {
+      color: #4b5563; font-size: 13px; text-align: center;
+      padding: 60px 20px; flex: 1; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ===== Input Bar ===== */
+    .input-bar {
+      flex-shrink: 0; background: #111218; border-top: 1px solid #1e1f2a;
+      padding: 10px 20px; display: flex; gap: 8px; align-items: center;
+    }
+    .input-bar input {
+      flex: 1; background: #0a0b0f; border: 1px solid #2a2b38;
+      padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #e4e4e7;
+    }
+    .mic-btn {
+      width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      background: #1a1b25; color: #9ca3af; transition: all 0.2s;
+    }
+    .mic-btn:hover:not(:disabled) { background: #2a2b38; color: #e4e4e7; }
+    .mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .mic-btn.active { background: #ef4444; color: #fff; animation: pulse 1.5s infinite; }
+    .mic-btn svg { width: 16px; height: 16px; }
+
+    /* VAD indicator in input bar */
+    .vad-indicator {
+      display: flex; align-items: center; gap: 6px; font-size: 10px; color: #6b7280;
+    }
+    .vad-bar { width: 60px; height: 4px; background: #1e1f2a; border-radius: 2px; overflow: hidden; }
+    .vad-fill { height: 100%; background: #22c55e; border-radius: 2px; transition: width 0.08s; width: 0%; }
+    .vad-state {
+      font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .vad-state.silent { background: #1e1f2a; color: #6b7280; }
+    .vad-state.speaking { background: #14532d; color: #4ade80; }
+    .vad-state.committed { background: #1e3a8a; color: #93c5fd; }
+
+    /* ===== Debug Panel (bottom, collapsible) ===== */
+    .debug-panel {
+      flex-shrink: 0; background: #0d0e14; border-top: 1px solid #1e1f2a;
+      transition: max-height 0.3s ease;
+      overflow: hidden;
+    }
+    .debug-panel.collapsed { max-height: 32px; }
+    .debug-panel:not(.collapsed) { max-height: 220px; }
+    .debug-header {
+      padding: 7px 20px; display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .debug-header:hover { background: #111218; }
+    .debug-title {
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: #6b7280; display: flex; align-items: center; gap: 6px;
+    }
+    .debug-title .chevron { font-size: 8px; transition: transform 0.3s; }
+    .debug-title .chevron.open { transform: rotate(180deg); }
+    .debug-actions { display: flex; gap: 6px; }
+    .debug-scroll {
+      max-height: 185px; overflow-y: auto; padding: 0 20px 8px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 10px; line-height: 1.6;
+    }
+    .debug-scroll::-webkit-scrollbar { width: 3px; }
+    .debug-scroll::-webkit-scrollbar-thumb { background: #2a2b38; border-radius: 2px; }
+    .log { padding: 1px 0; color: #6b7280; }
+    .log .ts { color: #4b5563; }
+    .log .arrow { margin: 0 2px; }
+    .log .arrow.in { color: #22c55e; }
+    .log .arrow.out { color: #3b82f6; }
+    .log .tp { color: #eab308; font-weight: 500; }
+    .log .m { color: #9ca3af; }
+    .log.err .m { color: #ef4444; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>WIGVO</h1>
+    <span class="badge">TEST</span>
+    <button class="setup-toggle" onclick="toggleSetup()">
+      <span class="chevron open" id="setupChevron">&#9654;</span>
+      Setup
+    </button>
+    <div class="header-right">
+      <div class="status-pill">
+        <div class="dot gray" id="dotWs"></div>
+        <span id="lblWs">Disconnected</span>
+      </div>
+      <div class="status-pill">
+        <div class="dot gray" id="dotCall"></div>
+        <span id="lblCall">Idle</span>
+      </div>
+      <button class="btn btn-primary" id="btnStart" onclick="startCall()" style="font-size:11px;padding:4px 12px;">Start</button>
+      <button class="btn btn-danger" id="btnEnd" onclick="endCall()" disabled style="font-size:11px;padding:4px 12px;">End</button>
+    </div>
+  </div>
+
+  <!-- Setup Panel -->
+  <div class="setup-panel" id="setupPanel">
+    <div class="setup-row">
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" id="phoneNumber" placeholder="+821012345678" style="width:160px">
+      </div>
+      <div class="form-group">
+        <label>From</label>
+        <select id="sourceLang" style="width:90px">
+          <option value="en">English</option>
+          <option value="ko">Korean</option>
+          <option value="ja">Japanese</option>
+          <option value="zh">Chinese</option>
+          <option value="vi">Vietnamese</option>
+          <option value="th">Thai</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>To</label>
+        <select id="targetLang" style="width:90px">
+          <option value="ko" selected>Korean</option>
+          <option value="en">English</option>
+          <option value="ja">Japanese</option>
+          <option value="zh">Chinese</option>
+          <option value="vi">Vietnamese</option>
+          <option value="th">Thai</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Mode</label>
+        <select id="callMode" style="width:80px">
+          <option value="relay">Relay</option>
+          <option value="agent">Agent</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>VAD</label>
+        <select id="vadMode" style="width:80px">
+          <option value="client">Client</option>
+          <option value="server">Server</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Server</label>
+        <input type="text" id="serverUrl" value="http://localhost:8000" style="width:200px">
+      </div>
+    </div>
+  </div>
+
+  <!-- Conversation -->
+  <div class="conversation-area">
+    <div class="conversation-scroll" id="conversation">
+      <div class="empty-state" id="emptyState">Start a call to begin conversation</div>
+    </div>
+  </div>
+
+  <!-- Input Bar -->
+  <div class="input-bar">
+    <button class="mic-btn" id="btnMic" onclick="toggleRecording()" disabled title="Toggle microphone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </svg>
+    </button>
+    <div class="vad-indicator" id="vadIndicator" style="display:none">
+      <div class="vad-bar"><div class="vad-fill" id="vadFill"></div></div>
+      <span class="vad-state silent" id="vadLabel">OFF</span>
+    </div>
+    <input type="text" id="textInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendText()" disabled>
+    <button class="btn btn-primary" onclick="sendText()" id="btnSend" disabled style="padding:8px 16px;">Send</button>
+  </div>
+
+  <!-- Debug Panel -->
+  <div class="debug-panel collapsed" id="debugPanel">
+    <div class="debug-header" onclick="toggleDebug()">
+      <div class="debug-title">
+        <span class="chevron" id="debugChevron">&#9650;</span>
+        Debug Log
+        <span id="debugCount" style="color:#4b5563">(0)</span>
+      </div>
+      <div class="debug-actions">
+        <button class="btn btn-outline" style="padding:1px 6px;font-size:9px" onclick="event.stopPropagation();clearDebug()">Clear</button>
+      </div>
+    </div>
+    <div class="debug-scroll" id="debugLog"></div>
+  </div>
+
+<script>
+// ========== State ==========
+let callId = null;
+let ws = null;
+let recorder = null;
+let vad = null;
+let player = null;
+let isRecording = false;
+let debugCount = 0;
+
+// ========== Toggle Panels ==========
+function toggleSetup() {
+  const panel = document.getElementById('setupPanel');
+  const chevron = document.getElementById('setupChevron');
+  panel.classList.toggle('collapsed');
+  chevron.classList.toggle('open');
+}
+
+function toggleDebug() {
+  const panel = document.getElementById('debugPanel');
+  const chevron = document.getElementById('debugChevron');
+  panel.classList.toggle('collapsed');
+  chevron.classList.toggle('open');
+}
+
+// ========== Utilities ==========
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+function now() {
+  return new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function float32ToInt16(f32) {
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return i16;
+}
+
+function int16ToBase64(i16) {
+  const bytes = new Uint8Array(i16.buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function base64ToFloat32(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const i16 = new Int16Array(bytes.buffer);
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+  return f32;
+}
+
+function downsample(buf, from, to) {
+  if (from === to) return buf;
+  const ratio = from / to;
+  const len = Math.floor(buf.length / ratio);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) out[i] = buf[Math.floor(i * ratio)];
+  return out;
+}
+
+// ========== Audio Player ==========
+class AudioPlayer {
+  constructor(sampleRate = 24000) {
+    this.sampleRate = sampleRate;
+    this.ctx = null;
+    this.nextTime = 0;
+  }
+  _ctx() {
+    if (!this.ctx) this.ctx = new AudioContext();
+    return this.ctx;
+  }
+  play(b64) {
+    const ctx = this._ctx();
+    const f32 = base64ToFloat32(b64);
+    if (f32.length === 0) return;
+    const buf = ctx.createBuffer(1, f32.length, this.sampleRate);
+    buf.getChannelData(0).set(f32);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    const t = ctx.currentTime;
+    if (this.nextTime < t) this.nextTime = t;
+    src.start(this.nextTime);
+    this.nextTime += buf.duration;
+  }
+  clear() { this.nextTime = 0; }
+  stop() {
+    if (this.ctx) { this.ctx.close(); this.ctx = null; this.nextTime = 0; }
+  }
+}
+
+// ========== VAD Processor ==========
+class VadProcessor {
+  constructor() {
+    this.speechThreshold = 0.015;
+    this.silenceThreshold = 0.008;
+    this.speechOnsetMs = 200;
+    this.speechEndMs = 500;
+    this.state = 'silent';
+    this.rms = 0;
+    this._speechStart = 0;
+    this._silenceStart = 0;
+    this.preBuffer = [];
+    this.preBufferMax = 2;
+    this.onStateChange = null;
+  }
+  process(f32) {
+    let sum = 0;
+    for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+    this.rms = Math.sqrt(sum / f32.length);
+    const t = Date.now();
+    const speech = this.rms >= this.speechThreshold;
+    const silence = this.rms < this.silenceThreshold;
+    switch (this.state) {
+      case 'silent':
+        if (speech) {
+          if (!this._speechStart) this._speechStart = t;
+          else if (t - this._speechStart >= this.speechOnsetMs) {
+            this._setState('speaking');
+            this._speechStart = 0; this._silenceStart = 0;
+            return 'onset';
+          }
+        } else { this._speechStart = 0; }
+        return 'silent';
+      case 'speaking':
+        if (silence) {
+          if (!this._silenceStart) this._silenceStart = t;
+          else if (t - this._silenceStart >= this.speechEndMs) {
+            this._setState('committed');
+            this._silenceStart = 0;
+            setTimeout(() => this._setState('silent'), 100);
+            return 'committed';
+          }
+        } else { this._silenceStart = 0; }
+        return 'speaking';
+      default:
+        return this.state;
+    }
+  }
+  _setState(s) {
+    this.state = s;
+    if (this.onStateChange) this.onStateChange(s);
+  }
+  pushPreBuffer(chunk) {
+    this.preBuffer.push(chunk);
+    if (this.preBuffer.length > this.preBufferMax) this.preBuffer.shift();
+  }
+  drainPreBuffer() {
+    const c = [...this.preBuffer]; this.preBuffer = []; return c;
+  }
+  reset() {
+    this.state = 'silent'; this.rms = 0;
+    this._speechStart = 0; this._silenceStart = 0;
+    this.preBuffer = [];
+    if (this.onStateChange) this.onStateChange('silent');
+  }
+}
+
+// ========== UI ==========
+function setWsStatus(status) {
+  const dot = document.getElementById('dotWs');
+  const lbl = document.getElementById('lblWs');
+  const colors = { disconnected: 'gray', connecting: 'yellow', connected: 'green', error: 'red' };
+  dot.className = 'dot ' + (colors[status] || 'gray');
+  lbl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function setCallStatus(status) {
+  const dot = document.getElementById('dotCall');
+  const lbl = document.getElementById('lblCall');
+  const colors = { idle: 'gray', calling: 'yellow', connected: 'green', ended: 'gray', error: 'red' };
+  dot.className = 'dot ' + (colors[status] || 'gray');
+  lbl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function updateVad() {
+  if (!vad) return;
+  const fill = document.getElementById('vadFill');
+  const label = document.getElementById('vadLabel');
+  const pct = Math.min(100, (vad.rms / 0.05) * 100);
+  fill.style.width = pct + '%';
+  fill.style.background = vad.state === 'speaking' ? '#22c55e' : vad.state === 'committed' ? '#3b82f6' : '#4b5563';
+  label.textContent = vad.state.toUpperCase();
+  label.className = 'vad-state ' + vad.state;
+}
+
+function addMessage(speaker, text, extra) {
+  const div = document.getElementById('conversation');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+
+  const el = document.createElement('div');
+  const type = speaker === 'user' ? 'user' : speaker === 'system' ? 'system' : 'recipient';
+  el.className = 'msg ' + type;
+
+  let metaHtml = '';
+  if (type === 'user') {
+    metaHtml = `<div class="meta">You &middot; ${now()}</div>`;
+  } else if (type === 'system') {
+    metaHtml = `<div class="meta">${now()}</div>`;
+  } else {
+    const stageTag = extra ? `<span class="stage-tag">${escHtml(extra)}</span>` : '';
+    metaHtml = `<div class="meta">Recipient &middot; ${now()} ${stageTag}</div>`;
+  }
+
+  el.innerHTML = `${metaHtml}<div class="text">${escHtml(text)}</div>`;
+  div.appendChild(el);
+  div.scrollTop = div.scrollHeight;
+}
+
+function logDebug(dir, type, msg, isError) {
+  debugCount++;
+  document.getElementById('debugCount').textContent = `(${debugCount})`;
+
+  const div = document.getElementById('debugLog');
+  const el = document.createElement('div');
+  el.className = 'log' + (isError ? ' err' : '');
+  const arrow = dir === 'in' ? '<span class="arrow in">&larr;</span>' : '<span class="arrow out">&rarr;</span>';
+  const display = msg.length > 100 ? msg.substring(0, 100) + '...' : msg;
+  el.innerHTML = `<span class="ts">${now()}</span> ${arrow} <span class="tp">${escHtml(type)}</span> <span class="m">${escHtml(display)}</span>`;
+  div.appendChild(el);
+  div.scrollTop = div.scrollHeight;
+}
+
+function clearDebug() {
+  document.getElementById('debugLog').innerHTML = '';
+  debugCount = 0;
+  document.getElementById('debugCount').textContent = '(0)';
+}
+
+// ========== Call Management ==========
+async function startCall() {
+  const phone = document.getElementById('phoneNumber').value.trim();
+  if (!phone) { alert('Phone number is required'); return; }
+
+  const serverUrl = document.getElementById('serverUrl').value.trim();
+  callId = uuid();
+
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnEnd').disabled = false;
+  document.getElementById('textInput').disabled = false;
+  document.getElementById('btnSend').disabled = false;
+  setCallStatus('calling');
+
+  // Collapse setup
+  document.getElementById('setupPanel').classList.add('collapsed');
+  document.getElementById('setupChevron').classList.remove('open');
+
+  const body = {
+    call_id: callId,
+    phone_number: phone,
+    mode: document.getElementById('callMode').value,
+    source_language: document.getElementById('sourceLang').value,
+    target_language: document.getElementById('targetLang').value,
+    vad_mode: document.getElementById('vadMode').value,
+  };
+
+  logDebug('out', 'HTTP', `POST /relay/calls/start ${JSON.stringify(body)}`);
+
+  try {
+    const res = await fetch(`${serverUrl}/relay/calls/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`HTTP ${res.status}: ${err}`);
+    }
+
+    const data = await res.json();
+    logDebug('in', 'HTTP', `200 OK ${JSON.stringify(data)}`);
+    addMessage('system', `Call started (${body.source_language} → ${body.target_language})`);
+    connectWebSocket(data.relay_ws_url);
+  } catch (e) {
+    logDebug('in', 'ERROR', e.message, true);
+    addMessage('system', `Error: ${e.message}`);
+    setCallStatus('error');
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnEnd').disabled = true;
+  }
+}
+
+function connectWebSocket(url) {
+  setWsStatus('connecting');
+  logDebug('out', 'WS', `Connecting to ${url}`);
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setWsStatus('connected');
+    logDebug('in', 'WS', 'Connected');
+    document.getElementById('btnMic').disabled = false;
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleWsMessage(msg);
+    } catch (err) {
+      logDebug('in', 'WS', `Parse error: ${e.data}`, true);
+    }
+  };
+
+  ws.onclose = (e) => {
+    setWsStatus('disconnected');
+    logDebug('in', 'WS', `Closed (code=${e.code})`);
+    stopRecording();
+    document.getElementById('btnMic').disabled = true;
+  };
+
+  ws.onerror = () => {
+    setWsStatus('error');
+    logDebug('in', 'WS', 'Connection error', true);
+  };
+}
+
+function handleWsMessage(msg) {
+  const type = msg.type;
+  const data = msg.data || {};
+
+  const logData = { ...data };
+  if (logData.audio) logData.audio = `[${logData.audio.length} chars]`;
+  logDebug('in', type, JSON.stringify(logData));
+
+  switch (type) {
+    case 'caption':
+      addMessage(data.role || 'ai', data.text || '', data.direction === 'outbound' ? 'outbound' : '');
+      break;
+    case 'caption.original':
+      addMessage('recipient', data.text || '', 'original');
+      break;
+    case 'caption.translated':
+      addMessage('recipient', data.text || '', 'translated');
+      break;
+    case 'recipient_audio':
+      if (data.audio) {
+        if (!player) player = new AudioPlayer(24000);
+        player.play(data.audio);
+      }
+      break;
+    case 'call_status': {
+      const status = data.status || '';
+      const message = data.message || status;
+      addMessage('system', message);
+      if (status === 'connected') setCallStatus('connected');
+      else if (status === 'ended' || status === 'timeout') {
+        setCallStatus('ended');
+        resetUI();
+      }
+      break;
+    }
+    case 'interrupt_alert':
+      addMessage('system', 'Recipient is speaking (interrupt)');
+      if (player) player.clear();
+      break;
+    case 'session.recovery':
+      addMessage('system', `Recovery: ${data.status} — ${data.message || ''}`);
+      break;
+    case 'guardrail.triggered':
+      addMessage('system', `Guardrail L${data.level || '?'}: ${data.action || ''}`);
+      break;
+    case 'error':
+      addMessage('system', `Error: ${data.message || 'Unknown'}`);
+      logDebug('in', 'ERROR', data.message || 'Unknown', true);
+      break;
+  }
+}
+
+async function endCall() {
+  stopRecording();
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'end_call', data: {} }));
+    logDebug('out', 'end_call', '');
+  }
+
+  const serverUrl = document.getElementById('serverUrl').value.trim();
+  if (callId) {
+    try {
+      await fetch(`${serverUrl}/relay/calls/${callId}/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_id: callId, reason: 'user_hangup' }),
+      });
+    } catch (e) {
+      console.warn('End call HTTP failed:', e);
+    }
+  }
+
+  if (ws) { ws.close(); ws = null; }
+  if (player) { player.stop(); player = null; }
+
+  callId = null;
+  setCallStatus('ended');
+  addMessage('system', 'Call ended');
+  resetUI();
+}
+
+function resetUI() {
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnEnd').disabled = true;
+  document.getElementById('textInput').disabled = true;
+  document.getElementById('btnSend').disabled = true;
+  document.getElementById('btnMic').disabled = true;
+}
+
+// ========== Text Input ==========
+function sendText() {
+  const input = document.getElementById('textInput');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+  ws.send(JSON.stringify({ type: 'text_input', data: { text } }));
+  logDebug('out', 'text_input', text);
+  addMessage('user', text);
+  input.value = '';
+}
+
+// ========== Audio Recording + VAD ==========
+const TARGET_SAMPLE_RATE = 24000;
+
+async function startRecording() {
+  if (isRecording) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+    vad = new VadProcessor();
+    vad.onStateChange = (state) => {
+      updateVad();
+      if (state === 'committed' && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'vad_state', data: { state: 'committed' } }));
+        logDebug('out', 'vad_state', 'committed');
+      }
+    };
+
+    processor.onaudioprocess = (e) => {
+      if (!isRecording) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const resampled = downsample(input, audioCtx.sampleRate, TARGET_SAMPLE_RATE);
+      const result = vad.process(resampled);
+      updateVad();
+
+      const i16 = float32ToInt16(resampled);
+      const b64 = int16ToBase64(i16);
+      const vadMode = document.getElementById('vadMode').value;
+
+      if (vadMode === 'server') {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'audio_chunk', data: { audio: b64 } }));
+        }
+      } else {
+        if (vad.state === 'silent') {
+          vad.pushPreBuffer(b64);
+        } else if (result === 'onset') {
+          const preChunks = vad.drainPreBuffer();
+          for (const chunk of preChunks) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'audio_chunk', data: { audio: chunk } }));
+            }
+          }
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'audio_chunk', data: { audio: b64 } }));
+          }
+        } else if (vad.state === 'speaking') {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'audio_chunk', data: { audio: b64 } }));
+          }
+        }
+      }
+    };
+
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+
+    recorder = { stream, audioCtx, source, processor };
+    isRecording = true;
+
+    const btn = document.getElementById('btnMic');
+    btn.classList.add('active');
+    btn.title = 'Stop microphone';
+    document.getElementById('vadIndicator').style.display = 'flex';
+
+    logDebug('out', 'MIC', `Started (${audioCtx.sampleRate}Hz → ${TARGET_SAMPLE_RATE}Hz)`);
+  } catch (e) {
+    logDebug('in', 'ERROR', `Mic: ${e.message}`, true);
+    addMessage('system', `Mic error: ${e.message}`);
+  }
+}
+
+function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+
+  if (recorder) {
+    recorder.processor.disconnect();
+    recorder.source.disconnect();
+    recorder.stream.getTracks().forEach(t => t.stop());
+    recorder.audioCtx.close();
+    recorder = null;
+  }
+
+  if (vad) { vad.reset(); vad = null; }
+
+  const btn = document.getElementById('btnMic');
+  btn.classList.remove('active');
+  btn.title = 'Toggle microphone';
+  document.getElementById('vadIndicator').style.display = 'none';
+  document.getElementById('vadFill').style.width = '0%';
+
+  logDebug('out', 'MIC', 'Stopped');
+}
+
+function toggleRecording() {
+  if (isRecording) stopRecording();
+  else startRecording();
+}
+</script>
+</body>
+</html>
