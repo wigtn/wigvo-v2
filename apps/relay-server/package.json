@@ -1,0 +1,31 @@
+{
+  "name": "@wigvo/relay-server",
+  "version": "3.0.0",
+  "description": "WIGVO Realtime Relay Server — Fastify + Twilio + OpenAI Realtime API",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "@fastify/websocket": "^11.0.0",
+    "@fastify/cors": "^10.0.0",
+    "ws": "^8.18.0",
+    "twilio": "^5.4.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
