@@ -22,6 +22,7 @@ import time
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
+from src.realtime.context_manager import ConversationContextManager
 from src.realtime.first_message import FirstMessageHandler
 from src.realtime.interrupt_handler import InterruptHandler
 from src.realtime.recovery import SessionRecoveryManager
@@ -64,6 +65,9 @@ class AudioRouter:
                 enabled=True,
             )
 
+        # Phase 3: 대화 컨텍스트 매니저 (번역 일관성)
+        self.context_manager = ConversationContextManager()
+
         # Session A 핸들러: User -> 수신자
         self.session_a = SessionAHandler(
             session=dual_session.session_a,
@@ -76,6 +80,7 @@ class AudioRouter:
             on_guardrail_corrected_tts=self._on_guardrail_corrected_tts,
             on_guardrail_event=self._on_guardrail_event,
             on_function_call_result=self._on_function_call_result,
+            on_transcript_complete=self._on_turn_complete,
         )
 
         # Session B 핸들러: 수신자 -> User
@@ -87,6 +92,7 @@ class AudioRouter:
             on_original_caption=self._on_session_b_original_caption,
             on_recipient_speech_started=self._on_recipient_started,
             on_recipient_speech_stopped=self._on_recipient_stopped,
+            on_transcript_complete=self._on_turn_complete,
         )
 
         # First Message 핸들러 (PRD 3.4)
@@ -110,6 +116,10 @@ class AudioRouter:
         self.ring_buffer_b = AudioRingBuffer(
             capacity=settings.ring_buffer_capacity_slots,
         )
+
+        # Echo Gate: 에코 피드백 루프 차단
+        self._echo_suppressed = False
+        self._echo_cooldown_task: asyncio.Task | None = None
 
         # Phase 3: Recovery Managers (PRD 5.3)
         self.recovery_a = SessionRecoveryManager(
@@ -148,6 +158,14 @@ class AudioRouter:
             except asyncio.CancelledError:
                 pass
 
+        # Echo Gate 쿨다운 정리
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            try:
+                await self._echo_cooldown_task
+            except asyncio.CancelledError:
+                pass
+
         # Phase 3: Recovery 중지
         await self.recovery_a.stop()
         await self.recovery_b.stop()
@@ -178,17 +196,58 @@ class AudioRouter:
         """Client VAD 발화 종료 -> Session A 커밋."""
         if self.recovery_a.is_recovering or self.recovery_a.is_degraded:
             return
+        # Phase 5: 번역 시작 상태 알림
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.TRANSLATION_STATE,
+                data={"state": "processing"},
+            )
+        )
+        # Phase 3: 컨텍스트 주입 후 커밋
+        await self.context_manager.inject_context(self.dual_session.session_a)
         await self.session_a.commit_user_audio()
 
     async def handle_user_text(self, text: str) -> None:
-        """User 텍스트 입력 -> Session A (Agent Mode)."""
+        """User 텍스트 입력 -> Session A.
+
+        Relay Mode: 번역 지시를 명시하여 전달 (모델이 대화하지 않고 번역하도록)
+        Agent Mode: 텍스트를 그대로 전달
+
+        수신자가 말하는 중이면, 끝날 때까지 대기한다 (턴 겹침 방지).
+        """
         self.call.transcript_history.append({"role": "user", "text": text})
-        await self.session_a.send_user_text(text)
+
+        # 수신자가 말하는 중이면 대기 (턴 겹침 방지)
+        if self.interrupt.is_recipient_speaking:
+            logger.info("Recipient is speaking — holding text until they finish...")
+            for _ in range(100):  # 최대 10초 대기
+                await asyncio.sleep(0.1)
+                if not self.interrupt.is_recipient_speaking:
+                    break
+
+        # Session A가 응답 생성 중이면 대기 (충돌 방지)
+        if self.session_a.is_generating:
+            logger.debug("Waiting for Session A to finish before sending text...")
+            for _ in range(50):  # 최대 5초 대기
+                await asyncio.sleep(0.1)
+                if not self.session_a.is_generating:
+                    break
+        if self.call.mode == CallMode.RELAY:
+            # Relay Mode: 번역으로 명시 전달
+            await self.session_a.send_user_text(
+                f"[User says in {self.call.source_language}]: {text}"
+            )
+        else:
+            await self.session_a.send_user_text(text)
 
     # --- Twilio -> Session B ---
 
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
-        """Twilio에서 받은 수신자 오디오를 Session B로 전달."""
+        """Twilio에서 받은 수신자 오디오를 Session B로 전달.
+
+        Echo Gate v2: INPUT은 항상 활성 — 수신자 발화 감지를 위해 오디오를 차단하지 않는다.
+        OUTPUT만 SessionB.output_suppressed로 게이팅한다.
+        """
         # Phase 3: Ring Buffer B에 기록 (handle_user_audio와 대칭)
         seq = self.ring_buffer_b.write(audio_bytes)
 
@@ -205,7 +264,13 @@ class AudioRouter:
     # --- Session A 콜백: TTS -> Twilio ---
 
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
-        """Session A의 TTS 오디오를 Twilio로 전달."""
+        """Session A의 TTS 오디오를 Twilio로 전달 + 에코 억제 활성화.
+
+        수신자가 말하는 중이면 TTS를 Twilio에 보내지 않는다 (겹침 방지).
+        """
+        if self.interrupt.is_recipient_speaking:
+            return  # 수신자 발화 중 — TTS 드롭
+        self._activate_echo_suppression()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -218,8 +283,15 @@ class AudioRouter:
         )
 
     async def _on_session_a_done(self) -> None:
-        """Session A 응답 완료."""
-        pass
+        """Session A 응답 완료 → 에코 쿨다운 시작 + 번역 완료 알림."""
+        self._start_echo_cooldown()
+        # Phase 5: 번역 완료 상태 알림
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.TRANSLATION_STATE,
+                data={"state": "done"},
+            )
+        )
 
     # --- Session B 콜백: 번역 -> App ---
 
@@ -263,18 +335,64 @@ class AudioRouter:
             )
         )
 
+    # --- Echo Gate (에코 피드백 루프 차단) ---
+
+    def _activate_echo_suppression(self) -> None:
+        """에코 억제를 활성화한다. Session B의 OUTPUT만 억제 (INPUT은 항상 활성)."""
+        self._echo_suppressed = True
+        self.session_b.output_suppressed = True
+        # 기존 쿨다운 타이머 취소 (새 TTS가 시작되면 리셋)
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            self._echo_cooldown_task = None
+
+    def _start_echo_cooldown(self) -> None:
+        """응답 완료 후 쿨다운 타이머를 시작한다."""
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+        self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
+
+    async def _echo_cooldown_timer(self) -> None:
+        """쿨다운 대기 후 에코 억제를 해제하고 큐에 저장된 출력을 배출한다."""
+        try:
+            await asyncio.sleep(settings.echo_gate_cooldown_s)
+            self._echo_suppressed = False
+            self.session_b.output_suppressed = False
+            await self.session_b.flush_pending_output()
+            logger.debug("Echo gate released after %.1fs cooldown", settings.echo_gate_cooldown_s)
+        except asyncio.CancelledError:
+            pass
+
     # --- 수신자 발화 감지 (First Message + Interrupt) ---
 
     async def _on_recipient_started(self) -> None:
-        """수신자 발화 시작 -> First Message 또는 Interrupt 처리."""
+        """수신자 발화 시작 -> Echo Gate 즉시 해제 + First Message 또는 Interrupt 처리."""
+        # Echo Gate v2: 억제 중 수신자 발화 감지 시 즉시 게이트 해제
+        if self._echo_suppressed:
+            logger.info("Recipient speech during echo suppression — releasing gate immediately")
+            self._echo_suppressed = False
+            self.session_b.output_suppressed = False
+            if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+                self._echo_cooldown_task.cancel()
+                self._echo_cooldown_task = None
+            await self.session_b.flush_pending_output()
+
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
         else:
             await self.interrupt.on_recipient_speech_started()
 
     async def _on_recipient_stopped(self) -> None:
-        """수신자 발화 종료."""
+        """수신자 발화 종료 + 컨텍스트 주입."""
+        # Phase 3: Session B에 대화 컨텍스트 주입 (다음 번역 일관성)
+        await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
+
+    # --- 대화 컨텍스트 콜백 (Phase 3) ---
+
+    async def _on_turn_complete(self, role: str, text: str) -> None:
+        """양쪽 세션의 완료된 번역을 대화 컨텍스트에 추가."""
+        self.context_manager.add_turn(role, text)
 
     # --- Guardrail 콜백 (PRD Phase 4 / M-2) ---
 

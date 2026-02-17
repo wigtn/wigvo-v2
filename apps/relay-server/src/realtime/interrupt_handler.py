@@ -16,6 +16,7 @@ Case 4: Agent Mode에서 수신자 끼어들기
 """
 
 import logging
+import time
 from typing import Callable, Coroutine
 
 from src.realtime.session_a import SessionAHandler
@@ -23,6 +24,10 @@ from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import WsMessage, WsMessageType
 
 logger = logging.getLogger(__name__)
+
+# 수신자 발화 종료 후 쿨다운 (초).
+# 수신자가 잠깐 쉬었다가 이어 말하는 경우를 위한 보호 구간.
+RECIPIENT_SPEECH_COOLDOWN_S = 1.5
 
 
 class InterruptHandler:
@@ -38,18 +43,23 @@ class InterruptHandler:
         self.twilio_handler = twilio_handler
         self._on_notify_app = on_notify_app
         self._recipient_speaking = False
+        self._last_speech_stopped_at: float = 0.0
 
     async def on_recipient_speech_started(self) -> None:
         """수신자가 말하기 시작했을 때.
 
         Session A가 TTS를 생성 중이면 즉시 중단한다 (Case 1, 4).
+        이전에 보낸 TTS가 Twilio에서 재생 중일 수 있으므로, 항상 Twilio 버퍼를 클리어한다.
         """
         self._recipient_speaking = True
+        self._last_speech_stopped_at = 0.0  # 쿨다운 리셋
 
         if self.session_a.is_generating:
             logger.info("Interrupt: recipient speech while Session A generating — cancelling")
             await self.session_a.cancel()
-            await self.twilio_handler.send_clear()
+
+        # 항상 Twilio 버퍼 클리어 (이미 전송된 TTS가 재생 중일 수 있음)
+        await self.twilio_handler.send_clear()
 
         # App에 알림 (Case 2)
         await self._on_notify_app(
@@ -60,9 +70,25 @@ class InterruptHandler:
         )
 
     async def on_recipient_speech_stopped(self) -> None:
-        """수신자가 말을 멈췄을 때."""
+        """수신자가 말을 멈췄을 때.
+
+        즉시 False로 바꾸지 않고 타임스탬프만 기록한다.
+        is_recipient_speaking 프로퍼티가 쿨다운을 적용한다.
+        """
         self._recipient_speaking = False
+        self._last_speech_stopped_at = time.monotonic()
 
     @property
     def is_recipient_speaking(self) -> bool:
-        return self._recipient_speaking
+        """수신자가 현재 말하고 있거나, 발화 종료 후 쿨다운 중인지 반환한다.
+
+        수신자가 잠깐 쉬었다가 이어 말하는 경우를 방지하기 위해,
+        speech_stopped 후 일정 시간 동안은 여전히 '말하는 중'으로 간주한다.
+        """
+        if self._recipient_speaking:
+            return True
+        if self._last_speech_stopped_at > 0:
+            elapsed = time.monotonic() - self._last_speech_stopped_at
+            if elapsed < RECIPIENT_SPEECH_COOLDOWN_S:
+                return True
+        return False

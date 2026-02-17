@@ -30,6 +30,7 @@ class SessionBHandler:
         on_original_caption: Callable[[str, str], Coroutine] | None = None,
         on_recipient_speech_started: Callable[[], Coroutine] | None = None,
         on_recipient_speech_stopped: Callable[[], Coroutine] | None = None,
+        on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
     ):
         """
         Args:
@@ -40,6 +41,7 @@ class SessionBHandler:
             on_original_caption: 원문 자막 콜백 (role, text → App에 전달) — 2단계 자막 Stage 1
             on_recipient_speech_started: 수신자 발화 시작 콜백 (First Message / Interrupt)
             on_recipient_speech_stopped: 수신자 발화 종료 콜백
+            on_transcript_complete: 번역 완료 콜백 (role, text → 대화 컨텍스트 추적)
         """
         self.session = session
         self._call = call
@@ -48,7 +50,10 @@ class SessionBHandler:
         self._on_original_caption = on_original_caption
         self._on_recipient_speech_started = on_recipient_speech_started
         self._on_recipient_speech_stopped = on_recipient_speech_stopped
+        self._on_transcript_complete = on_transcript_complete
         self._is_recipient_speaking = False
+        self._output_suppressed = False
+        self._pending_output: list[tuple[str, Any]] = []
 
         self._register_handlers()
 
@@ -70,6 +75,23 @@ class SessionBHandler:
         )
 
     @property
+    def output_suppressed(self) -> bool:
+        return self._output_suppressed
+
+    @output_suppressed.setter
+    def output_suppressed(self, value: bool) -> None:
+        self._output_suppressed = value
+
+    @property
+    def muted(self) -> bool:
+        """하위 호환: output_suppressed에 매핑."""
+        return self._output_suppressed
+
+    @muted.setter
+    def muted(self, value: bool) -> None:
+        self._output_suppressed = value
+
+    @property
     def is_recipient_speaking(self) -> bool:
         return self._is_recipient_speaking
 
@@ -81,36 +103,69 @@ class SessionBHandler:
 
     # --- 이벤트 핸들러 ---
 
+    async def clear_input_buffer(self) -> None:
+        """에코 잔여물을 제거하기 위해 입력 오디오 버퍼를 비운다."""
+        await self.session.clear_input_buffer()
+
+    async def flush_pending_output(self) -> None:
+        """억제 해제 후 큐에 저장된 출력을 배출한다."""
+        pending = self._pending_output[:]
+        self._pending_output.clear()
+        for entry_type, data in pending:
+            if entry_type == "audio" and self._on_translated_audio:
+                await self._on_translated_audio(data)
+            elif entry_type == "caption" and self._on_caption:
+                await self._on_caption(data[0], data[1])
+            elif entry_type == "original_caption" and self._on_original_caption:
+                await self._on_original_caption(data[0], data[1])
+        if pending:
+            logger.debug("[SessionB] Flushed %d pending output items", len(pending))
+
     async def _handle_audio_delta(self, event: dict[str, Any]) -> None:
-        """Session B 번역 음성 → App으로 전달 (pcm16)."""
+        """Session B 번역 음성 → App으로 전달 (pcm16). 억제 중이면 큐에 저장."""
         delta_b64 = event.get("delta", "")
-        if delta_b64 and self._on_translated_audio:
-            audio_bytes = base64.b64decode(delta_b64)
+        if not delta_b64:
+            return
+        audio_bytes = base64.b64decode(delta_b64)
+        if self._output_suppressed:
+            self._pending_output.append(("audio", audio_bytes))
+            return
+        if self._on_translated_audio:
             await self._on_translated_audio(audio_bytes)
 
     async def _handle_transcript_delta(self, event: dict[str, Any]) -> None:
-        """번역된 텍스트 스트리밍 → App 자막."""
+        """번역된 텍스트 스트리밍 → App 자막. 억제 중이면 큐에 저장."""
         delta = event.get("delta", "")
-        if delta and self._on_caption:
+        if not delta:
+            return
+        if self._output_suppressed:
+            self._pending_output.append(("caption", ("recipient", delta)))
+            return
+        if self._on_caption:
             await self._on_caption("recipient", delta)
 
     async def _handle_transcript_done(self, event: dict[str, Any]) -> None:
-        """번역 텍스트 완료 + 양방향 transcript 저장."""
+        """번역 텍스트 완료 + 양방향 transcript 저장 (억제 중에도 항상 저장)."""
         transcript = event.get("transcript", "")
-        if transcript:
-            logger.info("[SessionB] Translation complete: %s", transcript[:80])
+        if not transcript:
+            return
+        logger.info("[SessionB] Translation complete: %s", transcript[:80])
 
-            # 양방향 transcript 저장 (Session B: recipient 발화 → 번역)
-            if self._call:
-                self._call.transcript_bilingual.append(
-                    TranscriptEntry(
-                        role="recipient",
-                        original_text=transcript,
-                        translated_text=transcript,  # Session B output은 이미 번역된 텍스트
-                        language=self._call.target_language,
-                        timestamp=time.time(),
-                    )
+        # 양방향 transcript 저장 — 억제 상태와 무관하게 항상 저장
+        if self._call:
+            self._call.transcript_bilingual.append(
+                TranscriptEntry(
+                    role="recipient",
+                    original_text=transcript,
+                    translated_text=transcript,  # Session B output은 이미 번역된 텍스트
+                    language=self._call.target_language,
+                    timestamp=time.time(),
                 )
+            )
+
+        # 대화 컨텍스트 콜백
+        if self._on_transcript_complete:
+            await self._on_transcript_complete("recipient", transcript)
 
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
         """Session B 응답 완료 + cost token 추적."""
@@ -160,8 +215,14 @@ class SessionBHandler:
         OpenAI input_audio_transcription이 활성화된 경우,
         수신자 발화의 원문 텍스트(예: 한국어)를 App에 즉시 전달한다.
         번역 텍스트(Stage 2)는 response.audio_transcript.done에서 별도로 전송된다.
+        억제 중이면 큐에 저장하여 나중에 배출한다.
         """
         transcript = event.get("transcript", "")
-        if transcript and self._on_original_caption:
-            logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
+        if not transcript:
+            return
+        if self._output_suppressed:
+            self._pending_output.append(("original_caption", ("recipient", transcript)))
+            return
+        logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
+        if self._on_original_caption:
             await self._on_original_caption("recipient", transcript)

@@ -37,6 +37,12 @@ from src.types import (
 
 logger = logging.getLogger(__name__)
 
+# 세션 장애가 아닌 단순 타이밍 경쟁 에러 — Recovery 불필요
+_IGNORABLE_ERROR_CODES = {
+    "response_cancel_not_active",        # 이미 끝난 응답을 cancel 시도 (interrupt 타이밍)
+    "conversation_already_has_active_response",  # 응답 생성 중 중복 요청
+}
+
 
 class SessionRecoveryManager:
     """단일 OpenAI Realtime 세션의 장애 복구를 관리한다."""
@@ -111,7 +117,18 @@ class SessionRecoveryManager:
 
     async def _on_session_error(self, event: dict[str, Any]) -> None:
         """세션 에러 발생 시 복구를 시작한다."""
-        error_msg = str(event.get("error", {}).get("message", "unknown error"))
+        error = event.get("error", {})
+        error_code = error.get("code", "")
+        error_msg = str(error.get("message", "unknown error"))
+
+        # 타이밍 경쟁으로 발생하는 무해한 에러는 무시
+        if error_code in _IGNORABLE_ERROR_CODES:
+            logger.debug(
+                "[%s] Ignoring non-critical error (%s): %s",
+                self.session.label, error_code, error_msg,
+            )
+            return
+
         logger.error(
             "[%s] Session error detected: %s", self.session.label, error_msg
         )

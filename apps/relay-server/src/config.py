@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Whisper fallback (Degraded Mode)
     whisper_model: str = "whisper-1"
 
+    # Echo Gate (에코 피드백 루프 차단)
+    echo_gate_cooldown_s: float = 0.3  # Twilio RTT 150-250ms + 디바이스 에코 50-100ms
+
     # Phase 4: Guardrail (PRD M-2)
     guardrail_enabled: bool = True
     guardrail_fallback_model: str = "gpt-4o-mini"

@@ -177,6 +177,13 @@ export function RealtimeCallView({
         />
       )}
 
+      {/* Translation state indicator */}
+      {call.translationState === "processing" && (
+        <View style={styles.translatingBar}>
+          <Text style={styles.translatingText}>Translating...</Text>
+        </View>
+      )}
+
       {/* Captions */}
       <LiveCaptionPanel ref={captionRef} fontScale={fontScale} />
 
@@ -229,6 +236,17 @@ const styles = StyleSheet.create({
   },
   controlsRow: {
     backgroundColor: "#fff",
+  },
+  translatingBar: {
+    backgroundColor: "#FEF3C7",
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  translatingText: {
+    fontSize: 13,
+    color: "#92400E",
+    fontWeight: "600",
   },
   endCallButton: {
     backgroundColor: "#EF4444",

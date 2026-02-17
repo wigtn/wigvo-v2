@@ -36,6 +36,7 @@ class SessionAHandler:
         on_guardrail_corrected_tts: Callable[[str], Coroutine] | None = None,
         on_guardrail_event: Callable[[dict], Coroutine] | None = None,
         on_function_call_result: Callable[[str, dict], Coroutine] | None = None,
+        on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
     ):
         """
         Args:
@@ -49,12 +50,14 @@ class SessionAHandler:
             on_guardrail_corrected_tts: Level 3 교정 완료 시 교정된 텍스트 -> 재TTS 콜백
             on_guardrail_event: Guardrail 이벤트 로그 콜백 (App에 디버그 알림)
             on_function_call_result: Function Call 결과 콜백 (Agent Mode, result + args)
+            on_transcript_complete: 번역 완료 콜백 (role, text → 대화 컨텍스트 추적)
         """
         self.session = session
         self._call = call
         self._on_tts_audio = on_tts_audio
         self._on_caption = on_caption
         self._on_response_done = on_response_done
+        self._on_transcript_complete = on_transcript_complete
         self._guardrail = guardrail
         self._on_guardrail_filler = on_guardrail_filler
         self._on_guardrail_corrected_tts = on_guardrail_corrected_tts
@@ -194,6 +197,10 @@ class SessionAHandler:
                     timestamp=time.time(),
                 )
             )
+
+        # 대화 컨텍스트 콜백
+        if self._on_transcript_complete:
+            await self._on_transcript_complete("user", transcript)
 
         if not self._guardrail:
             return

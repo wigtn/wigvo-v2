@@ -14,6 +14,8 @@ export interface CaptionEntry {
   language: string;
   isFinal: boolean;
   timestamp: number;
+  /** Caption stage: 1 = original STT, 2 = translated */
+  stage?: 1 | 2;
 }
 
 interface LiveCaptionPanelProps {
@@ -103,31 +105,42 @@ export const LiveCaptionPanel = React.forwardRef<LiveCaptionPanelHandle, LiveCap
     const scaledSpeaker = 11 * fontScale;
 
     const renderItem = useCallback(
-      ({ item }: { item: CaptionEntry }) => (
-        <View
-          style={[
-            styles.bubble,
-            item.speaker === "user" ? styles.userBubble : styles.recipientBubble,
-            !item.isFinal && styles.interimBubble,
-          ]}
-          accessible
-          accessibilityLabel={`${item.speaker === "user" ? "You" : "Recipient"}: ${item.text}`}
-          accessibilityRole="text"
-        >
-          <Text style={[styles.speaker, { fontSize: scaledSpeaker }]}>
-            {item.speaker === "user" ? "You" : "Recipient"}
-          </Text>
-          <Text
+      ({ item }: { item: CaptionEntry }) => {
+        const isOriginal = item.stage === 1;
+        const speakerLabel = item.speaker === "user" ? "You" : "Recipient";
+        const stageLabel = isOriginal ? " (original)" : item.stage === 2 ? " (translated)" : "";
+
+        return (
+          <View
             style={[
-              styles.captionText,
-              { fontSize: scaledFont, lineHeight: scaledFont * 1.4 },
-              !item.isFinal && styles.interimText,
+              styles.bubble,
+              item.speaker === "user" ? styles.userBubble : styles.recipientBubble,
+              isOriginal && styles.originalBubble,
+              !item.isFinal && styles.interimBubble,
             ]}
+            accessible
+            accessibilityLabel={`${speakerLabel}${stageLabel}: ${item.text}`}
+            accessibilityRole="text"
           >
-            {item.text}
-          </Text>
-        </View>
-      ),
+            <Text style={[styles.speaker, { fontSize: scaledSpeaker }]}>
+              {speakerLabel}
+              {stageLabel ? (
+                <Text style={styles.stageLabel}>{stageLabel}</Text>
+              ) : null}
+            </Text>
+            <Text
+              style={[
+                styles.captionText,
+                { fontSize: scaledFont, lineHeight: scaledFont * 1.4 },
+                isOriginal && styles.originalText,
+                !item.isFinal && styles.interimText,
+              ]}
+            >
+              {item.text}
+            </Text>
+          </View>
+        );
+      },
       [scaledFont, scaledSpeaker]
     );
 
@@ -184,6 +197,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0FDF4",
     alignSelf: "flex-start",
   },
+  originalBubble: {
+    backgroundColor: "#F3F4F6",
+    borderLeftWidth: 3,
+    borderLeftColor: "#9CA3AF",
+  },
   interimBubble: {
     opacity: 0.7,
   },
@@ -192,8 +210,16 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginBottom: 2,
   },
+  stageLabel: {
+    fontWeight: "400",
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
   captionText: {
     color: "#111827",
+  },
+  originalText: {
+    color: "#6B7280",
   },
   interimText: {
     fontStyle: "italic",

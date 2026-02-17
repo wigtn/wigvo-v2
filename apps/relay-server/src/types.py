@@ -104,6 +104,7 @@ class WsMessageType(str, Enum):
     INTERRUPT_ALERT = "interrupt_alert"
     SESSION_RECOVERY = "session.recovery"
     GUARDRAIL_TRIGGERED = "guardrail.triggered"
+    TRANSLATION_STATE = "translation.state"
     ERROR = "error"
 
 
@@ -130,9 +131,16 @@ class SessionConfig(BaseModel):
 
 
 class TwilioMediaEvent(BaseModel):
+    """Twilio Media Stream WebSocket 이벤트.
+
+    Twilio는 camelCase (streamSid, sequenceNumber)로 보내므로 alias 매핑 필요.
+    """
+
+    model_config = {"populate_by_name": True}
+
     event: str
-    stream_sid: str | None = None
-    sequence_number: str | None = None
+    stream_sid: str | None = Field(None, alias="streamSid")
+    sequence_number: str | None = Field(None, alias="sequenceNumber")
     media: dict[str, str] | None = None  # {"payload": base64, "track": "inbound"}
     start: dict[str, Any] | None = None
     stop: dict[str, Any] | None = None

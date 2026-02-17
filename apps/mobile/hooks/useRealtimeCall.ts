@@ -19,6 +19,8 @@ interface UseRealtimeCallOptions {
   onRecoveryStatus?: (status: string, message: string) => void;
 }
 
+type TranslationState = "idle" | "processing" | "done";
+
 interface UseRealtimeCallReturn {
   /** WebSocket connection status */
   wsStatus: "disconnected" | "connecting" | "connected" | "error";
@@ -40,6 +42,8 @@ interface UseRealtimeCallReturn {
   endCall: () => void;
   /** Disconnect WebSocket */
   disconnect: () => void;
+  /** Current translation state */
+  translationState: TranslationState;
 }
 
 export function useRealtimeCall({
@@ -51,6 +55,7 @@ export function useRealtimeCall({
   onRecoveryStatus,
 }: UseRealtimeCallOptions): UseRealtimeCallReturn {
   const [inputMode, setInputMode] = useState<InputMode>("voice");
+  const [translationState, setTranslationState] = useState<TranslationState>("idle");
 
   const onCaptionRef = useRef(onCaption);
   onCaptionRef.current = onCaption;
@@ -94,6 +99,11 @@ export function useRealtimeCall({
           playback.clearQueue();
           break;
         }
+        case "translation.state": {
+          const state = msg.data.state as TranslationState;
+          setTranslationState(state);
+          break;
+        }
         case "session.recovery": {
           const status = msg.data.status as string;
           const message = (msg.data.message as string) ?? "";
@@ -118,12 +128,19 @@ export function useRealtimeCall({
     autoConnect: true,
   });
 
-  // Client VAD
+  // Client VAD — stop playback when user starts speaking
+  const userSpeakingRef = useRef(false);
   const vad = useClientVad({
     onSpeechAudio: (audioBase64) => {
+      // Stop recipient audio playback when user starts speaking
+      if (!userSpeakingRef.current) {
+        userSpeakingRef.current = true;
+        playback.stop();
+      }
       ws.sendAudioChunk(audioBase64);
     },
     onSpeechCommitted: () => {
+      userSpeakingRef.current = false;
       ws.sendVadState("committed");
     },
     enabled: inputMode === "voice",
@@ -177,5 +194,6 @@ export function useRealtimeCall({
     sendText,
     endCall,
     disconnect: ws.disconnect,
+    translationState,
   };
 }

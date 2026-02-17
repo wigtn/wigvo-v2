@@ -10,6 +10,7 @@ PRD 3.4:
      - Agent Mode: AI가 바로 용건 시작
 """
 
+import asyncio
 import logging
 from typing import Callable, Coroutine
 
@@ -43,12 +44,22 @@ class FirstMessageHandler:
 
         logger.info("Recipient answered — sending AI greeting (call=%s)", self.call.call_id)
 
+        # Session A가 이미 응답 중이면 대기 (conversation_already_has_active_response 방지)
+        if self.session_a.is_generating:
+            logger.debug("Waiting for Session A to finish before sending greeting...")
+            for _ in range(30):  # 최대 3초 대기
+                await asyncio.sleep(0.1)
+                if not self.session_a.is_generating:
+                    break
+
         # AI 고지 메시지 전송 (Session A → Twilio → 수신자)
+        # 영어 원문을 Session A에 전달 → Session A가 target_language로 번역
         greeting = FIRST_MESSAGE_TEMPLATES.get(
             self.call.target_language,
             FIRST_MESSAGE_TEMPLATES["en"],
         )
-        await self.session_a.send_user_text(greeting)
+        wrapped = f"[User says in {self.call.source_language}]: {greeting}"
+        await self.session_a.send_user_text(wrapped)
 
         # App에 통화 연결 알림
         if self.call.mode == CallMode.RELAY:

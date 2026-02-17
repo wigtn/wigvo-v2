@@ -38,9 +38,12 @@ export type WsMessageType =
   | "end_call"
   // Relay -> App
   | "caption"
+  | "caption.original"
+  | "caption.translated"
   | "recipient_audio"
   | "call_status"
   | "interrupt_alert"
+  | "translation.state"
   | "session.recovery"
   | "error";
 

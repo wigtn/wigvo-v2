@@ -132,6 +132,10 @@ class RealtimeSession:
         await self._send({"type": "input_audio_buffer.commit"})
         await self._send({"type": "response.create"})
 
+    async def clear_input_buffer(self) -> None:
+        """입력 오디오 버퍼를 비운다 (에코 잔여물 제거)."""
+        await self._send({"type": "input_audio_buffer.clear"})
+
     async def cancel_response(self) -> None:
         """현재 진행 중인 응답을 취소한다 (Interrupt 처리)."""
         await self._send({"type": "response.cancel"})
@@ -261,7 +265,7 @@ class DualSessionManager:
                 input_audio_format="g711_ulaw",  # Twilio에서 입력
                 output_audio_format="pcm16",  # App으로 출력
                 vad_mode=VadMode.SERVER,
-                input_audio_transcription={"model": "whisper-1"},  # 2단계 자막: 원문 STT (PRD 5.4)
+                input_audio_transcription={"model": "whisper-1", "language": target_language},  # 2단계 자막: 원문 STT + 언어 힌트 (PRD 5.4)
             ),
         )
 

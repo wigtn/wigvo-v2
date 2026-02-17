@@ -9,7 +9,6 @@ from typing import Any
 
 from src.prompt.templates import (
     CULTURAL_ADAPTATION_RULES,
-    FIRST_MESSAGE_TEMPLATES,
     POLITENESS_RULES,
     SESSION_A_AGENT_TEMPLATE,
     SESSION_A_RELAY_TEMPLATE,
@@ -42,9 +41,6 @@ def generate_session_a_prompt(
             scenario_type=_get(collected_data, "scenario_type", "general inquiry"),
             service=_get(collected_data, "service", ""),
             customer_name=_get(collected_data, "customer_name", "the customer"),
-            first_message_template=FIRST_MESSAGE_TEMPLATES.get(
-                target_language, FIRST_MESSAGE_TEMPLATES["en"]
-            ),
         )
     else:
         prompt = SESSION_A_AGENT_TEMPLATE.format(
