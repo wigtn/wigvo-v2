@@ -1,4 +1,4 @@
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Slot } from "expo-router";
 import { useAuth } from "../../lib/AuthContext";
 import { ActivityIndicator, View } from "react-native";
 
@@ -17,13 +17,5 @@ export default function MainLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  return (
-    <Stack>
-      <Stack.Screen name="home" options={{ title: "WIGVO", headerShown: true }} />
-      <Stack.Screen
-        name="call"
-        options={{ title: "Call", headerShown: true, headerBackTitle: "Back" }}
-      />
-    </Stack>
-  );
+  return <Slot />;
 }
