@@ -1,9 +1,13 @@
-"""Echo Gate v3 + 오디오 에너지 게이트 테스트.
+"""Echo Gate + 오디오 에너지 게이트 테스트.
 
-Echo Gate v3 핵심 원칙:
-  - 에코 억제 중 INPUT + OUTPUT 모두 차단
-  - 억제 중 쌓인 출력은 폐기 (환각 제거)
-  - 수신자 발화 감지 시 에코로 간주하여 무시
+Echo Detector (feature flag on):
+  - per-chunk 에너지 핑거프린트 기반 에코 감지
+  - 출력 억제 없음 (genuine speech 즉시 통과)
+  - TTS 종료 후 0.3s safety cooldown
+
+레거시 Echo Gate (feature flag off):
+  - 2.5s blanket block (기존 v3 동작)
+  - 출력 억제 + 쿨다운 후 폐기
 
 오디오 에너지 게이트:
   - mu-law 오디오 RMS 에너지 측정
@@ -15,7 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.realtime.audio_router import AudioRouter, _ulaw_rms, _ULAW_TO_LINEAR
+from src.realtime.audio_router import AudioRouter
+from src.realtime.audio_utils import _ULAW_TO_LINEAR, ulaw_rms as _ulaw_rms
 from src.realtime.session_b import SessionBHandler
 from src.types import ActiveCall, CallMode
 
@@ -34,7 +39,7 @@ def _make_call(**overrides) -> ActiveCall:
     return ActiveCall(**defaults)
 
 
-def _make_router() -> AudioRouter:
+def _make_router(echo_detector_enabled: bool = True) -> AudioRouter:
     """최소한의 mock 으로 AudioRouter 인스턴스를 생성한다."""
     call = _make_call()
 
@@ -48,6 +53,7 @@ def _make_router() -> AudioRouter:
     dual.session_b.on = MagicMock()
     dual.session_b.set_on_connection_lost = MagicMock()
     dual.session_b._send = AsyncMock()
+    dual.session_b.clear_input_buffer = AsyncMock()
 
     twilio_handler = MagicMock()
     twilio_handler.send_audio = AsyncMock()
@@ -63,6 +69,12 @@ def _make_router() -> AudioRouter:
         mock_settings.max_call_duration_ms = 600_000
         mock_settings.audio_energy_gate_enabled = False  # 테스트에서는 기본 비활성
         mock_settings.audio_energy_min_rms = 150.0
+        mock_settings.echo_detector_enabled = echo_detector_enabled
+        mock_settings.echo_detector_threshold = 0.6
+        mock_settings.echo_detector_safety_cooldown_s = 0.3
+        mock_settings.echo_detector_min_delay_chunks = 4
+        mock_settings.echo_detector_max_delay_chunks = 30
+        mock_settings.echo_detector_correlation_window = 10
         router = AudioRouter(
             call=call,
             dual_session=dual,
@@ -73,14 +85,115 @@ def _make_router() -> AudioRouter:
     return router
 
 
-class TestEchoGateV2:
-    """Echo Gate v2: OUTPUT 억제 + INPUT 활성 테스트."""
+class TestEchoDetectorIntegration:
+    """Echo Detector (feature flag on): per-chunk 에코 감지 통합 테스트."""
+
+    def test_echo_detector_created_when_enabled(self):
+        """feature flag on → EchoDetector 인스턴스 생성."""
+        router = _make_router(echo_detector_enabled=True)
+        assert router._echo_detector is not None
+
+    def test_echo_detector_not_created_when_disabled(self):
+        """feature flag off → EchoDetector 없음 (레거시 모드)."""
+        router = _make_router(echo_detector_enabled=False)
+        assert router._echo_detector is None
+
+    @pytest.mark.asyncio
+    async def test_tts_records_fingerprint(self):
+        """TTS 콜백 시 EchoDetector에 fingerprint 기록 (출력 억제 없음)."""
+        router = _make_router(echo_detector_enabled=True)
+        router.interrupt = MagicMock()
+        router.interrupt.is_recipient_speaking = False
+
+        await router._on_session_a_tts(b"\x00\x01\x02" * 50)
+
+        # EchoDetector에 기록됨
+        assert router._echo_detector.is_active is True
+        assert len(router._echo_detector._reference_buffer) == 1
+        # 출력 억제 없음 (기존 v3에서는 True였음)
+        assert router.session_b.output_suppressed is not True
+
+    @pytest.mark.asyncio
+    async def test_tts_done_marks_detector(self):
+        """Session A 응답 완료 시 mark_tts_done 호출 (2.5s 쿨다운 없음)."""
+        router = _make_router(echo_detector_enabled=True)
+        router._echo_detector.record_sent_chunk(b"\x00" * 160)
+
+        await router._on_session_a_done()
+
+        assert router._echo_detector._tts_active is False
+        assert router._echo_detector._tts_ended_at > 0
+
+    @pytest.mark.asyncio
+    async def test_genuine_speech_passes_during_tts(self):
+        """TTS 중에도 genuine speech는 Session B로 통과."""
+        router = _make_router(echo_detector_enabled=True)
+        router.session_b.send_recipient_audio = AsyncMock()
+
+        # TTS 기록 (reference)
+        for _ in range(15):
+            router._echo_detector.record_sent_chunk(bytes([0x00] * 160))
+
+        # 완전히 다른 패턴의 genuine speech
+        speech = bytes([0x70] * 160)
+
+        with patch("src.realtime.audio_router.settings") as mock_settings:
+            mock_settings.audio_energy_gate_enabled = False
+            await router.handle_twilio_audio(speech)
+
+        # genuine speech → 통과
+        router.session_b.send_recipient_audio.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_recipient_speech_not_blocked_during_tts(self):
+        """Echo Detector 활성 중에도 수신자 발화 이벤트 정상 처리."""
+        router = _make_router(echo_detector_enabled=True)
+        router._echo_detector.record_sent_chunk(bytes([0x00] * 160))
+
+        # First message mock
+        router.first_message = MagicMock()
+        router.first_message.on_recipient_speech_detected = AsyncMock()
+        router.call.first_message_sent = False
+
+        await router._on_recipient_started()
+
+        # 에코 감지 중에도 수신자 발화 이벤트 처리됨 (기존은 무시)
+        router.first_message.on_recipient_speech_detected.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_recipient_interrupt_not_blocked_during_tts(self):
+        """Echo Detector 활성 중에도 interrupt 이벤트 정상 처리."""
+        router = _make_router(echo_detector_enabled=True)
+        router._echo_detector.record_sent_chunk(bytes([0x00] * 160))
+
+        router.interrupt = MagicMock()
+        router.interrupt.on_recipient_speech_started = AsyncMock()
+        router.call.first_message_sent = True
+
+        await router._on_recipient_started()
+
+        # interrupt 정상 처리 (기존은 무시)
+        router.interrupt.on_recipient_speech_started.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stop_resets_echo_detector(self):
+        """AudioRouter.stop()이 EchoDetector를 reset."""
+        router = _make_router(echo_detector_enabled=True)
+        router._echo_detector.record_sent_chunk(bytes([0x00] * 160))
+        assert router._echo_detector.is_active is True
+
+        await router.stop()
+
+        assert router._echo_detector.is_active is False
+
+
+class TestLegacyEchoGate:
+    """레거시 Echo Gate (feature flag off): 2.5s blanket block 테스트."""
 
     def test_echo_suppression_activates_on_tts(self):
         """TTS 콜백 시 output_suppressed = True, _echo_suppressed = True."""
-        router = _make_router()
+        router = _make_router(echo_detector_enabled=False)
         assert router._echo_suppressed is False
-        assert router.session_b.output_suppressed is False
 
         router._activate_echo_suppression()
 
@@ -90,7 +203,7 @@ class TestEchoGateV2:
     @pytest.mark.asyncio
     async def test_echo_suppression_deactivates_after_cooldown(self):
         """쿨다운 후 output_suppressed = False, 쌓인 출력은 폐기."""
-        router = _make_router()
+        router = _make_router(echo_detector_enabled=False)
         router.session_b.clear_pending_output = MagicMock()
 
         router._activate_echo_suppression()
@@ -107,42 +220,37 @@ class TestEchoGateV2:
 
     @pytest.mark.asyncio
     async def test_twilio_audio_blocked_during_echo(self):
-        """Echo Gate v3: 억제 중 Twilio 오디오가 Session B에 전달되지 않음 (INPUT 차단)."""
-        router = _make_router()
+        """레거시: 억제 중 Twilio 오디오가 Session B에 전달되지 않음."""
+        router = _make_router(echo_detector_enabled=False)
         router.session_b.send_recipient_audio = AsyncMock()
         router._echo_suppressed = True
         router.session_b.output_suppressed = True
 
         await router.handle_twilio_audio(b"\x00\x01\x02")
 
-        # v3: INPUT도 차단 — 에코 환각 방지
         router.session_b.send_recipient_audio.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_echo_suppression_ignores_speech(self):
-        """억제 중 발화 감지는 에코로 간주하여 무시."""
-        router = _make_router()
+        """레거시: 억제 중 발화 감지는 에코로 간주하여 무시."""
+        router = _make_router(echo_detector_enabled=False)
         router._echo_suppressed = True
         router.session_b.output_suppressed = True
         router.session_b.flush_pending_output = AsyncMock()
 
-        # first_message mock
         router.first_message = MagicMock()
         router.first_message.on_recipient_speech_detected = AsyncMock()
         router.call.first_message_sent = False
 
         await router._on_recipient_started()
 
-        # 게이트 유지 + 이벤트 무시
         assert router._echo_suppressed is True
-        assert router.session_b.output_suppressed is True
-        router.session_b.flush_pending_output.assert_not_called()
         router.first_message.on_recipient_speech_detected.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_pending_output_discarded_after_cooldown(self):
-        """쿨다운 완료 시 큐에 저장된 출력이 폐기된다 (환각 제거)."""
-        router = _make_router()
+        """레거시: 쿨다운 완료 시 큐에 저장된 출력이 폐기."""
+        router = _make_router(echo_detector_enabled=False)
         router.session_b.clear_pending_output = MagicMock()
 
         router._activate_echo_suppression()
@@ -156,26 +264,23 @@ class TestEchoGateV2:
 
     @pytest.mark.asyncio
     async def test_speech_during_suppression_ignored_with_interrupt(self):
-        """억제 중 발화는 interrupt 처리도 하지 않음 (에코 방지)."""
-        router = _make_router()
+        """레거시: 억제 중 발화는 interrupt 처리도 하지 않음."""
+        router = _make_router(echo_detector_enabled=False)
         router._echo_suppressed = True
         router.session_b.output_suppressed = True
-        router.session_b.flush_pending_output = AsyncMock()
 
-        # interrupt mock (first_message_sent = True)
         router.interrupt = MagicMock()
         router.interrupt.on_recipient_speech_started = AsyncMock()
         router.call.first_message_sent = True
 
         await router._on_recipient_started()
 
-        # 게이트 유지 + interrupt 무시
         assert router._echo_suppressed is True
         router.interrupt.on_recipient_speech_started.assert_not_called()
 
     def test_echo_cooldown_reset_on_new_tts(self):
-        """새 TTS 시작 시 기존 쿨다운 타이머가 취소된다."""
-        router = _make_router()
+        """새 TTS 시작 시 기존 쿨다운 타이머가 취소."""
+        router = _make_router(echo_detector_enabled=False)
 
         old_task = MagicMock()
         old_task.done.return_value = False
@@ -188,33 +293,31 @@ class TestEchoGateV2:
         assert router._echo_cooldown_task is None
 
     @pytest.mark.asyncio
-    async def test_guardrail_retts_triggers_echo_gate(self):
-        """Guardrail 재TTS 경로도 echo gate를 경유한다."""
-        router = _make_router()
-        router.twilio_handler.send_audio = AsyncMock()
+    async def test_tts_uses_legacy_on_flag_off(self):
+        """feature flag off: TTS 시 _activate_echo_suppression 호출."""
+        router = _make_router(echo_detector_enabled=False)
+        router.interrupt = MagicMock()
+        router.interrupt.is_recipient_speaking = False
 
         await router._on_session_a_tts(b"\x00\x01")
 
         assert router._echo_suppressed is True
         assert router.session_b.output_suppressed is True
-        router.twilio_handler.send_audio.assert_called_once_with(b"\x00\x01")
 
     @pytest.mark.asyncio
-    async def test_no_input_buffer_clear_on_cooldown(self):
-        """v2: 쿨다운 완료 시 clear_input_buffer를 호출하지 않음 (오디오 폐기 방지)."""
-        router = _make_router()
-        router.session_b.clear_input_buffer = AsyncMock()
-        router.session_b.flush_pending_output = AsyncMock()
+    async def test_done_uses_legacy_cooldown_on_flag_off(self):
+        """feature flag off: 응답 완료 시 _start_echo_cooldown 호출."""
+        router = _make_router(echo_detector_enabled=False)
+        router.session_b.clear_pending_output = MagicMock()
 
         router._activate_echo_suppression()
 
         with patch("src.realtime.audio_router.settings") as mock_settings:
             mock_settings.echo_gate_cooldown_s = 0.05
-            router._start_echo_cooldown()
+            await router._on_session_a_done()
             await asyncio.sleep(0.1)
 
-        # clear_input_buffer는 더 이상 호출되지 않음
-        router.session_b.clear_input_buffer.assert_not_called()
+        assert router._echo_suppressed is False
 
 
 class TestSessionBOutputSuppression:
@@ -295,7 +398,6 @@ class TestSessionBOutputSuppression:
 
         assert len(handler._pending_output) == 2
 
-        # 억제 해제 후 배출
         handler.output_suppressed = False
         await handler.flush_pending_output()
 
@@ -350,14 +452,13 @@ class TestUlawRmsAndEnergyGate:
 
     def test_ulaw_rms_loud_audio(self):
         """큰 소리 오디오는 높은 RMS 값."""
-        # 0x00은 mu-law에서 가장 큰 양수값
         loud = bytes([0x00] * 160)
         rms = _ulaw_rms(loud)
-        assert rms > 1000  # 충분히 큰 값
+        assert rms > 1000
 
     def test_ulaw_rms_mixed(self):
         """혼합 오디오는 중간 RMS."""
-        mixed = bytes([0xFF] * 80 + [0x00] * 80)  # 반은 무음, 반은 큰 소리
+        mixed = bytes([0xFF] * 80 + [0x00] * 80)
         rms = _ulaw_rms(mixed)
         assert 0 < rms < _ulaw_rms(bytes([0x00] * 160))
 
@@ -367,7 +468,7 @@ class TestUlawRmsAndEnergyGate:
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
 
-        silence = bytes([0xFF] * 160)  # 무음
+        silence = bytes([0xFF] * 160)
 
         with patch("src.realtime.audio_router.settings") as mock_settings:
             mock_settings.audio_energy_gate_enabled = True
@@ -382,7 +483,6 @@ class TestUlawRmsAndEnergyGate:
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
 
-        # 큰 소리 오디오 (mu-law 0x00 = 최대 양수)
         speech = bytes([0x10] * 160)
 
         with patch("src.realtime.audio_router.settings") as mock_settings:

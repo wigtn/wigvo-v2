@@ -23,7 +23,9 @@ from typing import Any, Callable, Coroutine
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
+from src.realtime.audio_utils import _ULAW_TO_LINEAR, ulaw_rms as _ulaw_rms
 from src.realtime.context_manager import ConversationContextManager
+from src.realtime.echo_detector import EchoDetector
 from src.realtime.first_message import FirstMessageHandler
 from src.realtime.interrupt_handler import InterruptHandler
 from src.realtime.recovery import SessionRecoveryManager
@@ -36,29 +38,6 @@ from src.tools.definitions import get_tools_for_mode
 from src.types import ActiveCall, CallMode, CommunicationMode, WsMessage, WsMessageType
 
 logger = logging.getLogger(__name__)
-
-# --- G.711 mu-law → linear PCM 디코딩 테이블 ---
-# Twilio 오디오 에너지 측정용 (소음/무음 필터링)
-_ULAW_TO_LINEAR: list[int] = []
-for _byte in range(256):
-    _b = ~_byte & 0xFF
-    _sign = (_b >> 7) & 1
-    _exp = (_b >> 4) & 0x07
-    _man = _b & 0x0F
-    _mag = ((2 * _man + 33) << _exp) - 33
-    _ULAW_TO_LINEAR.append(-_mag if _sign else _mag)
-
-
-def _ulaw_rms(audio: bytes) -> float:
-    """g711 mu-law 오디오의 RMS 에너지를 계산한다.
-
-    Returns:
-        RMS 값 (0=무음, ~500=조용한 발화, ~2000=보통 발화, ~8000=매우 큰 소리)
-    """
-    if not audio:
-        return 0.0
-    total = sum(_ULAW_TO_LINEAR[b] ** 2 for b in audio)
-    return (total / len(audio)) ** 0.5
 
 
 class AudioRouter:
@@ -145,6 +124,17 @@ class AudioRouter:
         self._echo_suppressed = False
         self._echo_cooldown_task: asyncio.Task | None = None
 
+        # Echo Detector: 에너지 핑거프린트 기반 에코 감지 (blanket block 대체)
+        self._echo_detector: EchoDetector | None = None
+        if settings.echo_detector_enabled:
+            self._echo_detector = EchoDetector(
+                correlation_window_chunks=settings.echo_detector_correlation_window,
+                min_delay_chunks=settings.echo_detector_min_delay_chunks,
+                max_delay_chunks=settings.echo_detector_max_delay_chunks,
+                echo_threshold=settings.echo_detector_threshold,
+                safety_cooldown_s=settings.echo_detector_safety_cooldown_s,
+            )
+
         # Phase 3: Recovery Managers (PRD 5.3)
         # Agent Mode: Function Calling 도구를 Recovery에 전달하여 재연결 시 복원
         tools_a = get_tools_for_mode(call.mode) if call.mode == CallMode.AGENT else None
@@ -192,6 +182,10 @@ class AudioRouter:
                 await self._echo_cooldown_task
             except asyncio.CancelledError:
                 pass
+
+        # Echo Detector 정리
+        if self._echo_detector is not None:
+            self._echo_detector.reset()
 
         # Phase 3: Recovery 중지
         await self.recovery_a.stop()
@@ -280,9 +274,14 @@ class AudioRouter:
         if self.recovery_b.is_degraded:
             return  # Degraded 모드에서는 버퍼에만 기록
 
-        # Echo Gate v3: 에코 억제 중 — Session B에 오디오 전송 차단
-        if self._echo_suppressed:
-            return
+        # Echo Detector: per-chunk 에코 감지 (feature flag on)
+        if self._echo_detector is not None:
+            if self._echo_detector.is_active and self._echo_detector.is_echo(audio_bytes):
+                return  # 에코로 판정된 청크만 드롭
+        else:
+            # 레거시: 2.5s blanket block (feature flag off)
+            if self._echo_suppressed:
+                return
 
         # 오디오 에너지 게이트: 순수 무음 필터링
         if settings.audio_energy_gate_enabled:
@@ -297,13 +296,18 @@ class AudioRouter:
     # --- Session A 콜백: TTS -> Twilio ---
 
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
-        """Session A의 TTS 오디오를 Twilio로 전달 + 에코 억제 활성화.
+        """Session A의 TTS 오디오를 Twilio로 전달 + 에코 감지 기록.
 
         수신자가 말하는 중이면 TTS를 Twilio에 보내지 않는다 (겹침 방지).
         """
         if self.interrupt.is_recipient_speaking:
             return  # 수신자 발화 중 — TTS 드롭
-        self._activate_echo_suppression()
+        if self._echo_detector is not None:
+            # 새 방식: fingerprint 기록만 (출력 억제 없음)
+            self._echo_detector.record_sent_chunk(audio_bytes)
+        else:
+            # 레거시: blanket block
+            self._activate_echo_suppression()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -317,7 +321,12 @@ class AudioRouter:
 
     async def _on_session_a_done(self) -> None:
         """Session A 응답 완료 → 에코 쿨다운 시작 + 번역 완료 알림."""
-        self._start_echo_cooldown()
+        if self._echo_detector is not None:
+            # 새 방식: 0.3s safety cooldown만 (mark_tts_done이 타임스탬프 기록)
+            self._echo_detector.mark_tts_done()
+        else:
+            # 레거시: 2.5s blanket cooldown
+            self._start_echo_cooldown()
         # Phase 5: 번역 완료 상태 알림
         await self._app_ws_send(
             WsMessage(
@@ -396,7 +405,9 @@ class AudioRouter:
             self.session_b.output_suppressed = False
             # v3: 억제 중 쌓인 출력은 에코 환각이므로 폐기 (flush하지 않음)
             self.session_b.clear_pending_output()
-            logger.info("Echo gate released after %.1fs cooldown (pending output discarded)", settings.echo_gate_cooldown_s)
+            # Session B 입력 버퍼 초기화: 에코 잔여물이 VAD를 교란하지 않도록
+            await self.session_b.clear_input_buffer()
+            logger.info("Echo gate released after %.1fs cooldown (pending output discarded, input buffer cleared)", settings.echo_gate_cooldown_s)
         except asyncio.CancelledError:
             pass
 
@@ -404,11 +415,15 @@ class AudioRouter:
 
     async def _on_recipient_started(self) -> None:
         """수신자 발화 시작 -> Echo Gate 쿨다운 중이면 무시 + First Message 또는 Interrupt 처리."""
-        # Echo Gate v3: 쿨다운 중 감지된 발화는 에코로 간주하여 무시
-        # Whisper 환각("MBC 뉴스", "I love you" 등) 방지
-        if self._echo_suppressed:
-            logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
-            return
+        if self._echo_detector is not None:
+            # 새 방식: per-chunk 감지가 에코를 걸러주므로
+            # Session B VAD가 감지한 발화는 genuine speech — 정상 처리
+            pass
+        else:
+            # 레거시: 쿨다운 중 감지된 발화는 에코로 간주하여 무시
+            if self._echo_suppressed:
+                logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
+                return
 
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()

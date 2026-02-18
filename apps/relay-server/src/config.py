@@ -63,7 +63,15 @@ class Settings(BaseSettings):
     whisper_model: str = "whisper-1"
 
     # Echo Gate (에코 피드백 루프 차단)
-    echo_gate_cooldown_s: float = 3.0  # TTS 완료 후 에코 소멸 대기: TTS 잔향 + Twilio RTT + 디바이스 에코
+    echo_gate_cooldown_s: float = 2.5  # TTS 완료 후 에코 소멸 대기 (레거시 폴백용)
+
+    # Echo Detector (에너지 핑거프린트 기반 에코 감지)
+    echo_detector_enabled: bool = True  # feature flag (False → 레거시 2.5s blanket block 폴백)
+    echo_detector_threshold: float = 0.6  # Pearson 상관계수 임계값
+    echo_detector_safety_cooldown_s: float = 0.3  # TTS 종료 후 안전 마진
+    echo_detector_min_delay_chunks: int = 4  # 최소 에코 딜레이 (80ms)
+    echo_detector_max_delay_chunks: int = 30  # 최대 에코 딜레이 (600ms)
+    echo_detector_correlation_window: int = 10  # 비교 윈도우 크기 (200ms)
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
     session_b_vad_threshold: float = 0.7  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.7, 전화 오디오용)
