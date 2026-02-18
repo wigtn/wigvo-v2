@@ -1,0 +1,53 @@
+# wigvo-web: push to main → auto build + deploy
+# 트리거 경로 필터: apps/web/**
+# NEXT_PUBLIC_* 빌드 인자는 트리거 substitutions에서 주입
+
+steps:
+  # Docker 이미지 빌드 (NEXT_PUBLIC_* 빌드타임 주입)
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - --build-arg=NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL}
+      - --build-arg=NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID}
+      - --build-arg=NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}
+      - --build-arg=OPENAI_API_KEY=${_OPENAI_API_KEY}
+      - -t
+      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA
+      - -t
+      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest
+      - -f
+      - apps/web/Dockerfile
+      - apps/web
+
+  # 이미지 푸시
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web
+
+  # Cloud Run 배포
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - wigvo-web
+      - --image=asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA
+      - --region=asia-northeast3
+      - --platform=managed
+      - --quiet
+
+substitutions:
+  _NEXT_PUBLIC_SUPABASE_URL: ""
+  _NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+  _NEXT_PUBLIC_RELAY_WS_URL: ""
+  _NEXT_PUBLIC_NAVER_MAP_CLIENT_ID: ""
+  _NEXT_PUBLIC_BASE_URL: ""
+  _OPENAI_API_KEY: ""
+
+timeout: 1200s
+options:
+  logging: CLOUD_LOGGING_ONLY

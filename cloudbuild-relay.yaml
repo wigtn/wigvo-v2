@@ -1,0 +1,19 @@
+# wigvo-relay: push to main → auto deploy
+# 트리거 경로 필터: apps/relay-server/**
+
+steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - wigvo-relay
+      - --source=apps/relay-server
+      - --region=asia-northeast3
+      - --platform=managed
+      - --quiet
+    timeout: 600s
+
+timeout: 900s
+options:
+  logging: CLOUD_LOGGING_ONLY
