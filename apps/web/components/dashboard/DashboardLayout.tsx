@@ -34,7 +34,7 @@ export default function DashboardLayout() {
     callingCommunicationMode,
   } = useDashboard();
 
-  const { handleNewConversation } = useChat();
+  const { handleNewConversation, scenarioSelected } = useChat();
   const t = useTranslations("dashboard");
 
   const [mobileTab, setMobileTab] = useState<"chat" | "map" | "calling">(
@@ -142,7 +142,7 @@ export default function DashboardLayout() {
       ) : (
         /* 채팅 + 지도 2-column 레이아웃 */
         <div className="flex-1 flex flex-col lg:flex-row gap-0 lg:gap-4 p-0 lg:p-4 overflow-hidden">
-          {/* 모바일 헤더 (탭 전환) */}
+          {/* 모바일 헤더 (시나리오 선택 전: 메뉴+언어만 / 선택 후: 탭 전환) */}
           <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-[#E2E8F0]">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -151,56 +151,58 @@ export default function DashboardLayout() {
               <Menu className="size-5 text-[#64748B]" />
             </button>
 
-            <div className="flex bg-[#F1F5F9] rounded-xl p-1">
-              <button
-                onClick={() => setMobileTab("chat")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                  mobileTab === "chat"
-                    ? "bg-white text-[#0F172A] shadow-sm"
-                    : "text-[#94A3B8]",
+            {scenarioSelected && (
+              <div className="flex bg-[#F1F5F9] rounded-xl p-1">
+                <button
+                  onClick={() => setMobileTab("chat")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                    mobileTab === "chat"
+                      ? "bg-white text-[#0F172A] shadow-sm"
+                      : "text-[#94A3B8]",
+                  )}
+                >
+                  <MessageSquare className="size-4" />
+                  {t("tabChat")}
+                </button>
+                {isCalling ? (
+                  <button
+                    onClick={() => setMobileTab("calling")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                      mobileTab === "calling"
+                        ? "bg-white text-[#0F172A] shadow-sm"
+                        : "text-[#94A3B8]",
+                    )}
+                  >
+                    <Phone className="size-4" />
+                    {t("tabCalling")}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setMobileTab("map")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                      mobileTab === "map"
+                        ? "bg-white text-[#0F172A] shadow-sm"
+                        : "text-[#94A3B8]",
+                    )}
+                  >
+                    <Map className="size-4" />
+                    {t("tabMap")}
+                  </button>
                 )}
-              >
-                <MessageSquare className="size-4" />
-                {t("tabChat")}
-              </button>
-              {isCalling ? (
-                <button
-                  onClick={() => setMobileTab("calling")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                    mobileTab === "calling"
-                      ? "bg-white text-[#0F172A] shadow-sm"
-                      : "text-[#94A3B8]",
-                  )}
-                >
-                  <Phone className="size-4" />
-                  {t("tabCalling")}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setMobileTab("map")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                    mobileTab === "map"
-                      ? "bg-white text-[#0F172A] shadow-sm"
-                      : "text-[#94A3B8]",
-                  )}
-                >
-                  <Map className="size-4" />
-                  {t("tabMap")}
-                </button>
-              )}
-            </div>
+              </div>
+            )}
 
             <LanguageSwitcher />
           </div>
 
-          {/* 좌측: 채팅 카드 */}
+          {/* 좌측: 채팅 카드 (시나리오 미선택 시 전체 너비) */}
           <div
             className={cn(
               "h-full transition-all duration-500 ease-in-out",
-              isCalling ? "lg:w-1/2" : "lg:w-1/2",
+              !scenarioSelected && !isCalling && searchResults.length === 0 ? "lg:w-full" : "lg:w-1/2",
               mobileTab === "chat" ? "flex-1" : "hidden lg:block",
             )}
           >
@@ -233,11 +235,11 @@ export default function DashboardLayout() {
               </RelayCallProvider>
             )}
           </div>
-          {/* 우측: 지도 + 장소 정보 카드 (평상시) */}
+          {/* 우측: 지도 + 장소 정보 카드 (시나리오 선택 후에만 표시) */}
           <div
             className={cn(
               "h-full flex flex-col gap-2 lg:gap-4 p-2 lg:p-0 transition-all duration-500 ease-in-out overflow-hidden",
-              isCalling
+              isCalling || (!scenarioSelected && searchResults.length === 0)
                 ? "lg:w-0 lg:opacity-0 hidden"
                 : cn(
                     "lg:w-1/2",
