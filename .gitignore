@@ -1,5 +1,6 @@
 # Claude Code
 .claude/
+CLAUDE.md
 
 # Python
 __pycache__/
@@ -37,6 +38,3 @@ node_modules/
 # Next.js
 .next/
 next-env.d.ts
-
-# Claude Code
-.claude/
