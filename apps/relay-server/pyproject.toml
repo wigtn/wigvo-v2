@@ -22,3 +22,7 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "httpx>=0.28.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"

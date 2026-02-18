@@ -1,0 +1,27 @@
+# Cloud Build — GitHub push 시 자동 배포
+# 트리거 설정: Console > Cloud Build > Triggers > GitHub 연결
+#
+# relay-server 트리거: includedFiles = ['apps/relay-server/**']
+# web 트리거:          includedFiles = ['apps/web/**']
+
+substitutions:
+  _SERVICE_NAME: ""  # 트리거에서 설정 (relay-server 또는 web)
+  _REGION: asia-northeast3
+
+steps:
+  # Relay Server 배포
+  - id: deploy-relay
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --source=apps/${_SERVICE_NAME}
+      - --region=${_REGION}
+      - --platform=managed
+      - --quiet
+    waitFor: ["-"]
+
+options:
+  logging: CLOUD_LOGGING_ONLY
