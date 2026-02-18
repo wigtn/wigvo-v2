@@ -23,7 +23,7 @@ interface NaverMapContainerProps {
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 };
-const NAVER_MAPS_SRC = "https://openapi.map.naver.com/openapi/v3/maps.js";
+const NAVER_MAPS_SRC = "https://oapi.map.naver.com/openapi/v3/maps.js";
 
 // 전역 스크립트 로딩 상태 (컴포넌트 리마운트 시 중복 로딩 방지)
 let _scriptLoadPromise: Promise<void> | null = null;
