@@ -167,6 +167,13 @@
       "textToVoice": "텍스트 → 음성",
       "voiceToText": "음성 → 자막",
       "fullAgent": "AI 자율 통화"
+    },
+    "caption": {
+      "you": "나",
+      "ai": "AI",
+      "recipient": "상대방",
+      "original": "원문",
+      "translated": "번역"
     }
   },
   "callStatus": {

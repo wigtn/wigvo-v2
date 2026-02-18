@@ -167,6 +167,13 @@
       "textToVoice": "Text to Voice",
       "voiceToText": "Voice to Text",
       "fullAgent": "AI Auto Call"
+    },
+    "caption": {
+      "you": "You",
+      "ai": "AI",
+      "recipient": "Recipient",
+      "original": "Original",
+      "translated": "Translated"
     }
   },
   "callStatus": {

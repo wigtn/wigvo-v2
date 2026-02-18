@@ -223,6 +223,7 @@ export default function DashboardLayout() {
           >
             {isCalling && callingCallId && (
               <RelayCallProvider
+                key={callingCallId}
                 callingCallId={callingCallId}
                 communicationMode={callingCommunicationMode ?? 'voice_to_voice'}
               >

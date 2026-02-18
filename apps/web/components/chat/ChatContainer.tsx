@@ -56,7 +56,7 @@ export default function ChatContainer() {
   } = useRelayCallStore();
 
   // Call 메타데이터 (targetName 등) - 통화 중에만 폴링
-  const { call } = useCallPolling(callingCallId ?? '');
+  const { call, refetch } = useCallPolling(callingCallId ?? '');
 
   // 통화 상태 추적 (연결 중/연결됨/종료 상태 메시지용)
   const prevCallStatusRef = useRef(callStatus);
@@ -79,10 +79,12 @@ export default function ChatContainer() {
       }
       if (callStatus === 'ended') {
         shownStatusesRef.current.add('ended');
+        // Immediately refetch call data so ResultCard shows up-to-date info
+        refetch();
       }
       prevCallStatusRef.current = callStatus;
     }
-  }, [callStatus]);
+  }, [callStatus, refetch]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);

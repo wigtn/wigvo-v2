@@ -30,6 +30,15 @@ export default function RelayCallProvider({
   const syncState = useRelayCallStore((s) => s.syncState);
   const reset = useRelayCallStore((s) => s.reset);
   const startedRef = useRef(false);
+  const prevCallIdRef = useRef(callingCallId);
+
+  // callingCallId 변경 시 startedRef 리셋 (같은 마운트에서 새 통화 시작 가능)
+  useEffect(() => {
+    if (prevCallIdRef.current !== callingCallId) {
+      prevCallIdRef.current = callingCallId;
+      startedRef.current = false;
+    }
+  }, [callingCallId]);
 
   // relayWsUrl 확보 시 startCall
   useEffect(() => {

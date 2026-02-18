@@ -21,6 +21,7 @@ import type { CommunicationMode } from '@/shared/call-types';
 import { DEFAULT_LANGUAGE_PAIR } from '@/shared/call-types';
 import { createEmptyCollectedData } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
+import { getStoredLocale } from '@/lib/i18n';
 import {
   STORAGE_KEY_CONVERSATION_ID,
   ERROR_AUTO_DISMISS_MS,
@@ -305,7 +306,8 @@ export function useChat(): UseChatReturn {
           conversationId,
           content.trim(),
           currentSearchResults.length > 0 ? currentSearchResults : undefined,
-          communicationMode || undefined
+          communicationMode || undefined,
+          getStoredLocale()
         );
         setIsSearching(false);
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useRelayCallStore } from '@/hooks/useRelayCallStore';
@@ -48,7 +49,7 @@ export default function CallEffectPanel() {
   const t = useTranslations('call');
   const tc = useTranslations('common');
   const { callingCallId, callingCommunicationMode, resetCalling } = useDashboard();
-  const { call, loading, error: pollError } = useCallPolling(callingCallId ?? '');
+  const { call, loading, error: pollError, refetch } = useCallPolling(callingCallId ?? '');
 
   const {
     callStatus,
@@ -61,6 +62,15 @@ export default function CallEffectPanel() {
     endCall,
     toggleMute,
   } = useRelayCallStore();
+
+  // WebSocket reports ended → immediately refetch call data from server
+  const prevCallStatusRef = useRef(callStatus);
+  useEffect(() => {
+    if (callStatus === 'ended' && prevCallStatusRef.current !== 'ended') {
+      refetch();
+    }
+    prevCallStatusRef.current = callStatus;
+  }, [callStatus, refetch]);
 
   const communicationMode = callingCommunicationMode ?? 'voice_to_voice';
   const BadgeIcon = modeBadgeIcon[communicationMode];

@@ -44,6 +44,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
 
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userSpeakingRef = useRef(false);
+  const wsRef = useRef<{ disconnect: () => void } | null>(null);
 
   // Mode UI config
   const modeConfig = getModeUIConfig(communicationMode);
@@ -130,6 +131,17 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
             setCallStatus('connected');
           } else if (status === 'ended' || status === 'completed' || status === 'failed') {
             setCallStatus('ended');
+            // Server confirmed call ended — clean up resources
+            player.stop();
+            if (durationTimerRef.current) {
+              clearInterval(durationTimerRef.current);
+              durationTimerRef.current = null;
+            }
+            // Delay disconnect so any final messages can arrive
+            setTimeout(() => {
+              wsRef.current?.disconnect();
+              setWsUrl(null);
+            }, 300);
           }
           break;
         }
@@ -165,6 +177,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
     onMessage: handleMessage,
     autoConnect: true,
   });
+  wsRef.current = ws;
 
   // Update callStatus when ws connects
   useEffect(() => {
@@ -226,20 +239,45 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
   );
 
   const endCall = useCallback(() => {
-    ws.sendEndCall();
+    // Send END_CALL first, then wait briefly before disconnecting
+    // to ensure the message is delivered to the relay server.
+    const sent = ws.sendEndCall();
     player.stop();
-    ws.disconnect();
     setCallStatus('ended');
 
     if (durationTimerRef.current) {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
     }
+
+    if (sent) {
+      // Give the server time to receive END_CALL and process Twilio hangup
+      setTimeout(() => {
+        ws.disconnect();
+        setWsUrl(null);
+      }, 500);
+    } else {
+      // WebSocket was not open — disconnect immediately
+      ws.disconnect();
+      setWsUrl(null);
+    }
   }, [ws, player]);
 
   const sendText = useCallback(
     (text: string) => {
       ws.sendText(text);
+      // Add local caption immediately so the user sees their text in the chat
+      captionCounterRef.current += 1;
+      const entry: CaptionEntry = {
+        id: `caption-${captionCounterRef.current}`,
+        speaker: 'user',
+        text,
+        language: '',
+        isFinal: true,
+        timestamp: Date.now(),
+      };
+      setCaptions((prev) => [...prev, entry]);
+      streamingRef.current = null;
     },
     [ws],
   );

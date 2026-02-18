@@ -57,7 +57,8 @@ export async function sendChatMessage(
   conversationId: string,
   message: string,
   previousSearchResults?: Array<{ name: string; address: string; roadAddress: string; telephone: string; category: string; mapx: number; mapy: number }>,
-  communicationMode?: CommunicationMode
+  communicationMode?: CommunicationMode,
+  locale?: string
 ): Promise<ChatResponse> {
   const body: Record<string, unknown> = { conversationId, message };
   if (previousSearchResults && previousSearchResults.length > 0) {
@@ -65,6 +66,9 @@ export async function sendChatMessage(
   }
   if (communicationMode) {
     body.communicationMode = communicationMode;
+  }
+  if (locale) {
+    body.locale = locale;
   }
   const response = await fetch('/api/chat', {
     method: 'POST',

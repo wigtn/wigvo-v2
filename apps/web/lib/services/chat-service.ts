@@ -40,6 +40,7 @@ interface ChatContext {
   location?: { lat: number; lng: number };
   previousSearchResults?: NaverPlaceResultBasic[];
   communicationMode?: CommunicationMode;
+  locale?: string;
 }
 
 interface ChatResult {
@@ -137,7 +138,7 @@ function formatSearchResultsForTool(results: NaverPlaceResult[]): string {
 // -----------------------------------------------------------------------------
 
 export async function processChat(context: ChatContext): Promise<ChatResult> {
-  const { existingData, history, userMessage, location, previousSearchResults, communicationMode } =
+  const { existingData, history, userMessage, location, previousSearchResults, communicationMode, locale } =
     context;
 
   // 이전 검색 결과 초기화
@@ -167,6 +168,11 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
       existingData.scenario_type || undefined,
       placeResults
     );
+  }
+
+  // Prepend locale instruction if user's UI is in English
+  if (locale === 'en') {
+    systemPrompt = `**IMPORTANT: The user's interface is in English. You MUST respond in English.** Use friendly, natural English. Keep the JSON block keys in English as-is.\n\n${systemPrompt}`;
   }
 
   // 2. LLM 메시지 구성

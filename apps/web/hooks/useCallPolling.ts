@@ -11,6 +11,7 @@ interface UseCallPollingReturn {
   call: Call | null;
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }
 
 export function useCallPolling(callId: string): UseCallPollingReturn {
@@ -97,5 +98,11 @@ export function useCallPolling(callId: string): UseCallPollingReturn {
     };
   }, [fetchCall, stopPolling]);
 
-  return { call, loading, error };
+  // Manual refetch — bypasses terminal guard for immediate data refresh
+  const refetch = useCallback(() => {
+    isTerminalRef.current = false;
+    fetchCall();
+  }, [fetchCall]);
+
+  return { call, loading, error, refetch };
 }

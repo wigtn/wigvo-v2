@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { conversationId, message, location, previousSearchResults, communicationMode } =
+    const { conversationId, message, location, previousSearchResults, communicationMode, locale } =
       validation.data;
 
     // 3. 대화 세션 확인
@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
         location,
         previousSearchResults,
         communicationMode,
+        locale,
       });
     } catch (llmError) {
       console.error('OpenAI API error:', llmError);

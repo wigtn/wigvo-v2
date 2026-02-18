@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import {
   ArrowLeftRight,
   Phone,
@@ -64,9 +64,13 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
   const t = useTranslations('scenario');
   const tModes = useTranslations('scenario.modes');
   const tQuick = useTranslations('scenario.quick');
+  const locale = useLocale();
 
-  const [sourceLang, setSourceLang] = useState(DEFAULT_LANGUAGE_PAIR.source.code);
-  const [targetLang, setTargetLang] = useState(DEFAULT_LANGUAGE_PAIR.target.code);
+  // Sync source language with UI locale: if UI is English, user speaks English (source=en, target=ko)
+  const defaultSource = locale === 'ko' ? DEFAULT_LANGUAGE_PAIR.source.code : 'en';
+  const defaultTarget = locale === 'ko' ? DEFAULT_LANGUAGE_PAIR.target.code : 'ko';
+  const [sourceLang, setSourceLang] = useState(defaultSource);
+  const [targetLang, setTargetLang] = useState(defaultTarget);
   const [communicationMode, setCommunicationMode] = useState<CommunicationMode>('voice_to_voice');
   const [isModeOpen, setIsModeOpen] = useState(false);
   const [freeText, setFreeText] = useState('');

@@ -41,6 +41,7 @@ export const ChatRequestSchema = z.object({
   communicationMode: z
     .enum(['voice_to_voice', 'text_to_voice', 'voice_to_text', 'full_agent'])
     .optional(),
+  locale: z.enum(['en', 'ko']).optional(),
   location: LocationSchema.optional(),
   previousSearchResults: z
     .array(
