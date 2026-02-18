@@ -54,6 +54,14 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
   // Caption counter for unique IDs
   const captionCounterRef = useRef(0);
 
+  // Track current streaming caption for delta accumulation
+  // Streaming deltas from the same speaker/direction/stage are merged into one caption
+  const streamingRef = useRef<{
+    direction: string;
+    stage: number | undefined;
+    speaker: string;
+  } | null>(null);
+
   // Handle incoming WS messages
   const handleMessage = useCallback(
     (msg: RelayWsMessage) => {
@@ -65,17 +73,42 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
             : msg.type === WsMessageType.CAPTION_TRANSLATED ? 2
             : (msg.data.stage as 1 | 2 | undefined);
 
-          captionCounterRef.current += 1;
-          const entry: CaptionEntry = {
-            id: `caption-${captionCounterRef.current}`,
-            speaker: (msg.data.speaker as CaptionEntry['speaker']) ?? 'recipient',
-            text: (msg.data.text as string) ?? '',
-            language: (msg.data.language as string) ?? '',
-            isFinal: (msg.data.is_final as boolean) ?? true,
-            timestamp: Date.now(),
-            stage,
-          };
-          setCaptions((prev) => [...prev, entry]);
+          const direction = (msg.data.direction as string) ?? 'unknown';
+          // Server sends "role", client uses "speaker" — support both
+          const speaker = (msg.data.role as CaptionEntry['speaker'])
+            ?? (msg.data.speaker as CaptionEntry['speaker'])
+            ?? 'recipient';
+          const text = (msg.data.text as string) ?? '';
+
+          const cur = streamingRef.current;
+
+          // Append to existing caption if same speaker + direction + stage
+          if (cur &&
+              cur.direction === direction &&
+              cur.stage === stage &&
+              cur.speaker === speaker) {
+            setCaptions((prev) => {
+              if (prev.length === 0) return prev;
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, text: last.text + text };
+              return updated;
+            });
+          } else {
+            // New caption entry
+            captionCounterRef.current += 1;
+            const entry: CaptionEntry = {
+              id: `caption-${captionCounterRef.current}`,
+              speaker,
+              text,
+              language: (msg.data.language as string) ?? '',
+              isFinal: false,
+              timestamp: Date.now(),
+              stage,
+            };
+            setCaptions((prev) => [...prev, entry]);
+            streamingRef.current = { direction, stage, speaker };
+          }
           break;
         }
 
@@ -186,6 +219,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
       setTranslationState('idle');
       setIsMuted(false);
       captionCounterRef.current = 0;
+      streamingRef.current = null;
       setWsUrl(relayWsUrl);
     },
     [],

@@ -66,13 +66,15 @@ class Settings(BaseSettings):
     echo_gate_cooldown_s: float = 3.0  # TTS 완료 후 에코 소멸 대기: TTS 잔향 + Twilio RTT + 디바이스 에코
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
-    session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.8로 상향)
-    session_b_vad_silence_ms: int = 600  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 600ms)
+    session_b_vad_threshold: float = 0.7  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.7, 전화 오디오용)
+    session_b_vad_silence_ms: int = 500  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 500ms)
     session_b_vad_prefix_padding_ms: int = 300  # 발화 시작 전 포함할 오디오 (기본 300ms)
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
+    # NOTE: Server VAD threshold 0.8이 소음 필터링을 담당하므로,
+    # 에너지 게이트는 순수 무음만 차단하도록 낮은 임계값 사용
     audio_energy_gate_enabled: bool = True
-    audio_energy_min_rms: float = 150.0  # mu-law RMS 최소 임계값 (0=무음, ~500=조용한 발화, ~2000=보통 발화)
+    audio_energy_min_rms: float = 20.0  # mu-law RMS 최소 임계값 (0=무음, 전화 소음 ~50-200, 발화 ~300+)
 
     # Phase 4: Guardrail (PRD M-2)
     guardrail_enabled: bool = True

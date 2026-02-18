@@ -284,11 +284,11 @@ class AudioRouter:
         if self._echo_suppressed:
             return
 
-        # 오디오 에너지 게이트: 무음/소음 필터링 (Whisper 환각 방지)
+        # 오디오 에너지 게이트: 순수 무음 필터링
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
             if rms < settings.audio_energy_min_rms:
-                return  # 에너지 부족 — 무음 또는 소음으로 판단
+                return  # 순수 무음 — 전송 불필요
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
