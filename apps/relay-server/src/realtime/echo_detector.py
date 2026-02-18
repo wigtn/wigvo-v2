@@ -111,8 +111,7 @@ class EchoDetector:
         # Reference RMS 시퀀스 추출
         ref_rms_list = [rms for _, rms in self._reference_buffer]
 
-        # 다양한 딜레이 오프셋에서 상관관계 테스트
-        max_corr = -1.0
+        # 다양한 딜레이 오프셋에서 상관관계 테스트 (early termination 적용)
         incoming_window = list(self._incoming_buffer)[-self._correlation_window :]
 
         for delay in range(
@@ -128,17 +127,15 @@ class EchoDetector:
             ref_window = ref_rms_list[ref_start:ref_end]
 
             corr = self._pearson_correlation(ref_window, incoming_window)
-            if corr > max_corr:
-                max_corr = corr
+            # Early termination: 임계값 초과 시 즉시 에코 판정
+            if corr > self._echo_threshold:
+                logger.debug(
+                    "Echo detected: correlation=%.3f delay=%d (threshold=%.3f)",
+                    corr, delay, self._echo_threshold,
+                )
+                return True
 
-        is_echo = max_corr > self._echo_threshold
-        if is_echo:
-            logger.debug(
-                "Echo detected: correlation=%.3f (threshold=%.3f)",
-                max_corr,
-                self._echo_threshold,
-            )
-        return is_echo
+        return False
 
     def reset(self) -> None:
         """상태 초기화."""

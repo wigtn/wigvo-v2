@@ -54,6 +54,7 @@ class SessionBHandler:
         self._is_recipient_speaking = False
         self._output_suppressed = False
         self._pending_output: list[tuple[str, Any]] = []
+        self._speech_started_at: float = 0.0  # 파이프라인 지연 계측용
 
         self._register_handlers()
 
@@ -179,7 +180,15 @@ class SessionBHandler:
 
     async def _save_transcript_and_notify(self, transcript: str) -> None:
         """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
-        logger.info("[SessionB] Translation complete: %s", transcript[:80])
+        if self._speech_started_at > 0:
+            e2e_ms = (time.time() - self._speech_started_at) * 1000
+            logger.info(
+                "[SessionB] Translation complete (e2e=%.0fms): %s",
+                e2e_ms, transcript[:80],
+            )
+            self._speech_started_at = 0.0
+        else:
+            logger.info("[SessionB] Translation complete: %s", transcript[:80])
 
         # 양방향 transcript 저장 — 억제 상태와 무관하게 항상 저장
         if self._call:
@@ -226,6 +235,7 @@ class SessionBHandler:
         Interrupt 처리 (PRD 3.6)의 핵심 트리거다.
         """
         self._is_recipient_speaking = True
+        self._speech_started_at = time.time()
         logger.info("[SessionB] Recipient speech started")
         if self._on_recipient_speech_started:
             await self._on_recipient_speech_started()
@@ -233,7 +243,11 @@ class SessionBHandler:
     async def _handle_speech_stopped(self, event: dict[str, Any]) -> None:
         """Server VAD가 수신자 발화 종료를 감지."""
         self._is_recipient_speaking = False
-        logger.debug("[SessionB] Recipient speech stopped")
+        if self._speech_started_at > 0:
+            speech_dur = (time.time() - self._speech_started_at) * 1000
+            logger.info("[SessionB] Recipient speech stopped (duration=%.0fms)", speech_dur)
+        else:
+            logger.info("[SessionB] Recipient speech stopped")
         if self._on_recipient_speech_stopped:
             await self._on_recipient_speech_stopped()
 
@@ -253,6 +267,10 @@ class SessionBHandler:
         if self._output_suppressed:
             self._pending_output.append(("original_caption", ("recipient", transcript)))
             return
-        logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
+        if self._speech_started_at > 0:
+            stt_ms = (time.time() - self._speech_started_at) * 1000
+            logger.info("[SessionB] Original STT (Stage 1, stt=%.0fms): %s", stt_ms, transcript[:80])
+        else:
+            logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
         if self._on_original_caption:
             await self._on_original_caption("recipient", transcript)

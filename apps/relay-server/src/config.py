@@ -68,14 +68,14 @@ class Settings(BaseSettings):
     # Echo Detector (에너지 핑거프린트 기반 에코 감지)
     echo_detector_enabled: bool = True  # feature flag (False → 레거시 2.5s blanket block 폴백)
     echo_detector_threshold: float = 0.6  # Pearson 상관계수 임계값
-    echo_detector_safety_cooldown_s: float = 0.3  # TTS 종료 후 안전 마진
+    echo_detector_safety_cooldown_s: float = 0.15  # TTS 종료 후 안전 마진 (per-chunk 감지가 정확하므로 짧게)
     echo_detector_min_delay_chunks: int = 4  # 최소 에코 딜레이 (80ms)
-    echo_detector_max_delay_chunks: int = 30  # 최대 에코 딜레이 (600ms)
-    echo_detector_correlation_window: int = 10  # 비교 윈도우 크기 (200ms)
+    echo_detector_max_delay_chunks: int = 20  # 최대 에코 딜레이 (400ms, Twilio RTT ~100-300ms)
+    echo_detector_correlation_window: int = 8  # 비교 윈도우 크기 (160ms)
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
     session_b_vad_threshold: float = 0.7  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.7, 전화 오디오용)
-    session_b_vad_silence_ms: int = 500  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 500ms)
+    session_b_vad_silence_ms: int = 300  # 발화 종료 판정까지 필요한 무음 시간 (500→300ms, 자연 대화 속도)
     session_b_vad_prefix_padding_ms: int = 300  # 발화 시작 전 포함할 오디오 (기본 300ms)
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
