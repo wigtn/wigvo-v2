@@ -41,15 +41,10 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // 미인증 사용자 처리
+  // NOTE: /api routes are excluded by middleware matcher — no need to check here
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api');
   const isTestPage = request.nextUrl.pathname.startsWith('/test-map');
-
-  // API Route는 각 핸들러에서 인증 처리
-  if (isApiRoute) {
-    return supabaseResponse;
-  }
 
   // 인증 콜백은 통과
   if (isAuthCallback) {
