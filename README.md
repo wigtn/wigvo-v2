@@ -15,7 +15,7 @@ No apps needed on the recipient's end. Just call.
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#tech-stack)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#tech-stack)
-[![Tests](https://img.shields.io/badge/Tests-74_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-136_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br />
 
@@ -78,14 +78,24 @@ Booking a hospital appointment. Ordering delivery. Calling a restaurant. Contact
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Supported Modes
+### Supported Modes & Pipeline Architecture
 
-| Mode | Input | Output | For |
-|------|-------|--------|-----|
-| **Voice → Voice** | Speak your language | Translated speech + captions | General users |
-| **Text → Voice** | Type text | AI speaks for you via phone | Speech disabilities, phone anxiety |
-| **Voice → Text** | Speak | Real-time captions only | Hearing disabilities |
-| **Agent Mode** | Provide info upfront | AI handles entire call autonomously | Anyone |
+Each communication mode is handled by a dedicated **pipeline** (Strategy pattern), enabling independent development and testing:
+
+| Mode | Pipeline | Input | Output | For |
+|------|----------|-------|--------|-----|
+| **Voice → Voice** | `VoiceToVoicePipeline` | Speak your language | Translated speech + captions | General users |
+| **Voice → Text** | `VoiceToVoicePipeline` (suppress audio) | Speak | Real-time captions only | Hearing disabilities |
+| **Text → Voice** | `TextToVoicePipeline` | Type text | AI speaks for you via phone | Speech disabilities, phone anxiety |
+| **Agent Mode** | `FullAgentPipeline` | Provide info upfront | AI handles entire call autonomously | Anyone |
+
+```
+AudioRouter (thin delegator)
+    │
+    ├── VoiceToVoicePipeline  ← EchoDetector + full audio path
+    ├── TextToVoicePipeline   ← Per-response instruction + text-only Session B
+    └── FullAgentPipeline     ← Function calling + autonomous AI
+```
 
 ---
 
@@ -128,11 +138,33 @@ This is the core architectural decision that makes real-time bidirectional phone
 
 ## Key Technical Innovations
 
-### Echo Gate v2 — Preventing Feedback Loops
+### Echo Prevention — Dual-Layer Detection
 
 When Session A sends translated audio to the recipient via Twilio, that same audio echoes back into Session B's microphone. Without mitigation, this creates an infinite translation loop.
 
-**Our solution: Output-only gating.**
+**Layer 1: Audio Fingerprint Echo Detector (default)**
+
+Per-chunk energy fingerprint analysis using Pearson correlation:
+
+```
+Session A TTS chunks          Twilio incoming audio
+       │                              │
+       ▼                              ▼
+  Record RMS energy           Compare energy pattern
+  to reference buffer         against reference at
+  (timestamp, RMS)            80–600ms delay offsets
+                                      │
+                                      ▼
+                              Pearson correlation r
+                              r > 0.6 → ECHO (drop)
+                              r ≤ 0.6 → GENUINE (pass through immediately)
+```
+
+- Only **echo chunks are dropped** — genuine recipient speech passes through immediately
+- Scale-invariant: works even with 10–30dB signal attenuation
+- **Zero false-positive speech loss** vs. the blanket blocking approach
+
+**Layer 2: Echo Gate v2 (output-side gating)**
 
 ```
                       ┌─────── TTS Playing ───────┐
@@ -140,7 +172,7 @@ When Session A sends translated audio to the recipient via Twilio, that same aud
 Input (recipient):    │  ● Always active          │  ← Never miss real speech
 Output (to user):     │  ○ Suppressed → Queue     │  ← Prevent echo forwarding
                       │                           │
-                      └───── Cooldown (800ms) ────┘
+                      └───── Cooldown (300ms) ────┘
                                     │
                               Flush queued output
 ```
@@ -148,6 +180,8 @@ Output (to user):     │  ○ Suppressed → Queue     │  ← Prevent echo fo
 - Input is **never blocked** — recipient speech detection stays active during echo suppression
 - Output is **queued** during TTS playback, then flushed after cooldown
 - Recipient speech **immediately releases** the gate (priority interrupt)
+
+> **Note**: EchoDetector is only active in **VoiceToVoicePipeline**. TextToVoice/FullAgent don't need echo detection since user input is text (no TTS echo loop possible).
 
 ### Guardrail System — Translation Quality Verification
 
@@ -232,10 +266,17 @@ apps/
 │   │   │   ├── stream.py            # WS /calls/{id}/stream (app ↔ relay)
 │   │   │   └── twilio_webhook.py    # Twilio status callbacks
 │   │   ├── realtime/                # OpenAI Realtime session management
+│   │   │   ├── pipeline/            # Strategy pattern — mode-specific pipelines
+│   │   │   │   ├── base.py          # BasePipeline ABC
+│   │   │   │   ├── voice_to_voice.py # V2V + V2T (EchoDetector, full audio)
+│   │   │   │   ├── text_to_voice.py  # T2V (per-response instruction, text-only B)
+│   │   │   │   └── full_agent.py     # Agent (function calling, autonomous)
+│   │   │   ├── audio_router.py      # Thin delegator → pipeline selection
+│   │   │   ├── echo_detector.py     # Pearson correlation echo detection
+│   │   │   ├── audio_utils.py       # Shared mu-law audio utilities
 │   │   │   ├── session_manager.py   # Dual session orchestrator
 │   │   │   ├── session_a.py         # User → Recipient translation
 │   │   │   ├── session_b.py         # Recipient → User translation
-│   │   │   ├── audio_router.py      # Audio routing + Echo Gate v2
 │   │   │   ├── context_manager.py   # 6-turn sliding context window
 │   │   │   ├── recovery.py          # Session failure recovery + degraded mode
 │   │   │   └── ring_buffer.py       # 30s circular audio buffer
@@ -243,7 +284,7 @@ apps/
 │   │   ├── tools/                   # Agent Mode function calling
 │   │   ├── prompt/                  # System prompt templates + generator
 │   │   └── db/                      # Supabase client
-│   ├── tests/                       # 74 pytest unit tests
+│   ├── tests/                       # 136+ pytest unit tests
 │   └── scripts/tests/               # Integration + Component + E2E tests
 │       ├── run.py                   # Test runner (--suite, --test options)
 │       ├── integration/             # Server-required tests (health, API, WebSocket)
@@ -348,7 +389,7 @@ ngrok http 8000               # Copy URL to .env RELAY_SERVER_URL
 ### Testing
 
 ```bash
-# Unit tests (74 tests, no server needed)
+# Unit tests (136+ tests, no server needed)
 cd apps/relay-server
 uv run pytest -v
 
