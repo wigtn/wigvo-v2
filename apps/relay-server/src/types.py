@@ -64,6 +64,7 @@ class CallStartRequest(BaseModel):
     target_language: str = "ko"
     collected_data: dict[str, Any] | None = None
     vad_mode: VadMode = VadMode.CLIENT
+    system_prompt_override: str | None = None
 
     @field_validator("phone_number")
     @classmethod

@@ -7,6 +7,7 @@ guardrail_events, recovery_events 등을 Supabase에 저장한다.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from supabase import acreate_client, AsyncClient
@@ -49,6 +50,8 @@ async def persist_call(call: ActiveCall) -> None:
         "call_result_data": call.call_result_data,
         "auto_ended": call.auto_ended,
         "function_call_logs": call.function_call_logs,
+        "duration_s": round(time.time() - call.started_at, 1) if call.started_at > 0 else None,
+        "total_tokens": call.cost_tokens.total,
     }
 
     try:

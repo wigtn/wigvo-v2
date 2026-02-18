@@ -122,12 +122,15 @@ class AudioRouter:
         self._echo_cooldown_task: asyncio.Task | None = None
 
         # Phase 3: Recovery Managers (PRD 5.3)
+        # Agent Mode: Function Calling 도구를 Recovery에 전달하여 재연결 시 복원
+        tools_a = get_tools_for_mode(call.mode) if call.mode == CallMode.AGENT else None
         self.recovery_a = SessionRecoveryManager(
             session=dual_session.session_a,
             ring_buffer=self.ring_buffer_a,
             call=call,
             system_prompt=prompt_a,
             on_notify_app=self._notify_app,
+            tools=tools_a,
         )
         self.recovery_b = SessionRecoveryManager(
             session=dual_session.session_b,
@@ -391,8 +394,31 @@ class AudioRouter:
     # --- 대화 컨텍스트 콜백 (Phase 3) ---
 
     async def _on_turn_complete(self, role: str, text: str) -> None:
-        """양쪽 세션의 완료된 번역을 대화 컨텍스트에 추가."""
+        """양쪽 세션의 완료된 번역을 대화 컨텍스트에 추가.
+
+        Agent Mode: 수신자 번역이 완료되면 Session A에 전달하여
+        AI가 다음 응답을 자동 생성하도록 한다 (피드백 루프).
+        """
         self.context_manager.add_turn(role, text)
+
+        # Agent Mode 피드백 루프: Session B 번역 → Session A
+        if role == "recipient" and self.call.mode == CallMode.AGENT:
+            await self._forward_recipient_to_session_a(text)
+
+    async def _forward_recipient_to_session_a(self, text: str) -> None:
+        """Agent Mode: 수신자의 번역된 발화를 Session A에 전달."""
+        # Recovery 컨텍스트를 위해 transcript_history에 기록
+        self.call.transcript_history.append({"role": "recipient", "text": text})
+
+        if self.session_a.is_generating:
+            logger.debug("Waiting for Session A before forwarding recipient translation...")
+            for _ in range(50):  # 최대 5초
+                await asyncio.sleep(0.1)
+                if not self.session_a.is_generating:
+                    break
+
+        logger.info("Agent Mode: forwarding recipient translation to Session A: %s", text[:80])
+        await self.session_a.send_user_text(f"[Recipient says]: {text}")
 
     # --- Guardrail 콜백 (PRD Phase 4 / M-2) ---
 

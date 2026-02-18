@@ -26,3 +26,7 @@ node_modules/
 
 # Expo
 .expo/
+
+# Web App
+apps/web/.next/
+apps/web/next-env.d.ts

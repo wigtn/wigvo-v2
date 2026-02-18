@@ -1,0 +1,229 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { WsMessageType, type CallMode, type CaptionEntry, type RelayWsMessage } from '@/shared/call-types';
+import { useRelayWebSocket } from './useRelayWebSocket';
+import { useClientVad } from './useClientVad';
+import { useWebAudioPlayer } from './useWebAudioPlayer';
+
+type CallStatus = 'idle' | 'connecting' | 'waiting' | 'connected' | 'ended';
+type TranslationState = 'idle' | 'processing' | 'done';
+
+interface UseRelayCallReturn {
+  callStatus: CallStatus;
+  translationState: TranslationState;
+  captions: CaptionEntry[];
+  callDuration: number;
+  callMode: CallMode;
+  startCall: (callId: string, relayWsUrl: string, mode: CallMode) => void;
+  endCall: () => void;
+  sendText: (text: string) => void;
+  toggleMute: () => void;
+  isMuted: boolean;
+  isRecording: boolean;
+  isPlaying: boolean;
+  error: string | null;
+}
+
+export function useRelayCall(): UseRelayCallReturn {
+  const [callStatus, setCallStatus] = useState<CallStatus>('idle');
+  const [translationState, setTranslationState] = useState<TranslationState>('idle');
+  const [captions, setCaptions] = useState<CaptionEntry[]>([]);
+  const [callDuration, setCallDuration] = useState(0);
+  const [callMode, setCallMode] = useState<CallMode>('agent');
+  const [isMuted, setIsMuted] = useState(false);
+  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const userSpeakingRef = useRef(false);
+
+  // Audio player
+  const player = useWebAudioPlayer();
+
+  // Caption counter for unique IDs
+  const captionCounterRef = useRef(0);
+
+  // Handle incoming WS messages
+  const handleMessage = useCallback(
+    (msg: RelayWsMessage) => {
+      switch (msg.type) {
+        case WsMessageType.CAPTION:
+        case WsMessageType.CAPTION_ORIGINAL:
+        case WsMessageType.CAPTION_TRANSLATED: {
+          const stage = msg.type === WsMessageType.CAPTION_ORIGINAL ? 1
+            : msg.type === WsMessageType.CAPTION_TRANSLATED ? 2
+            : (msg.data.stage as 1 | 2 | undefined);
+
+          captionCounterRef.current += 1;
+          const entry: CaptionEntry = {
+            id: `caption-${captionCounterRef.current}`,
+            speaker: (msg.data.speaker as CaptionEntry['speaker']) ?? 'recipient',
+            text: (msg.data.text as string) ?? '',
+            language: (msg.data.language as string) ?? '',
+            isFinal: (msg.data.is_final as boolean) ?? true,
+            timestamp: Date.now(),
+            stage,
+          };
+          setCaptions((prev) => [...prev, entry]);
+          break;
+        }
+
+        case WsMessageType.RECIPIENT_AUDIO: {
+          const audio = msg.data.audio as string;
+          if (audio) {
+            player.play(audio);
+          }
+          break;
+        }
+
+        case WsMessageType.CALL_STATUS: {
+          const status = (msg.data.status as string) ?? (msg.data.message as string);
+          if (status === 'ringing' || status === 'waiting') {
+            setCallStatus('waiting');
+          } else if (status === 'connected' || status === 'in-progress') {
+            setCallStatus('connected');
+          } else if (status === 'ended' || status === 'completed' || status === 'failed') {
+            setCallStatus('ended');
+          }
+          break;
+        }
+
+        case WsMessageType.TRANSLATION_STATE: {
+          const state = msg.data.state as TranslationState;
+          if (state) setTranslationState(state);
+          break;
+        }
+
+        case WsMessageType.INTERRUPT_ALERT: {
+          // Clear playback queue when recipient is speaking
+          player.clearQueue();
+          break;
+        }
+
+        case WsMessageType.ERROR: {
+          const message = (msg.data.message as string) ?? 'Unknown error';
+          setError(message);
+          break;
+        }
+
+        default:
+          break;
+      }
+    },
+    [player],
+  );
+
+  // WebSocket connection
+  const ws = useRelayWebSocket({
+    url: wsUrl,
+    onMessage: handleMessage,
+    autoConnect: true,
+  });
+
+  // Update callStatus when ws connects
+  useEffect(() => {
+    if (ws.status === 'connected' && callStatus === 'connecting') {
+      setCallStatus('waiting');
+    } else if (ws.status === 'error') {
+      setError('WebSocket connection failed');
+    }
+  }, [ws.status, callStatus]);
+
+  // Client VAD — only active in relay mode when not muted
+  const vadEnabled = callMode === 'relay' && !isMuted && wsUrl !== null && ws.status === 'connected';
+
+  const { isSpeaking } = useClientVad({
+    onSpeechAudio: (base64Audio: string) => {
+      if (!userSpeakingRef.current) {
+        userSpeakingRef.current = true;
+        player.stop();
+      }
+      ws.sendAudioChunk(base64Audio);
+    },
+    onSpeechCommitted: () => {
+      userSpeakingRef.current = false;
+      ws.sendVadState('committed');
+    },
+    enabled: vadEnabled,
+  });
+
+  // Call duration timer
+  useEffect(() => {
+    if (callStatus === 'connected') {
+      durationTimerRef.current = setInterval(() => {
+        setCallDuration((prev) => prev + 1);
+      }, 1000);
+    }
+
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    };
+  }, [callStatus]);
+
+  const startCall = useCallback(
+    (callId: string, relayWsUrl: string, mode: CallMode) => {
+      setCallMode(mode);
+      setCallStatus('connecting');
+      setCaptions([]);
+      setCallDuration(0);
+      setError(null);
+      setTranslationState('idle');
+      setIsMuted(false);
+      captionCounterRef.current = 0;
+      setWsUrl(relayWsUrl);
+    },
+    [],
+  );
+
+  const endCall = useCallback(() => {
+    ws.sendEndCall();
+    player.stop();
+    ws.disconnect();
+    setCallStatus('ended');
+
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+  }, [ws, player]);
+
+  const sendText = useCallback(
+    (text: string) => {
+      ws.sendText(text);
+    },
+    [ws],
+  );
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => !prev);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    callStatus,
+    translationState,
+    captions,
+    callDuration,
+    callMode,
+    startCall,
+    endCall,
+    sendText,
+    toggleMute,
+    isMuted,
+    isRecording: vadEnabled && isSpeaking,
+    isPlaying: player.isPlaying,
+    error,
+  };
+}

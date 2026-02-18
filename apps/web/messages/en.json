@@ -1,0 +1,93 @@
+{
+  "common": {
+    "logout": "Logout",
+    "loading": "Loading...",
+    "error": "An error occurred"
+  },
+  "metadata": {
+    "title": "WIGVO - AI Voice Assistant",
+    "description": "AI voice assistant service that makes phone calls on your behalf"
+  },
+  "login": {
+    "title": "AI makes phone calls for you",
+    "subtitle": "Just chat your request —\nour AI Call Agent dials the phone for you\nto book, inquire, and confirm.",
+    "or": "or",
+    "terms": "By starting, you agree to our Terms of Service and Privacy Policy.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Login",
+    "submitting": "Logging in...",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign up",
+    "errors": {
+      "invalidCredentials": "Invalid email or password.",
+      "emailNotConfirmed": "Please verify your email. Check your inbox.",
+      "generic": "An error occurred during login."
+    }
+  },
+  "signup": {
+    "title": "Sign Up",
+    "name": "Name",
+    "email": "Email",
+    "password": "Password (min. 6 characters)",
+    "confirmPassword": "Confirm Password",
+    "submit": "Sign Up",
+    "submitting": "Signing up...",
+    "backToLogin": "Back to Login",
+    "hasAccount": "Already have an account?",
+    "login": "Login",
+    "terms": "By signing up, you agree to our Terms of Service and Privacy Policy.",
+    "success": {
+      "title": "Check your email",
+      "message": "We sent a verification email to . Click the link in the email to complete your registration.",
+      "backToLogin": "Back to Login"
+    },
+    "errors": {
+      "passwordMismatch": "Passwords do not match.",
+      "passwordTooShort": "Password must be at least 6 characters.",
+      "emailExists": "This email is already registered.",
+      "generic": "An error occurred during sign up."
+    }
+  },
+  "chat": {
+    "loadingConversation": "Loading conversation...",
+    "header": "AI makes phone calls for you",
+    "heroTitle": "Phone calls, by AI",
+    "heroSubtitle": "What call would you like me to make?",
+    "emptyState": "Start a conversation",
+    "example": "e.g. \"Book a haircut for tomorrow\"",
+    "placeholder": "Type your message...",
+    "aiAssistant": "AI Assistant",
+    "typing": "Typing",
+    "cancel": "Cancel",
+    "call": "Call",
+    "processing": "Processing..."
+  },
+  "sidebar": {
+    "menu": "Menu",
+    "newChat": "New Chat",
+    "history": "Chat History",
+    "reservations": "Reservations",
+    "recentChats": "Recent Chats",
+    "viewAllReservations": "View All Reservations"
+  },
+  "collection": {
+    "collectionComplete": "Collection Complete",
+    "reservedBy": "Reserved by:",
+    "partySize": "{count} people",
+    "edit": "Edit",
+    "makeCall": "Make Call",
+    "processing": "Processing...",
+    "newRequest": "New Request"
+  },
+  "oauth": {
+    "google": "Continue with Google",
+    "kakao": "Continue with Kakao",
+    "apple": "Continue with Apple",
+    "comingSoon": "Coming soon"
+  },
+  "language": {
+    "ko": "한국어",
+    "en": "English"
+  }
+}

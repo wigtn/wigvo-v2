@@ -55,6 +55,7 @@ class SessionRecoveryManager:
         system_prompt: str,
         on_notify_app: Callable[[WsMessage], Coroutine],
         on_recovered_caption: Callable[[str, str], Coroutine] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ):
         self.session = session
         self.ring_buffer = ring_buffer
@@ -62,6 +63,7 @@ class SessionRecoveryManager:
         self._system_prompt = system_prompt
         self._on_notify_app = on_notify_app
         self._on_recovered_caption = on_recovered_caption
+        self._tools = tools
 
         self._recovering = False
         self._recovery_task: asyncio.Task | None = None
@@ -233,7 +235,10 @@ class SessionRecoveryManager:
             # 재연결 시도
             try:
                 await self.session.close()
-                await self.session.connect(self._build_recovery_prompt())
+                await self.session.connect(
+                    self._build_recovery_prompt(),
+                    tools=self._tools,
+                )
                 self._last_heartbeat = time.time()
 
                 logger.info(
@@ -311,7 +316,7 @@ class SessionRecoveryManager:
             f"--- Previous conversation context (restored after reconnection) ---\n"
             f"{context}\n"
             f"--- End of context ---\n"
-            f"Continue the conversation naturally from where it left off."
+            f"이전 대화를 자연스럽게 이어서 진행하세요."
         )
 
     async def _catchup(self) -> None:

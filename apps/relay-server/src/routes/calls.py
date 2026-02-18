@@ -66,12 +66,15 @@ async def start_call(req: CallStartRequest):
     )
 
     # 2. System Prompt 생성
-    prompt_a = generate_session_a_prompt(
-        mode=req.mode,
-        source_language=req.source_language,
-        target_language=req.target_language,
-        collected_data=req.collected_data,
-    )
+    if req.system_prompt_override:
+        prompt_a = req.system_prompt_override
+    else:
+        prompt_a = generate_session_a_prompt(
+            mode=req.mode,
+            source_language=req.source_language,
+            target_language=req.target_language,
+            collected_data=req.collected_data,
+        )
     prompt_b = generate_session_b_prompt(
         source_language=req.source_language,
         target_language=req.target_language,
