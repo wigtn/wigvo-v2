@@ -3,12 +3,13 @@
 import { useState, useCallback } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
-  ArrowLeftRight,
+  ArrowDownUp,
   Phone,
   Mic,
   MessageSquare,
   Bot,
   Captions,
+  AudioLines,
   ChevronLeft,
   Send,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
   const tDirect = useTranslations('scenario.direct');
   const tAiAuto = useTranslations('scenario.aiAuto');
   const tQuick = useTranslations('scenario.quick');
+  const tLang = useTranslations('scenario.lang');
   const locale = useLocale();
 
   // Language pair
@@ -77,6 +79,80 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
     setSourceLang(targetLang);
     setTargetLang(sourceLang);
   };
+
+  const sourceLangObj = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLang);
+  const targetLangObj = SUPPORTED_LANGUAGES.find((l) => l.code === targetLang);
+
+  const renderLanguagePair = () => (
+    <div className="mb-5 max-w-xs mx-auto w-full">
+      <div className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
+        {/* My language */}
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
+            {tLang('myLang')}
+          </p>
+          <select
+            value={sourceLang}
+            onChange={(e) => setSourceLang(e.target.value)}
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.flag} {lang.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Divider with swap button */}
+        <div className="relative flex items-center px-4">
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+          <button
+            type="button"
+            onClick={handleSwapLanguages}
+            disabled={disabled}
+            className="mx-3 shrink-0 w-8 h-8 rounded-full bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors disabled:opacity-50"
+            aria-label="Swap languages"
+          >
+            <ArrowDownUp className="size-3.5" />
+          </button>
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+        </div>
+
+        {/* Their language */}
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
+            {tLang('theirLang')}
+          </p>
+          <select
+            value={targetLang}
+            onChange={(e) => setTargetLang(e.target.value)}
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.flag} {lang.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Translation flow preview */}
+      <div className="mt-2.5 px-1 space-y-0.5">
+        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
+          <span>{sourceLangObj?.flag}</span>
+          <span>{tLang('flowSend', { source: sourceLangObj?.label ?? '', target: targetLangObj?.label ?? '' })}</span>
+        </p>
+        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
+          <span>{targetLangObj?.flag}</span>
+          <span>{tLang('flowReceive', { source: sourceLangObj?.label ?? '' })}</span>
+        </p>
+      </div>
+    </div>
+  );
 
   // ── Category selection ──────────────────────────────────────
   const handleCategorySelect = useCallback((category: CallCategory) => {
@@ -138,42 +214,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex flex-col justify-center px-5 py-6 overflow-y-auto">
-          {/* Language pair */}
-          <div className="flex items-center justify-center gap-2 mb-5 max-w-xs mx-auto w-full">
-            <select
-              value={sourceLang}
-              onChange={(e) => setSourceLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleSwapLanguages}
-              disabled={disabled}
-              className="shrink-0 w-8 h-8 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] transition-colors disabled:opacity-50"
-              aria-label="Swap languages"
-            >
-              <ArrowLeftRight className="size-3.5" />
-            </button>
-            <select
-              value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {renderLanguagePair()}
 
           {/* Header */}
           <div className="text-center mb-8">
@@ -242,42 +283,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
             {tCat('directTitle')}
           </button>
 
-          {/* Language pair (compact) */}
-          <div className="flex items-center justify-center gap-2 mb-5 max-w-xs mx-auto w-full">
-            <select
-              value={sourceLang}
-              onChange={(e) => setSourceLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleSwapLanguages}
-              disabled={disabled}
-              className="shrink-0 w-8 h-8 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] transition-colors disabled:opacity-50"
-              aria-label="Swap languages"
-            >
-              <ArrowLeftRight className="size-3.5" />
-            </button>
-            <select
-              value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {renderLanguagePair()}
 
           {/* Header */}
           <div className="text-center mb-6">
@@ -341,7 +347,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
                       : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
                   } disabled:opacity-50`}
                 >
-                  <Mic className={`size-5 ${outputMethod === 'voice' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
+                  <AudioLines className={`size-5 ${outputMethod === 'voice' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
                   <span className="text-xs font-medium text-[#0F172A]">{tDirect('outputVoice')}</span>
                   <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('outputVoiceDesc')}</span>
                 </button>

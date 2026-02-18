@@ -92,6 +92,12 @@
     "scenarioTitle": "What's the purpose of your <accent>call</accent>?",
     "scenarioSubtitle": "AI makes the call on your behalf",
     "subtypeQuestion": "What type is it?",
+    "lang": {
+      "myLang": "My language",
+      "theirLang": "Their language",
+      "flowSend": "Speak {source} → Delivered in {target}",
+      "flowReceive": "Their reply → Translated to {source}"
+    },
     "category": {
       "directTitle": "Direct Call",
       "directSubtitle": "Real-time Translation",
@@ -109,10 +115,10 @@
       "inputText": "Type text",
       "inputTextDesc": "Send messages by typing",
       "outputLabel": "Recipient audio",
-      "outputVoice": "Listen to voice",
-      "outputVoiceDesc": "Hear translated voice playback",
-      "outputCaption": "Read captions",
-      "outputCaptionDesc": "See translated text only",
+      "outputVoice": "Voice + Captions",
+      "outputVoiceDesc": "Hear translated voice with captions",
+      "outputCaption": "Captions only",
+      "outputCaptionDesc": "See translated text without audio",
       "startCall": "Start Call"
     },
     "aiAuto": {

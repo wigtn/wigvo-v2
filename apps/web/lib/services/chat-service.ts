@@ -134,6 +134,71 @@ function formatSearchResultsForTool(results: NaverPlaceResult[]): string {
 
 
 // -----------------------------------------------------------------------------
+// Direct Call System Prompt (translation-only, minimal collection)
+// -----------------------------------------------------------------------------
+
+function buildDirectCallPrompt(
+  existingData: CollectedData,
+  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>,
+): string {
+  let contextSection = '';
+  if (existingData.target_name || existingData.target_phone) {
+    const items: string[] = [];
+    if (existingData.target_name) items.push(`- target_name: "${existingData.target_name}"`);
+    if (existingData.target_phone) items.push(`- target_phone: "${existingData.target_phone}"`);
+    contextSection = `\n## 현재까지 수집된 정보\n${items.join('\n')}\n`;
+  }
+
+  let placeSection = '';
+  if (placeSearchResults && placeSearchResults.length > 0) {
+    placeSection = `\n## 장소 검색 결과\n${placeSearchResults.map((p, i) =>
+      `${i + 1}. ${p.name} (${p.telephone}) - ${p.address}`
+    ).join('\n')}\n\n**중요**: 사용자가 위 결과에서 선택하면 target_name과 target_phone을 저장하세요.\n`;
+  }
+
+  return `당신은 WIGVO의 직접 통화 도우미입니다. 사용자가 직접 통화에 참여하며, AI는 실시간 번역만 담당합니다.
+
+## 역할
+전화할 곳의 이름(target_name)과 전화번호(target_phone)만 빠르게 수집하세요.
+
+## ⚠️ 절대 규칙
+- 정보를 지어내지 마세요. 확인된 정보만 collected에 넣으세요.
+- 예약 시간, 인원수, 예약자 이름 등 상세 정보는 물어보지 마세요 — 사용자가 직접 통화에서 처리합니다.
+- target_name + target_phone이 모두 확보되면 즉시 is_complete: true로 설정하세요.
+
+## 🔍 장소 검색 기능
+search_place 도구로 장소를 검색할 수 있습니다.
+- 사용자가 장소명을 언급하면 반드시 검색하세요.
+- 검색 결과에서 전화번호를 확보하세요.
+- 검색 결과가 없으면 사용자에게 직접 알려달라고 하세요.
+
+## 대화 규칙
+1. 간결하게 대화하세요. 1-2문장이면 충분합니다.
+2. 전화할 곳과 번호만 확인되면 바로 완료하세요.
+3. 이모지를 적절히 사용하세요.
+${contextSection}${placeSection}
+## 출력 형식
+매 응답마다 아래 JSON 블록을 포함하세요:
+
+\`\`\`json
+{
+  "collected": {
+    "target_name": "전화할 곳 이름",
+    "target_phone": "전화번호",
+    "scenario_type": "INQUIRY",
+    "scenario_sub_type": "OTHER"
+  },
+  "is_complete": false
+}
+\`\`\`
+
+## 📞 전화 걸기 안내
+- WIGVO는 사용자 대신 전화를 걸어주는 서비스입니다.
+- 정보가 모이면 "전화 걸기 버튼을 눌러주세요!"라고 안내하세요.
+- "직접 전화해주세요"라고 절대 말하지 마세요.`.trim();
+}
+
+// -----------------------------------------------------------------------------
 // Main: Process Chat
 // -----------------------------------------------------------------------------
 
@@ -154,7 +219,10 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
       }))
     : undefined;
 
-  if (existingData.scenario_type && existingData.scenario_sub_type) {
+  // Direct call (non-full_agent): 번역 전용 간결한 프롬프트
+  if (communicationMode && communicationMode !== 'full_agent') {
+    systemPrompt = buildDirectCallPrompt(existingData, placeResults);
+  } else if (existingData.scenario_type && existingData.scenario_sub_type) {
     systemPrompt = buildScenarioPrompt(
       existingData.scenario_type,
       existingData.scenario_sub_type,

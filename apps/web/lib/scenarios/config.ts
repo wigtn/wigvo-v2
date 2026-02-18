@@ -274,15 +274,9 @@ export function getScenarioGreeting(
     return '안녕하세요! 어떤 전화를 대신 걸어드릴까요?';
   }
 
-  // relay 모드: 간결한 인사 (전화할 곳 + 번호만 수집)
+  // Direct call (relay) 모드: 간결한 인사 (전화할 곳 + 번호만 수집)
   if (communicationMode && communicationMode !== 'full_agent') {
-    const modeLabels: Record<string, string> = {
-      voice_to_voice: '양방향 음성 번역',
-      text_to_voice: '텍스트→음성',
-      voice_to_text: '음성→자막',
-    };
-    const modeLabel = modeLabels[communicationMode] || communicationMode;
-    return `${modeLabel} 모드로 전화를 걸어드릴게요! 어디에 전화하시겠어요? (장소 이름과 전화번호만 알려주세요)`;
+    return '직접 통화 모드로 전화를 걸어드릴게요! 어디에 전화하시겠어요? (장소 이름과 전화번호만 알려주세요)';
   }
 
   // full_agent: 기존 상세 인사

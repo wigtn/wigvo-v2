@@ -1,6 +1,5 @@
 "use client";
 
-import Script from "next/script";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MapPin, Loader2 } from "lucide-react";
 import type { NaverPlaceResult } from "@/lib/naver-maps";
@@ -24,6 +23,26 @@ interface NaverMapContainerProps {
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 };
+const NAVER_MAPS_SRC = "https://openapi.map.naver.com/openapi/v3/maps.js";
+
+// 전역 스크립트 로딩 상태 (컴포넌트 리마운트 시 중복 로딩 방지)
+let _scriptLoadPromise: Promise<void> | null = null;
+
+function loadNaverMapsScript(clientId: string): Promise<void> {
+  if (window.naver?.maps) return Promise.resolve();
+  if (_scriptLoadPromise) return _scriptLoadPromise;
+
+  _scriptLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `${NAVER_MAPS_SRC}?ncpKeyId=${clientId}`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Naver Maps script load failed"));
+    document.head.appendChild(script);
+  });
+
+  return _scriptLoadPromise;
+}
 
 export default function NaverMapContainer({
   center,
@@ -49,6 +68,7 @@ export default function NaverMapContainer({
 
   const initMap = useCallback(() => {
     if (!mapRef.current || !window.naver?.maps) return;
+    if (mapInstanceRef.current) return; // 이미 초기화됨
 
     const activeCenter = center || DEFAULT_CENTER;
 
@@ -63,6 +83,20 @@ export default function NaverMapContainer({
 
     mapInstanceRef.current = map;
   }, [center, zoom]);
+
+  // 스크립트 로딩 (수동 script inject)
+  useEffect(() => {
+    if (!clientId) return;
+
+    loadNaverMapsScript(clientId)
+      .then(() => {
+        setIsLoaded(true);
+        initMap();
+      })
+      .catch(() => {
+        setHasError(true);
+      });
+  }, [clientId, initMap]);
 
   const addMarkers = useCallback(() => {
     if (!mapInstanceRef.current || !window.naver?.maps) return;
@@ -109,19 +143,6 @@ export default function NaverMapContainer({
     }
   }, [markers, onMarkerClick, clearMarkers]);
 
-  const handleScriptLoad = useCallback(() => {
-    setIsLoaded(true);
-    initMap();
-  }, [initMap]);
-
-  // 컴포넌트 마운트 시 이미 스크립트가 로드되어 있는 경우 처리
-  useEffect(() => {
-    if (window.naver?.maps && !isLoaded) {
-      setIsLoaded(true);
-      initMap();
-    }
-  }, [initMap, isLoaded]);
-
   useEffect(() => {
     if (isLoaded && mapInstanceRef.current) {
       addMarkers();
@@ -132,7 +153,6 @@ export default function NaverMapContainer({
   useEffect(() => {
     if (mapInstanceRef.current && center && window.naver?.maps) {
       const newCenter = new window.naver.maps.LatLng(center.lat, center.lng);
-      // panTo로 부드러운 이동 애니메이션
       mapInstanceRef.current.panTo(newCenter, {
         duration: 500,
         easing: "easeOutCubic",
@@ -145,7 +165,6 @@ export default function NaverMapContainer({
     if (mapInstanceRef.current && zoom && window.naver?.maps) {
       const currentZoom = mapInstanceRef.current.getZoom();
       if (currentZoom !== zoom) {
-        // 줌 변경도 애니메이션으로
         mapInstanceRef.current.setZoom(zoom, true);
       }
     }
@@ -189,24 +208,16 @@ export default function NaverMapContainer({
   }
 
   return (
-    <>
-      <Script
-        src={`https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}`}
-        onLoad={handleScriptLoad}
-        onError={() => setHasError(true)}
-        strategy="lazyOnload"
-      />
-      <div className="relative w-full h-full rounded-2xl border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        {!isLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#F8FAFC]">
-            <div className="text-center">
-              <Loader2 className="mx-auto size-6 text-[#0F172A] animate-spin mb-2" />
-              <p className="text-sm text-[#94A3B8]">지도 로딩 중...</p>
-            </div>
+    <div className="relative w-full h-full rounded-2xl border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {!isLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#F8FAFC]">
+          <div className="text-center">
+            <Loader2 className="mx-auto size-6 text-[#0F172A] animate-spin mb-2" />
+            <p className="text-sm text-[#94A3B8]">지도 로딩 중...</p>
           </div>
-        )}
-        <div ref={mapRef} className="w-full h-full" />
-      </div>
-    </>
+        </div>
+      )}
+      <div ref={mapRef} className="w-full h-full" />
+    </div>
   );
 }
