@@ -107,6 +107,12 @@ export default function ChatContainer() {
   const isTextMode = callingCommunicationMode === 'text_to_voice';
   const isCallTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
 
+  // AI 음성 자막 제외 (사용자 입력의 번역이므로 중복 표시 불필요)
+  const visibleCaptions = useMemo(
+    () => captions.filter((entry) => entry.speaker !== 'ai'),
+    [captions],
+  );
+
   if (isInitializing) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -200,7 +206,7 @@ export default function ChatContainer() {
             )}
 
             {/* 실시간 자막 */}
-            {captions.map((entry) => (
+            {visibleCaptions.map((entry) => (
               <CaptionMessage key={entry.id} entry={entry} />
             ))}
 

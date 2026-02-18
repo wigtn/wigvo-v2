@@ -206,6 +206,29 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
   const { existingData, history, userMessage, location, previousSearchResults, communicationMode, locale } =
     context;
 
+  // Direct phone input → skip LLM, return immediately (voice/text-to-voice only)
+  if (communicationMode && communicationMode !== 'full_agent') {
+    const extracted = extractDataFromMessage(userMessage, null);
+    const phone = extracted.target_phone;
+    if (phone) {
+      const name = existingData.target_name || phone;
+      const readyMsg = locale === 'ko'
+        ? `${phone}(으)로 전화를 걸 준비가 되었어요! 전화 걸기 버튼을 눌러주세요.`
+        : `Ready to call ${phone}! Press the call button to start.`;
+      return {
+        message: readyMsg,
+        collected: {
+          target_name: name,
+          target_phone: phone,
+          scenario_type: existingData.scenario_type || 'INQUIRY',
+          scenario_sub_type: existingData.scenario_sub_type || 'OTHER',
+        },
+        is_complete: true,
+        searchResults: [],
+      };
+    }
+  }
+
   // 이전 검색 결과 초기화
   let placeSearchResults: NaverPlaceResult[] = previousSearchResults || [];
 

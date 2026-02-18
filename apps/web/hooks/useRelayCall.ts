@@ -75,10 +75,12 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
             : (msg.data.stage as 1 | 2 | undefined);
 
           const direction = (msg.data.direction as string) ?? 'unknown';
-          // Server sends "role", client uses "speaker" — support both
-          const speaker = (msg.data.role as CaptionEntry['speaker'])
-            ?? (msg.data.speaker as CaptionEntry['speaker'])
-            ?? 'recipient';
+          // Server sends "role" (assistant/user/recipient) — map to client speaker type
+          const rawRole = (msg.data.role as string) ?? (msg.data.speaker as string) ?? 'recipient';
+          const ROLE_TO_SPEAKER: Record<string, CaptionEntry['speaker']> = {
+            assistant: 'ai', user: 'user', recipient: 'recipient', ai: 'ai',
+          };
+          const speaker: CaptionEntry['speaker'] = ROLE_TO_SPEAKER[rawRole] ?? 'recipient';
           const text = (msg.data.text as string) ?? '';
 
           const cur = streamingRef.current;
