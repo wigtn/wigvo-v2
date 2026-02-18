@@ -196,20 +196,21 @@ class TestTextToVoiceTextHandling:
         router.dual_session.session_a.send_text_item.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_text_waits_for_recipient_speaking(self):
-        """수신자가 말하는 중이면 텍스트 전송을 대기한다."""
+    async def test_text_sends_even_during_recipient_speaking(self):
+        """수신자가 말하는 중에도 텍스트가 즉시 전송된다 (hold 없음)."""
         router = _make_router()
         router.session_a = MagicMock()
         router.session_a.is_generating = False
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = True
-        router.interrupt.wait_for_recipient_done = AsyncMock()
         router.context_manager = MagicMock()
         router.context_manager.inject_context = AsyncMock()
 
         await router.handle_user_text("test")
 
-        router.interrupt.wait_for_recipient_done.assert_called_once_with(timeout=10.0)
+        # Lock으로 직렬화되지만 hold하지 않고 바로 전송
+        router.dual_session.session_a.send_text_item.assert_called_once_with("test")
+        router.dual_session.session_a.create_response.assert_called_once()
 
 
 class TestTextToVoiceSessionACallbacks:
@@ -227,15 +228,15 @@ class TestTextToVoiceSessionACallbacks:
         router.twilio_handler.send_audio.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_tts_blocked_during_recipient_speech(self):
-        """수신자가 말하는 중이면 TTS가 차단된다."""
+    async def test_tts_delivered_during_recipient_speech(self):
+        """수신자가 말하는 중에도 TTS가 전달된다 (전이중 통화 — 에코 위험 없음)."""
         router = _make_router()
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = True
 
         await router._on_session_a_tts(b"\x00\x01\x02" * 50)
 
-        router.twilio_handler.send_audio.assert_not_called()
+        router.twilio_handler.send_audio.assert_called_once()
 
 
 class TestTextToVoiceFirstMessage:

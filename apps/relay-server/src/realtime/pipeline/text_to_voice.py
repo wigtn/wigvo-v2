@@ -64,6 +64,9 @@ class TextToVoicePipeline(BasePipeline):
         self._prompt_a = prompt_a
         self._prompt_b = prompt_b
 
+        # 텍스트 전송 직렬화 Lock (race condition 방지)
+        self._text_send_lock = asyncio.Lock()
+
         # Per-response instruction override (hskim 이식)
         self._strict_relay_instruction = (
             f"Translate the user's message from {call.source_language} to "
@@ -185,35 +188,35 @@ class TextToVoicePipeline(BasePipeline):
         hskim 이식: sendTextToSessionA 패턴
           1. conversation.item.create (텍스트 아이템)
           2. response.create + response.instructions (번역만 강제)
+
+        Lock으로 직렬화하여 여러 텍스트가 동시에 response.create를 호출하는
+        race condition (conversation_already_has_active_response)을 방지한다.
         """
-        self.call.transcript_history.append({"role": "user", "text": text})
+        async with self._text_send_lock:
+            self.call.transcript_history.append({"role": "user", "text": text})
 
-        if self.interrupt.is_recipient_speaking:
-            logger.info("Recipient is speaking — holding text until they finish...")
-            await self.interrupt.wait_for_recipient_done(timeout=10.0)
+            if self.session_a.is_generating:
+                logger.debug("Waiting for Session A to finish before sending text...")
+                await self.session_a.wait_for_done(timeout=5.0)
 
-        if self.session_a.is_generating:
-            logger.debug("Waiting for Session A to finish before sending text...")
-            await self.session_a.wait_for_done(timeout=5.0)
-
-        await self._app_ws_send(
-            WsMessage(
-                type=WsMessageType.TRANSLATION_STATE,
-                data={"state": "processing"},
+            await self._app_ws_send(
+                WsMessage(
+                    type=WsMessageType.TRANSLATION_STATE,
+                    data={"state": "processing"},
+                )
             )
-        )
 
-        await self.context_manager.inject_context(self.dual_session.session_a)
+            await self.context_manager.inject_context(self.dual_session.session_a)
 
-        # Per-response instruction override (Relay mode)
-        # Agent mode에서는 기본 instructions 사용
-        if self.call.mode == CallMode.RELAY:
-            await self.dual_session.session_a.send_text_item(text)
-            await self.dual_session.session_a.create_response(
-                instructions=self._strict_relay_instruction,
-            )
-        else:
-            await self.session_a.send_user_text(text)
+            # Per-response instruction override (Relay mode)
+            # Agent mode에서는 기본 instructions 사용
+            if self.call.mode == CallMode.RELAY:
+                await self.dual_session.session_a.send_text_item(text)
+                await self.dual_session.session_a.create_response(
+                    instructions=self._strict_relay_instruction,
+                )
+            else:
+                await self.session_a.send_user_text(text)
 
     # --- Twilio -> Session B ---
 
@@ -245,9 +248,9 @@ class TextToVoicePipeline(BasePipeline):
         """Session A TTS 출력을 Twilio에 전달한다.
 
         TextToVoice는 Echo Gate 불필요 — TTS audio를 직접 전달.
+        텍스트 모드에서는 에코 위험이 없으므로 수신자 발화 중에도 TTS를 전달한다.
+        (전이중 통화 — 양쪽이 동시에 들을 수 있음)
         """
-        if self.interrupt.is_recipient_speaking:
-            return
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:

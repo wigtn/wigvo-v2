@@ -12,7 +12,14 @@ import {
   AudioLines,
   ChevronLeft,
   Send,
+  UtensilsCrossed,
+  Scissors,
+  Stethoscope,
+  Building2,
+  Search,
+  Wrench,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ScenarioType, ScenarioSubType } from '@/shared/types';
 import type { CommunicationMode, CallCategory } from '@/shared/call-types';
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE_PAIR, resolveDirectMode } from '@/shared/call-types';
@@ -20,7 +27,7 @@ import type { DirectCallOptions } from '@/shared/call-types';
 
 // ── Quick Action (AI Auto only) ────────────────────────────────
 interface QuickAction {
-  emoji: string;
+  icon: LucideIcon;
   scenarioType: ScenarioType;
   subType: ScenarioSubType;
   labelKey: string;
@@ -28,12 +35,12 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { emoji: '\uD83C\uDF7D\uFE0F', scenarioType: 'RESERVATION', subType: 'RESTAURANT', labelKey: 'restaurant', descKey: 'restaurantDesc' },
-  { emoji: '\uD83D\uDC87', scenarioType: 'RESERVATION', subType: 'SALON', labelKey: 'salon', descKey: 'salonDesc' },
-  { emoji: '\uD83C\uDFE5', scenarioType: 'RESERVATION', subType: 'HOSPITAL', labelKey: 'hospital', descKey: 'hospitalDesc' },
-  { emoji: '\uD83C\uDFE8', scenarioType: 'RESERVATION', subType: 'HOTEL', labelKey: 'hotel', descKey: 'hotelDesc' },
-  { emoji: '\uD83D\uDD0D', scenarioType: 'INQUIRY', subType: 'OTHER', labelKey: 'inquiry', descKey: 'inquiryDesc' },
-  { emoji: '\uD83D\uDD27', scenarioType: 'AS_REQUEST', subType: 'OTHER', labelKey: 'asRequest', descKey: 'asRequestDesc' },
+  { icon: UtensilsCrossed, scenarioType: 'RESERVATION', subType: 'RESTAURANT', labelKey: 'restaurant', descKey: 'restaurantDesc' },
+  { icon: Scissors, scenarioType: 'RESERVATION', subType: 'SALON', labelKey: 'salon', descKey: 'salonDesc' },
+  { icon: Stethoscope, scenarioType: 'RESERVATION', subType: 'HOSPITAL', labelKey: 'hospital', descKey: 'hospitalDesc' },
+  { icon: Building2, scenarioType: 'RESERVATION', subType: 'HOTEL', labelKey: 'hotel', descKey: 'hotelDesc' },
+  { icon: Search, scenarioType: 'INQUIRY', subType: 'OTHER', labelKey: 'inquiry', descKey: 'inquiryDesc' },
+  { icon: Wrench, scenarioType: 'AS_REQUEST', subType: 'OTHER', labelKey: 'asRequest', descKey: 'asRequestDesc' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────
@@ -233,8 +240,8 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               onClick={() => handleCategorySelect('direct')}
               className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
             >
-              <div className="shrink-0 w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-                <Phone className="size-5 text-blue-600" />
+              <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
+                <Phone className="size-5 text-[#0F172A]" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[#0F172A]">{tCat('directTitle')}</p>
@@ -250,8 +257,8 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               onClick={() => handleCategorySelect('ai_auto')}
               className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
             >
-              <div className="shrink-0 w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center">
-                <Bot className="size-5 text-teal-600" />
+              <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
+                <Bot className="size-5 text-[#0F172A]" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[#0F172A]">{tCat('aiAutoTitle')}</p>
@@ -304,28 +311,36 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
                   type="button"
                   disabled={disabled}
                   onClick={() => setInputMethod('voice')}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
                     inputMethod === 'voice'
                       ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
+                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
                   } disabled:opacity-50`}
                 >
-                  <Mic className={`size-5 ${inputMethod === 'voice' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
-                  <span className="text-xs font-medium text-[#0F172A]">{tDirect('inputVoice')}</span>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    inputMethod === 'voice' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}>
+                    <Mic className="size-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputVoice')}</span>
                   <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputVoiceDesc')}</span>
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => setInputMethod('text')}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
                     inputMethod === 'text'
                       ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
+                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
                   } disabled:opacity-50`}
                 >
-                  <MessageSquare className={`size-5 ${inputMethod === 'text' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
-                  <span className="text-xs font-medium text-[#0F172A]">{tDirect('inputText')}</span>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    inputMethod === 'text' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}>
+                    <MessageSquare className="size-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputText')}</span>
                   <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputTextDesc')}</span>
                 </button>
               </div>
@@ -341,28 +356,36 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
                   type="button"
                   disabled={disabled}
                   onClick={() => setOutputMethod('voice')}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
                     outputMethod === 'voice'
                       ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
+                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
                   } disabled:opacity-50`}
                 >
-                  <AudioLines className={`size-5 ${outputMethod === 'voice' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
-                  <span className="text-xs font-medium text-[#0F172A]">{tDirect('outputVoice')}</span>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    outputMethod === 'voice' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}>
+                    <AudioLines className="size-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#0F172A]">{tDirect('outputVoice')}</span>
                   <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('outputVoiceDesc')}</span>
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => setOutputMethod('caption')}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
                     outputMethod === 'caption'
                       ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
+                      : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
                   } disabled:opacity-50`}
                 >
-                  <Captions className={`size-5 ${outputMethod === 'caption' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`} />
-                  <span className="text-xs font-medium text-[#0F172A]">{tDirect('outputCaption')}</span>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    outputMethod === 'caption' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}>
+                    <Captions className="size-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#0F172A]">{tDirect('outputCaption')}</span>
                   <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('outputCaptionDesc')}</span>
                 </button>
               </div>
@@ -373,7 +396,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               type="button"
               onClick={handleDirectStart}
               disabled={disabled}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0F172A] text-white px-4 py-3 text-sm font-medium transition-colors hover:bg-[#1E293B] disabled:opacity-40"
+              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#0F172A] text-white px-4 py-3 text-sm font-medium transition-colors hover:bg-[#1E293B] disabled:opacity-40"
             >
               <Phone className="size-4" />
               {tDirect('startCall')}
@@ -411,23 +434,28 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
 
         {/* Quick action grid */}
         <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto w-full mb-5">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={`${action.scenarioType}-${action.subType}`}
-              type="button"
-              disabled={disabled}
-              onClick={() => handleQuickAction(action)}
-              className="group flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.97] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-2xl leading-none">{action.emoji}</span>
-              <span className="text-[11px] font-semibold text-[#0F172A] leading-tight text-center">
-                {tQuick(action.labelKey)}
-              </span>
-              <span className="text-[9px] text-[#94A3B8] leading-tight text-center hidden sm:block">
-                {tQuick(action.descKey)}
-              </span>
-            </button>
-          ))}
+          {QUICK_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={`${action.scenarioType}-${action.subType}`}
+                type="button"
+                disabled={disabled}
+                onClick={() => handleQuickAction(action)}
+                className="group flex flex-col items-center gap-2 p-3 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.97] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#F1F5F9] flex items-center justify-center group-hover:bg-[#E2E8F0] transition-colors">
+                  <Icon className="size-5 text-[#0F172A]" />
+                </div>
+                <span className="text-[11px] font-semibold text-[#0F172A] leading-tight text-center">
+                  {tQuick(action.labelKey)}
+                </span>
+                <span className="text-[9px] text-[#94A3B8] leading-tight text-center hidden sm:block">
+                  {tQuick(action.descKey)}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Divider + free text */}
@@ -448,13 +476,13 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               onKeyDown={handleKeyDown}
               disabled={disabled}
               placeholder={t('freeInputPlaceholder')}
-              className="flex-1 rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A] disabled:opacity-50"
+              className="flex-1 rounded-2xl border border-[#E2E8F0] px-4 py-2.5 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A] disabled:opacity-50"
             />
             <button
               type="button"
               onClick={handleFreeTextSubmit}
               disabled={!freeText.trim() || disabled}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B] disabled:opacity-30"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B] disabled:opacity-30"
             >
               <Send className="size-4" />
             </button>

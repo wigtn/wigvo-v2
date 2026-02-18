@@ -55,7 +55,7 @@ export default function LanguageSwitcher() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50">
+        <div className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50">
           <button
             onClick={() => handleLocaleChange('en')}
             className={`w-full px-4 py-2.5 text-left text-sm hover:bg-[#F8FAFC] transition-colors ${

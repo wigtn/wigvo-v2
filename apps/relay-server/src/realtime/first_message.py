@@ -50,19 +50,27 @@ class FirstMessageHandler:
             logger.debug("Waiting for Session A to finish before sending greeting...")
             await self.session_a.wait_for_done(timeout=3.0)
 
-        greeting = FIRST_MESSAGE_TEMPLATES.get(
-            self.call.target_language,
-            FIRST_MESSAGE_TEMPLATES["en"],
-        )
-
-        if self._use_exact_utterance:
-            # TextToVoice: AI 확장 방지 — 정확히 이 문장만 발화 (hskim 이식)
-            wrapped = f'Say exactly this sentence and nothing else: "{greeting}"'
+        if self.call.mode == CallMode.AGENT:
+            # Agent mode: AI가 자연스럽게 대화를 시작하도록 지시
+            instruction = (
+                "The recipient has answered the phone. "
+                "Begin the conversation by greeting them and stating the purpose of your call."
+            )
+            await self.session_a.send_user_text(instruction)
         else:
-            # VoiceToVoice: 번역 지시 형식
-            wrapped = f"[User says in {self.call.source_language}]: {greeting}"
+            greeting = FIRST_MESSAGE_TEMPLATES.get(
+                self.call.target_language,
+                FIRST_MESSAGE_TEMPLATES["en"],
+            )
 
-        await self.session_a.send_user_text(wrapped)
+            if self._use_exact_utterance:
+                # TextToVoice Relay: AI 확장 방지 — 정확히 이 문장만 발화 (hskim 이식)
+                wrapped = f'Say exactly this sentence and nothing else: "{greeting}"'
+            else:
+                # VoiceToVoice: 번역 지시 형식
+                wrapped = f"[User says in {self.call.source_language}]: {greeting}"
+
+            await self.session_a.send_user_text(wrapped)
 
         # App에 통화 연결 알림
         if self.call.mode == CallMode.RELAY:
