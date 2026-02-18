@@ -15,6 +15,7 @@ Case 4: Agent Mode에서 수신자 끼어들기
   → Session A response.cancel 후 수신자 발화 처리
 """
 
+import asyncio
 import logging
 import time
 from typing import Callable, Coroutine
@@ -44,6 +45,8 @@ class InterruptHandler:
         self._on_notify_app = on_notify_app
         self._recipient_speaking = False
         self._last_speech_stopped_at: float = 0.0
+        self._recipient_done_event = asyncio.Event()
+        self._recipient_done_event.set()  # 초기 상태: 발화 중 아님
 
     async def on_recipient_speech_started(self) -> None:
         """수신자가 말하기 시작했을 때.
@@ -53,6 +56,7 @@ class InterruptHandler:
         """
         self._recipient_speaking = True
         self._last_speech_stopped_at = 0.0  # 쿨다운 리셋
+        self._recipient_done_event.clear()
 
         if self.session_a.is_generating:
             logger.info("Interrupt: recipient speech while Session A generating — cancelling")
@@ -77,6 +81,17 @@ class InterruptHandler:
         """
         self._recipient_speaking = False
         self._last_speech_stopped_at = time.monotonic()
+        self._recipient_done_event.set()
+
+    async def wait_for_recipient_done(self, timeout: float = 10.0) -> bool:
+        """수신자 발화 종료를 대기한다. 발화 중이 아니면 즉시 반환."""
+        if not self.is_recipient_speaking:
+            return True
+        try:
+            await asyncio.wait_for(self._recipient_done_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     @property
     def is_recipient_speaking(self) -> bool:

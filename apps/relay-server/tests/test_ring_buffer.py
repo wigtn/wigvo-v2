@@ -48,9 +48,9 @@ class TestAudioRingBuffer:
 
         assert buf.total_written == 5
         assert buf.capacity == 3
-        # Only the most recent 3 slots are valid
-        recent = buf.get_recent(60)  # 60ms = 3 slots
-        assert len(recent) <= 3
+        # Only the most recent 3 unsent slots are valid
+        unsent = buf.get_unsent()
+        assert len(unsent) <= 3
 
     def test_gap_ms(self):
         """gap_ms equals unsent slot count * 20ms."""

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import HistoryList from '@/components/call/HistoryList';
 import { Loader2, AlertTriangle, RefreshCw, Home, Phone } from 'lucide-react';
-import type { Call } from '@/hooks/useCallPolling';
+import type { Call } from '@/shared/types';
 
 export default function HistoryPage() {
   const router = useRouter();

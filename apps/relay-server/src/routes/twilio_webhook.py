@@ -107,6 +107,8 @@ async def twilio_media_stream(ws: WebSocket, call_id: str):
         dual_session=dual_session,
         twilio_handler=twilio_handler,
         app_ws_send=send_to_app,
+        prompt_a=call.prompt_a,
+        prompt_b=call.prompt_b,
     )
     call_manager.register_router(call_id, audio_router)
     await audio_router.start()

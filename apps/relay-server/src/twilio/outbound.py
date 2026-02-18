@@ -10,8 +10,14 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
+_twilio_client: Client | None = None
+
+
 def get_twilio_client() -> Client:
-    return Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    global _twilio_client
+    if _twilio_client is None:
+        _twilio_client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    return _twilio_client
 
 
 def make_call(

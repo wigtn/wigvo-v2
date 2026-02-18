@@ -141,6 +141,17 @@ class RealtimeSession:
         await self._send({"type": "response.cancel"})
         logger.info("[%s] Response cancelled (interrupt)", self.label)
 
+    async def send_context_item(self, text: str) -> None:
+        """대화 컨텍스트 아이템을 세션에 추가한다."""
+        await self._send({
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": text}],
+            },
+        })
+
     async def send_function_call_output(self, call_id: str, output: str) -> None:
         """Function Call의 결과를 OpenAI에 전송한다.
 

@@ -5,10 +5,13 @@ __pycache__/
 .venv/
 dist/
 build/
+.pytest_cache/
 
 # Environment
 .env
 .env.local
+.env.production
+.env*.local
 
 # IDE
 .vscode/
@@ -20,13 +23,16 @@ build/
 .DS_Store
 Thumbs.db
 
-# Node (React Native)
+# Node
 node_modules/
 *.tsbuildinfo
 
 # Expo
 .expo/
 
-# Web App
-apps/web/.next/
-apps/web/next-env.d.ts
+# Next.js
+.next/
+next-env.d.ts
+
+# Claude Code
+.claude/

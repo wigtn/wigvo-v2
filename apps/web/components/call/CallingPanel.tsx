@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useCallPolling, type Call } from '@/hooks/useCallPolling';
+import { useCallPolling } from '@/hooks/useCallPolling';
+import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
 import CallingStatus from './CallingStatus';
 import ResultCard from './ResultCard';

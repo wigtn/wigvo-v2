@@ -169,6 +169,9 @@ class CallManager:
 
             logger.info("Cleanup complete for call %s", call_id)
 
+        # Lock 정리 (async with 블록 밖에서 제거)
+        self._cleanup_locks.pop(call_id, None)
+
     async def shutdown_all(self) -> None:
         """서버 종료 시 모든 활성 통화를 정리한다."""
         call_ids = list(self._calls.keys())

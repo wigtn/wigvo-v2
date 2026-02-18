@@ -2,42 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-
-// ============================
-// Call Types (from API Contract)
-// TODO: Import from shared/types.ts when BE1 creates it
-// ============================
-export type CallStatus =
-  | 'PENDING'
-  | 'CALLING'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'FAILED';
-
-export type CallResult = 'SUCCESS' | 'NO_ANSWER' | 'REJECTED' | 'ERROR' | null;
-
-export type RequestType = 'RESERVATION' | 'INQUIRY' | 'CONFIRMATION';
-
-export interface Call {
-  id: string;
-  userId: string;
-  conversationId: string | null;
-  requestType: RequestType;
-  targetName: string;
-  targetPhone: string;
-  parsedDate: string | null;
-  parsedTime: string | null;
-  parsedService: string | null;
-  status: CallStatus;
-  result: CallResult;
-  summary: string | null;
-  callMode?: 'agent' | 'relay';
-  relayWsUrl?: string;
-  durationS?: number | null;
-  totalTokens?: number | null;
-  createdAt: string;
-  completedAt: string | null;
-}
+import { Call, CallStatus } from '@/shared/types';
 
 // Terminal states that stop polling
 const TERMINAL_STATUSES: CallStatus[] = ['COMPLETED', 'FAILED'];

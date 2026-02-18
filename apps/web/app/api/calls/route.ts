@@ -12,67 +12,8 @@ import {
   getConversationById,
   updateConversationStatus,
 } from '@/lib/supabase/chat';
-import { CreateCallRequest, CollectedData, Call } from '@/shared/types';
-
-// -----------------------------------------------------------------------------
-// DB Row Type
-// -----------------------------------------------------------------------------
-interface CallRow {
-  id: string;
-  user_id: string;
-  conversation_id: string | null;
-  request_type: string;
-  target_name: string | null;
-  target_phone: string;
-  parsed_date: string | null;
-  parsed_time: string | null;
-  parsed_service: string | null;
-  status: string;
-  result: string | null;
-  summary: string | null;
-  call_mode: string | null;
-  relay_ws_url: string | null;
-  call_id: string | null;
-  call_sid: string | null;
-  source_language: string | null;
-  target_language: string | null;
-  duration_s: number | null;
-  total_tokens: number | null;
-  auto_ended: boolean;
-  created_at: string;
-  completed_at: string | null;
-}
-
-// -----------------------------------------------------------------------------
-// Helper: snake_case → camelCase 변환
-// -----------------------------------------------------------------------------
-function toCallResponse(row: CallRow): Call {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    conversationId: row.conversation_id,
-    requestType: row.request_type as Call['requestType'],
-    targetName: row.target_name,
-    targetPhone: row.target_phone,
-    parsedDate: row.parsed_date,
-    parsedTime: row.parsed_time,
-    parsedService: row.parsed_service,
-    status: row.status as Call['status'],
-    result: row.result as Call['result'],
-    summary: row.summary,
-    callMode: row.call_mode as Call['callMode'],
-    relayWsUrl: row.relay_ws_url ?? undefined,
-    callId: row.call_id,
-    callSid: row.call_sid,
-    sourceLanguage: row.source_language,
-    targetLanguage: row.target_language,
-    durationS: row.duration_s,
-    totalTokens: row.total_tokens,
-    autoEnded: row.auto_ended,
-    createdAt: row.created_at,
-    completedAt: row.completed_at,
-  };
-}
+import { CreateCallRequest, CollectedData, CallRow } from '@/shared/types';
+import { toCallResponse } from '@/lib/supabase/helpers';
 
 // -----------------------------------------------------------------------------
 // POST /api/calls

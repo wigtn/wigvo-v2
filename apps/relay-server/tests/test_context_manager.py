@@ -84,17 +84,14 @@ class TestConversationContextManager:
         ctx.add_turn("recipient", "안녕하세요")
 
         session = MagicMock()
-        session._send = AsyncMock()
+        session.send_context_item = AsyncMock()
 
         await ctx.inject_context(session)
 
-        session._send.assert_called_once()
-        call_args = session._send.call_args[0][0]
-        assert call_args["type"] == "conversation.item.create"
-        assert call_args["item"]["role"] == "user"
-        content_text = call_args["item"]["content"][0]["text"]
-        assert "User: Hello" in content_text
-        assert "Recipient: 안녕하세요" in content_text
+        session.send_context_item.assert_called_once()
+        context_text = session.send_context_item.call_args[0][0]
+        assert "User: Hello" in context_text
+        assert "Recipient: 안녕하세요" in context_text
 
     @pytest.mark.asyncio
     async def test_inject_empty_context_noop(self):
@@ -102,8 +99,8 @@ class TestConversationContextManager:
         ctx = ConversationContextManager()
 
         session = MagicMock()
-        session._send = AsyncMock()
+        session.send_context_item = AsyncMock()
 
         await ctx.inject_context(session)
 
-        session._send.assert_not_called()
+        session.send_context_item.assert_not_called()

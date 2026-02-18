@@ -17,11 +17,14 @@ interface UseRelayWebSocketReturn {
   status: WsStatus;
   connect: () => void;
   disconnect: () => void;
-  sendAudioChunk: (audioBase64: string) => void;
-  sendTextInput: (text: string) => void;
-  sendVadState: (state: string) => void;
-  sendEndCall: () => void;
+  sendAudioChunk: (audioBase64: string) => boolean;
+  sendTextInput: (text: string) => boolean;
+  sendVadState: (state: string) => boolean;
+  sendEndCall: () => boolean;
 }
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 3000;
 
 export function useRelayWebSocket({
   callId,
@@ -34,6 +37,10 @@ export function useRelayWebSocket({
   const onMessageRef = useRef(onMessage);
   const onStatusChangeRef = useRef(onStatusChange);
 
+  const reconnectCountRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
+
   // Keep refs in sync
   onMessageRef.current = onMessage;
   onStatusChangeRef.current = onStatusChange;
@@ -43,27 +50,53 @@ export function useRelayWebSocket({
     onStatusChangeRef.current?.(newStatus);
   }, []);
 
-  const sendMessage = useCallback((type: WsMessageType, data: Record<string, unknown> = {}) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type, data }));
+  const cleanup = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      if (
+        wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING
+      ) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
     }
   }, []);
 
+  const sendMessage = useCallback(
+    (type: WsMessageType, data: Record<string, unknown> = {}): boolean => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type, data }));
+        return true;
+      }
+      console.warn("[RelayWS] Cannot send, WebSocket not connected");
+      return false;
+    },
+    []
+  );
+
   const connect = useCallback(() => {
     if (!callId) return;
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
 
-    const url = `${RELAY_WS_URL}/relay/calls/${callId}/stream`;
+    cleanup();
+    intentionalCloseRef.current = false;
     updateStatus("connecting");
 
+    const url = `${RELAY_WS_URL}/relay/calls/${callId}/stream`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
       updateStatus("connected");
+      reconnectCountRef.current = 0;
     };
 
     ws.onmessage = (event) => {
@@ -76,21 +109,34 @@ export function useRelayWebSocket({
     };
 
     ws.onerror = () => {
-      updateStatus("error");
+      console.error("[RelayWS] WebSocket error");
     };
 
     ws.onclose = () => {
-      updateStatus("disconnected");
       wsRef.current = null;
+
+      if (intentionalCloseRef.current) {
+        updateStatus("disconnected");
+        return;
+      }
+
+      if (reconnectCountRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectCountRef.current += 1;
+        updateStatus("connecting");
+        reconnectTimerRef.current = setTimeout(() => {
+          connect();
+        }, RECONNECT_DELAY_MS);
+      } else {
+        updateStatus("error");
+      }
     };
-  }, [callId, updateStatus]);
+  }, [callId, cleanup, updateStatus]);
 
   const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-  }, []);
+    intentionalCloseRef.current = true;
+    cleanup();
+    updateStatus("disconnected");
+  }, [cleanup, updateStatus]);
 
   // Auto-connect when callId changes (if enabled)
   useEffect(() => {
@@ -98,33 +144,33 @@ export function useRelayWebSocket({
       connect();
     }
     return () => {
-      disconnect();
+      cleanup();
     };
-  }, [callId, autoConnect, connect, disconnect]);
+  }, [callId, autoConnect, connect, cleanup]);
 
   const sendAudioChunk = useCallback(
-    (audioBase64: string) => {
-      sendMessage("audio_chunk", { audio: audioBase64 });
+    (audioBase64: string): boolean => {
+      return sendMessage("audio_chunk", { audio: audioBase64 });
     },
     [sendMessage]
   );
 
   const sendTextInput = useCallback(
-    (text: string) => {
-      sendMessage("text_input", { text });
+    (text: string): boolean => {
+      return sendMessage("text_input", { text });
     },
     [sendMessage]
   );
 
   const sendVadState = useCallback(
-    (state: string) => {
-      sendMessage("vad_state", { state });
+    (state: string): boolean => {
+      return sendMessage("vad_state", { state });
     },
     [sendMessage]
   );
 
-  const sendEndCall = useCallback(() => {
-    sendMessage("end_call");
+  const sendEndCall = useCallback((): boolean => {
+    return sendMessage("end_call");
   }, [sendMessage]);
 
   return {

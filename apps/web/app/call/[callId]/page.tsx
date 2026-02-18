@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getCall } from '@/lib/api';
-import type { Call } from '@/hooks/useCallPolling';
+import type { Call } from '@/shared/types';
 import type { CallMode } from '@/shared/call-types';
 import RealtimeCallView from '@/components/call/RealtimeCallView';
 import ResultCard from '@/components/call/ResultCard';

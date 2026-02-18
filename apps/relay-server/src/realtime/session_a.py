@@ -63,6 +63,8 @@ class SessionAHandler:
         self._on_guardrail_corrected_tts = on_guardrail_corrected_tts
         self._on_guardrail_event = on_guardrail_event
         self._is_generating = False
+        self._done_event = asyncio.Event()
+        self._done_event.set()  # 초기 상태: 생성 중 아님
 
         # 현재 응답의 전체 transcript (Level 2/3 교정용)
         self._current_transcript: str = ""
@@ -121,9 +123,18 @@ class SessionAHandler:
         """User 텍스트를 Session A에 전달 (Agent Mode / Push-to-Talk)."""
         await self.session.send_text(text)
 
+    async def wait_for_done(self, timeout: float = 5.0) -> bool:
+        """응답 생성 완료를 대기한다. 이미 완료 상태면 즉시 반환."""
+        try:
+            await asyncio.wait_for(self._done_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
     async def cancel(self) -> None:
         """진행 중인 TTS를 중단한다 (Interrupt)."""
         self._is_generating = False
+        self._done_event.set()
         if self._guardrail:
             self._guardrail.reset()
         self._current_transcript = ""
@@ -137,6 +148,7 @@ class SessionAHandler:
         PRD M-2: Level 3인 경우 오디오를 Twilio로 전달하지 않음.
         """
         self._is_generating = True
+        self._done_event.clear()
         delta_b64 = event.get("delta", "")
         if not delta_b64 or not self._on_tts_audio:
             return
@@ -218,6 +230,7 @@ class SessionAHandler:
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
         """Session A 응답 완료 + cost token 추적."""
         self._is_generating = False
+        self._done_event.set()
 
         # Cost token 추적
         if self._call:

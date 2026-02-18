@@ -127,33 +127,6 @@ class AudioRingBuffer:
         unsent = self.get_unsent()
         return b"".join(slot.data for slot in unsent)
 
-    def get_recent(self, duration_ms: int) -> list[AudioSlot]:
-        """최근 N 밀리초의 오디오를 반환한다.
-
-        Args:
-            duration_ms: 가져올 오디오 길이 (밀리초)
-
-        Returns:
-            AudioSlot 리스트 (시퀀스 순서)
-        """
-        slot_count = min(
-            duration_ms // DEFAULT_CHUNK_DURATION_MS,
-            self._capacity,
-            self._total_written,
-        )
-
-        if slot_count <= 0:
-            return []
-
-        cutoff_time = time.time() - (duration_ms / 1000.0)
-        result: list[AudioSlot] = []
-        for slot in self._slots:
-            if slot.timestamp >= cutoff_time and slot.data:
-                result.append(slot)
-
-        result.sort(key=lambda s: s.sequence)
-        return result[-slot_count:]
-
     def clear(self) -> None:
         """버퍼를 초기화한다."""
         for slot in self._slots:

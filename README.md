@@ -1,22 +1,47 @@
+<div align="center">
+
+<img src="docs/assets/wigvo_logo.png" alt="WIGVO Logo" width="120" />
+
 # WIGVO
 
-**AI Realtime Relay Platform** — Phone calls without language barriers
+**AI Realtime Relay Platform — Phone Calls Without Language Barriers**
 
-[![Korean](https://img.shields.io/badge/lang-한국어-blue.svg)](README.ko.md)
+![Version](https://img.shields.io/badge/v3.2-Realtime_Relay-FF6B6B?style=for-the-badge)
+![Sessions](https://img.shields.io/badge/Dual_Session-OpenAI_Realtime-5A67D8?style=for-the-badge)
+![Languages](https://img.shields.io/badge/4-Languages-00D4AA?style=for-the-badge)
+![Tests](https://img.shields.io/badge/74-Tests_Passing-F59E0B?style=for-the-badge)
 
-WIGVO is an **AI-powered real-time phone interpretation and relay platform** for foreigners, people with speech/hearing disabilities, and those with phone anxiety. When a user speaks in their native language, the AI translates in real time and delivers it to the other party, then translates the response back.
+[![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
-## Problem
+</div>
 
-Language barriers block everyday phone calls:
+---
 
-- **Foreigners living in Korea** — Cannot make calls in Korean: hospital appointments, delivery orders, government inquiries
-- **Koreans making overseas calls** — Struggle with English/local languages: hotel reservations, airline inquiries
-- **People with speech disabilities** — Cannot make voice calls, but many businesses only accept phone calls
-- **People with hearing disabilities** — Cannot hear the other party, need real-time captions
+AI-powered real-time phone interpretation and relay platform for foreigners, people with speech/hearing disabilities, and those with phone anxiety.
 
-Existing translation apps only support **one-way text translation**.
-WIGVO solves **bidirectional real-time voice translation + phone connection** in a single platform.
+You speak your language. The other person hears theirs. In real time, on a real phone call.
+
+```
+"I'd like to make a reservation for tonight"
+  → OpenAI Realtime (STT + Translation + TTS)
+  → Twilio delivers to recipient: "오늘 저녁 예약하고 싶은데요"
+  → Recipient replies: "네, 몇 시에 오실 건가요?"
+  → User hears: "What time would you like to come?"
+```
+
+---
+
+## Why WIGVO?
+
+Existing translation apps only support **one-way text translation**. WIGVO solves **bidirectional real-time voice translation + phone connection** in a single platform.
+
+| Problem | Who | WIGVO Solution |
+|---------|-----|----------------|
+| Can't make calls in Korean | Foreigners in Korea | Real-time voice translation |
+| Struggle with overseas calls | Koreans abroad | Bidirectional interpretation |
+| Cannot make voice calls | Speech disabilities | Text-to-voice relay |
+| Cannot hear the other party | Hearing disabilities | Live captions + text mode |
+| Anxiety about phone calls | Call-phobic users | AI Agent handles the call |
 
 ## How It Works
 

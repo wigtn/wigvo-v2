@@ -40,13 +40,6 @@ async def start_call(req: CallStartRequest):
     if call_manager.get_call(req.call_id):
         raise HTTPException(status_code=409, detail="Call already in progress")
 
-    # Feature flag 확인
-    if settings.call_mode != "realtime":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Call mode '{settings.call_mode}' not supported by this endpoint",
-        )
-
     logger.info(
         "Starting call: id=%s, mode=%s, %s→%s",
         req.call_id,
@@ -79,6 +72,10 @@ async def start_call(req: CallStartRequest):
         source_language=req.source_language,
         target_language=req.target_language,
     )
+
+    # Prompt를 ActiveCall에 저장 (AudioRouter에서 사용)
+    call.prompt_a = prompt_a
+    call.prompt_b = prompt_b
 
     # 3. OpenAI Dual Session 생성 (vad_mode 전달 — PRD 4.2)
     dual_session = DualSessionManager(

@@ -17,10 +17,9 @@ PRD 텍스트 델타 검사 메커니즘:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 
 from src.guardrail.dictionary import get_filler_text
@@ -58,27 +57,6 @@ class GuardrailResult:
         return self.level == GuardrailLevel.LEVEL_2
 
 
-@dataclass
-class GuardrailEvent:
-    """Guardrail 이벤트 로그 항목 (guardrail_events JSONB)."""
-    level: int
-    original: str
-    corrected: str | None = None
-    category: str = ""
-    correction_time_ms: float = 0.0
-    timestamp: float = 0.0
-
-    def to_dict(self) -> dict:
-        return {
-            "level": self.level,
-            "original": self.original,
-            "corrected": self.corrected,
-            "category": self.category,
-            "correction_time_ms": self.correction_time_ms,
-            "timestamp": self.timestamp or time.time(),
-        }
-
-
 class GuardrailChecker:
     """텍스트 델타를 분석하여 Guardrail Level을 분류하고 처리한다.
 
@@ -101,9 +79,6 @@ class GuardrailChecker:
         self._text_buffer: str = ""
         self._current_level: GuardrailLevel = GuardrailLevel.LEVEL_1
 
-        # 이벤트 로그
-        self._events: list[GuardrailEvent] = []
-
     @property
     def current_level(self) -> GuardrailLevel:
         """현재 응답의 Guardrail 레벨."""
@@ -113,11 +88,6 @@ class GuardrailChecker:
     def is_blocking(self) -> bool:
         """현재 Level 3으로 TTS 차단 중인지."""
         return self._current_level == GuardrailLevel.LEVEL_3
-
-    @property
-    def events(self) -> list[dict]:
-        """기록된 Guardrail 이벤트 목록 (JSONB 저장용)."""
-        return [e.to_dict() for e in self._events]
 
     def reset(self) -> None:
         """새 응답 시작 시 상태를 초기화한다."""
@@ -196,22 +166,6 @@ class GuardrailChecker:
 
         result.corrected_text = corrected
         result.correction_time_ms = elapsed_ms
-
-        # 이벤트 기록
-        category = ""
-        if result.filter_result:
-            categories = {m.category.value for m in result.filter_result.matches}
-            category = ",".join(sorted(categories))
-
-        self._events.append(
-            GuardrailEvent(
-                level=result.level,
-                original=text,
-                corrected=corrected if corrected != text else None,
-                category=category,
-                correction_time_ms=elapsed_ms,
-            )
-        )
 
         return result
 

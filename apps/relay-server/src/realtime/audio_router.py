@@ -19,6 +19,7 @@ import asyncio
 import base64
 import logging
 import time
+from typing import Any, Callable, Coroutine
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
@@ -45,7 +46,7 @@ class AudioRouter:
         call: ActiveCall,
         dual_session: DualSessionManager,
         twilio_handler: TwilioMediaStreamHandler,
-        app_ws_send: asyncio.coroutines,  # App WebSocket으로 메시지 전송 함수
+        app_ws_send: Callable[[WsMessage], Coroutine[Any, Any, None]],
         prompt_a: str = "",
         prompt_b: str = "",
     ):
@@ -223,18 +224,12 @@ class AudioRouter:
         # 수신자가 말하는 중이면 대기 (턴 겹침 방지)
         if self.interrupt.is_recipient_speaking:
             logger.info("Recipient is speaking — holding text until they finish...")
-            for _ in range(100):  # 최대 10초 대기
-                await asyncio.sleep(0.1)
-                if not self.interrupt.is_recipient_speaking:
-                    break
+            await self.interrupt.wait_for_recipient_done(timeout=10.0)
 
         # Session A가 응답 생성 중이면 대기 (충돌 방지)
         if self.session_a.is_generating:
             logger.debug("Waiting for Session A to finish before sending text...")
-            for _ in range(50):  # 최대 5초 대기
-                await asyncio.sleep(0.1)
-                if not self.session_a.is_generating:
-                    break
+            await self.session_a.wait_for_done(timeout=5.0)
         if self.call.mode == CallMode.RELAY:
             # Relay Mode: 번역으로 명시 전달
             await self.session_a.send_user_text(
@@ -412,10 +407,7 @@ class AudioRouter:
 
         if self.session_a.is_generating:
             logger.debug("Waiting for Session A before forwarding recipient translation...")
-            for _ in range(50):  # 최대 5초
-                await asyncio.sleep(0.1)
-                if not self.session_a.is_generating:
-                    break
+            await self.session_a.wait_for_done(timeout=5.0)
 
         logger.info("Agent Mode: forwarding recipient translation to Session A: %s", text[:80])
         await self.session_a.send_user_text(f"[Recipient says]: {text}")

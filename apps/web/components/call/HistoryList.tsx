@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Phone, Calendar, HelpCircle, Search, ChevronRight, Inbox } from 'lucide-react';
-import { type Call, type CallStatus } from '@/hooks/useCallPolling';
+import { type Call, type CallStatus } from '@/shared/types';
 import type { ReactNode } from 'react';
 
 interface HistoryListProps {

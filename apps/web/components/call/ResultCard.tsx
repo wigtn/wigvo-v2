@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { type Call } from '@/hooks/useCallPolling';
+import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
 import { CheckCircle, XCircle, MapPin, Calendar, Clock, Scissors, FileText, RefreshCw, List, Home } from 'lucide-react';
 
@@ -109,7 +109,7 @@ export default function ResultCard({ call }: ResultCardProps) {
             <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">예약 정보</h3>
           </div>
           <div className="px-5 py-4 space-y-4">
-            <InfoRow icon={<MapPin className="size-4" />} label="장소" value={call.targetName} />
+            <InfoRow icon={<MapPin className="size-4" />} label="장소" value={call.targetName ?? '-'} />
             {call.parsedDate && (
               <InfoRow icon={<Calendar className="size-4" />} label="날짜" value={formatDate(call.parsedDate)} />
             )}

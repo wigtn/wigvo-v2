@@ -37,6 +37,8 @@ from src.types import (
 
 logger = logging.getLogger(__name__)
 
+DEGRADED_BATCH_DURATION_S = 3.0  # 3초마다 배치 처리
+
 # 세션 장애가 아닌 단순 타이밍 경쟁 에러 — Recovery 불필요
 _IGNORABLE_ERROR_CODES = {
     "response_cancel_not_active",        # 이미 끝난 응답을 cancel 시도 (interrupt 타이밍)
@@ -72,6 +74,8 @@ class SessionRecoveryManager:
         self._attempt: int = 0
         self._degraded_mode: bool = False
         self._openai_client: openai.AsyncOpenAI | None = None
+        self._degraded_buffer: bytes = b""
+        self._degraded_buffer_start: float = 0.0
 
     @property
     def is_recovering(self) -> bool:
@@ -400,6 +404,8 @@ class SessionRecoveryManager:
     async def exit_degraded_mode(self) -> None:
         """Degraded Mode에서 정상 모드로 복귀한다."""
         self._degraded_mode = False
+        self._degraded_buffer = b""
+        self._degraded_buffer_start = 0.0
         self._update_session_state(SessionState.CONNECTED)
 
         self._log_recovery_event(RecoveryEventType.DEGRADED_MODE_EXITED)
@@ -417,19 +423,36 @@ class SessionRecoveryManager:
         )
 
     async def process_degraded_audio(self, audio_bytes: bytes) -> str | None:
-        """Degraded Mode에서 오디오를 Whisper로 배치 처리한다.
+        """Degraded Mode에서 오디오를 버퍼링 후 배치 처리한다.
+
+        3초 분량의 오디오가 모이면 Whisper API를 한 번 호출한다.
 
         Args:
             audio_bytes: g711_ulaw 오디오 바이트
 
         Returns:
-            Whisper STT 결과 텍스트 또는 None
+            Whisper STT 결과 텍스트 또는 None (버퍼링 중)
         """
         if not self._degraded_mode:
             return None
 
+        if not self._degraded_buffer:
+            self._degraded_buffer_start = time.time()
+
+        self._degraded_buffer += audio_bytes
+
+        # 3초 미만이면 버퍼링만
+        elapsed = time.time() - self._degraded_buffer_start
+        if elapsed < DEGRADED_BATCH_DURATION_S:
+            return None
+
+        # 3초 이상 모였으면 배치 처리
+        batch = self._degraded_buffer
+        self._degraded_buffer = b""
+        self._degraded_buffer_start = 0.0
+
         try:
-            return await self._whisper_transcribe(audio_bytes)
+            return await self._whisper_transcribe(batch)
         except Exception as e:
             logger.error("[%s] Degraded mode transcription failed: %s", self.session.label, e)
             return None

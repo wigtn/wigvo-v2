@@ -316,13 +316,13 @@ class TestSessionBOutputSuppression:
         assert handler._pending_output[0] == ("original_caption", ("recipient", "원문"))
         handler._on_original_caption.assert_not_called()
 
-    def test_muted_backward_compat(self):
-        """muted property가 output_suppressed에 매핑됨."""
+    def test_output_suppressed_toggle(self):
+        """output_suppressed 프로퍼티 토글."""
         handler, _ = self._make_handler()
-        assert handler.muted is False
+        assert handler.output_suppressed is False
 
-        handler.muted = True
+        handler.output_suppressed = True
         assert handler.output_suppressed is True
 
         handler.output_suppressed = False
-        assert handler.muted is False
+        assert handler.output_suppressed is False

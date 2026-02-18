@@ -4,8 +4,13 @@
 session.update가 아닌 conversation.item.create를 사용하여 세션 상태 리셋을 방지한다.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.realtime.session_manager import RealtimeSession
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +58,7 @@ class ConversationContextManager:
             lines.append(f"{label}: {turn['text']}")
         return "\n".join(lines)
 
-    async def inject_context(self, session: Any) -> None:
+    async def inject_context(self, session: RealtimeSession) -> None:
         """OpenAI 세션에 컨텍스트를 conversation.item.create로 주입한다.
 
         session.update를 사용하지 않는 이유: 세션 전체 설정을 리셋하기 때문.
@@ -63,17 +68,9 @@ class ConversationContextManager:
         if not context:
             return
 
-        await session._send({
-            "type": "conversation.item.create",
-            "item": {
-                "type": "message",
-                "role": "user",
-                "content": [{
-                    "type": "input_text",
-                    "text": f"[Previous conversation for context]\n{context}\n[End context — now translate the next utterance]",
-                }],
-            },
-        })
+        await session.send_context_item(
+            f"[Previous conversation for context]\n{context}\n[End context — now translate the next utterance]"
+        )
         logger.debug("Context injected: %d turns", len(self._turns))
 
     @property

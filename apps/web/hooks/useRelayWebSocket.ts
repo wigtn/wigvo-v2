@@ -13,11 +13,11 @@ interface UseRelayWebSocketOptions {
 
 interface UseRelayWebSocketReturn {
   status: WsStatus;
-  sendMessage: (msg: RelayWsMessage) => void;
-  sendAudioChunk: (base64Audio: string) => void;
-  sendVadState: (state: string) => void;
-  sendText: (text: string) => void;
-  sendEndCall: () => void;
+  sendMessage: (msg: RelayWsMessage) => boolean;
+  sendAudioChunk: (base64Audio: string) => boolean;
+  sendVadState: (state: string) => boolean;
+  sendText: (text: string) => boolean;
+  sendEndCall: () => boolean;
   disconnect: () => void;
 }
 
@@ -110,35 +110,38 @@ export function useRelayWebSocket({
     setStatus('disconnected');
   }, [cleanup]);
 
-  const sendMessage = useCallback((msg: RelayWsMessage) => {
+  const sendMessage = useCallback((msg: RelayWsMessage): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
+      return true;
     }
+    console.warn('[RelayWS] Cannot send, WebSocket not connected');
+    return false;
   }, []);
 
   const sendAudioChunk = useCallback(
-    (base64Audio: string) => {
-      sendMessage({ type: WsMessageType.AUDIO_CHUNK, data: { audio: base64Audio } });
+    (base64Audio: string): boolean => {
+      return sendMessage({ type: WsMessageType.AUDIO_CHUNK, data: { audio: base64Audio } });
     },
     [sendMessage],
   );
 
   const sendVadState = useCallback(
-    (state: string) => {
-      sendMessage({ type: WsMessageType.VAD_STATE, data: { state } });
+    (state: string): boolean => {
+      return sendMessage({ type: WsMessageType.VAD_STATE, data: { state } });
     },
     [sendMessage],
   );
 
   const sendText = useCallback(
-    (text: string) => {
-      sendMessage({ type: WsMessageType.TEXT_INPUT, data: { text } });
+    (text: string): boolean => {
+      return sendMessage({ type: WsMessageType.TEXT_INPUT, data: { text } });
     },
     [sendMessage],
   );
 
-  const sendEndCall = useCallback(() => {
-    sendMessage({ type: WsMessageType.END_CALL, data: {} });
+  const sendEndCall = useCallback((): boolean => {
+    return sendMessage({ type: WsMessageType.END_CALL, data: {} });
   }, [sendMessage]);
 
   // Auto-connect when url is set and autoConnect is true

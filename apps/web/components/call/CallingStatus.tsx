@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { type Call } from '@/hooks/useCallPolling';
+import { type Call } from '@/shared/types';
 import { Check, X } from 'lucide-react';
 
 const Orb = dynamic(() => import('@/components/ui/Orb'), { ssr: false });

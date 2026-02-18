@@ -83,15 +83,6 @@ class SessionBHandler:
         self._output_suppressed = value
 
     @property
-    def muted(self) -> bool:
-        """하위 호환: output_suppressed에 매핑."""
-        return self._output_suppressed
-
-    @muted.setter
-    def muted(self, value: bool) -> None:
-        self._output_suppressed = value
-
-    @property
     def is_recipient_speaking(self) -> bool:
         return self._is_recipient_speaking
 

@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import ResultCard from '@/components/call/ResultCard';
 import { Loader2, AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import type { Call } from '@/hooks/useCallPolling';
+import type { Call } from '@/shared/types';
 
 export default function ResultPage() {
   const { id } = useParams<{ id: string }>();

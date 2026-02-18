@@ -203,6 +203,8 @@ class ActiveCall(BaseModel):
     collected_data: dict[str, Any] = {}
     started_at: float = 0.0
     first_message_sent: bool = False
+    prompt_a: str = ""
+    prompt_b: str = ""
     # Phase 3: Recovery
     session_a_state: SessionState = SessionState.CONNECTED
     session_b_state: SessionState = SessionState.CONNECTED

@@ -20,6 +20,8 @@ import {
   LLM_CONTEXT_MESSAGE_LIMIT,
   MAX_TOOL_CALL_LOOPS,
 } from '@/lib/constants';
+import { matchPlaceFromUserMessage } from './place-matcher';
+import { extractDataFromMessage } from './data-extractor';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -127,137 +129,6 @@ function formatSearchResultsForTool(results: NaverPlaceResult[]): string {
   return `검색 결과 ${results.length}건:\n${lines.join('\n')}\n\n[중요 지시]\n${coreInstruction}\n\n${phoneInstruction}`;
 }
 
-// -----------------------------------------------------------------------------
-// Helper: Match Place from User Selection
-// -----------------------------------------------------------------------------
-
-interface PlaceMatchResult {
-  matched: NaverPlaceResult | null;
-  matchType: 'number' | 'name' | 'none';
-}
-
-export function matchPlaceFromUserMessage(
-  message: string,
-  searchResults: NaverPlaceResult[]
-): PlaceMatchResult {
-  if (searchResults.length === 0) {
-    return { matched: null, matchType: 'none' };
-  }
-
-  const trimmed = message.trim();
-
-  // 1) "1번", "2번", "4번", "나는 4번", "4번으로", "첫번째" 등 번호 선택 해석
-  // 메시지 어디서든 숫자+번 패턴을 찾음 (앵커 없이)
-  const numMatch = trimmed.match(
-    /(\d+)\s*번|첫\s*번째|두\s*번째|세\s*번째|네\s*번째|다섯\s*번째/
-  );
-  const ordinalMap: Record<string, number> = { 첫: 1, 두: 2, 세: 3, 네: 4, 다섯: 5 };
-  let index = -1;
-
-  if (numMatch) {
-    if (numMatch[1]) {
-      index = parseInt(numMatch[1], 10) - 1;
-    } else {
-      // 서수 매칭: "첫번째", "두번째" 등
-      const matched = numMatch[0];
-      for (const [key, val] of Object.entries(ordinalMap)) {
-        if (matched.startsWith(key)) {
-          index = val - 1;
-          break;
-        }
-      }
-    }
-  } else {
-    // 숫자만 입력한 경우 ("4", "1")
-    const pureNum = trimmed.match(/^(\d+)$/);
-    if (pureNum) {
-      index = parseInt(pureNum[1], 10) - 1;
-    }
-  }
-
-  if (index >= 0 && index < searchResults.length) {
-    return { matched: searchResults[index], matchType: 'number' };
-  }
-
-  // 2) 메시지에 가게명이 포함된 경우
-  const nameMatch =
-    searchResults.find(
-      (r) =>
-        message.includes(r.name) ||
-        r.name.includes(
-          message.replace(/으로|에|로|할게|예약|선택|갈게|해줘/g, '').trim()
-        )
-    ) || null;
-
-  if (nameMatch) {
-    return { matched: nameMatch, matchType: 'name' };
-  }
-
-  return { matched: null, matchType: 'none' };
-}
-
-// -----------------------------------------------------------------------------
-// Helper: Extract Data from User Message (Fallback)
-// -----------------------------------------------------------------------------
-
-export function extractDataFromMessage(
-  message: string,
-  scenarioType: string | null
-): Partial<CollectedData> {
-  const result: Partial<CollectedData> = {};
-  const m = message.trim();
-
-  // 날짜/시간 패턴
-  if (/(오늘|내일|모레|다음\s*주|월|일|오전|오후|\d+시)/.test(m) && m.length <= 30) {
-    result.primary_datetime = m;
-  }
-
-  // 인원수 패턴
-  const partyMatch = m.match(/^(\d+)\s*명$/);
-  if (partyMatch) {
-    result.party_size = parseInt(partyMatch[1], 10);
-  }
-
-  // 예약자 이름 패턴 (2-4자 한글)
-  if (
-    /^[가-힣]{2,4}$/.test(m) &&
-    !/^(오늘|내일|모레|다음|첫번째|두번째)$/.test(m)
-  ) {
-    result.customer_name = m;
-  }
-
-  // 전화번호 패턴 (국내 + E.164)
-  const phoneMatch = m.match(
-    /(\+82[\d-]{9,13})|(0\d{1,2}-?\d{3,4}-?\d{4})|(010\d{8})/
-  );
-  if (phoneMatch) {
-    if (phoneMatch[1]) {
-      // E.164: +8210-9265-9103 → +821092659103
-      result.target_phone = phoneMatch[1].replace(/-/g, '');
-    } else {
-      const raw = (phoneMatch[2] || phoneMatch[3] || '').replace(/-/g, '');
-      if (raw.length >= 10 && raw.length <= 11 && /^0\d+$/.test(raw)) {
-        const withDashes = phoneMatch[2]?.includes('-') ? phoneMatch[2] : null;
-        result.target_phone = withDashes ?? raw;
-      }
-    }
-  }
-
-  // INQUIRY(재고/가능 여부) 문의 내용
-  if (scenarioType === 'INQUIRY') {
-    const inquiryMatch = m.match(
-      /(?:.*에\s+)?(.+?(?:남았는지|있는지|가능한지|있어|되나요))/
-    );
-    const phrase = inquiryMatch?.[1]
-      ?.replace(/\s*(물어봐|문의해|확인해|전화해).*$/g, '')
-      .trim();
-    if (phrase && phrase.length >= 2 && phrase.length <= 80) {
-      result.special_request = phrase;
-    }
-  }
-
-  return result;
-}
 
 // -----------------------------------------------------------------------------
 // Main: Process Chat
@@ -472,3 +343,8 @@ export function isReadyForCall(
     forceReady,
   };
 }
+
+// Re-exports for backward compatibility
+export { matchPlaceFromUserMessage } from './place-matcher';
+export type { PlaceMatchResult } from './place-matcher';
+export { extractDataFromMessage } from './data-extractor';
