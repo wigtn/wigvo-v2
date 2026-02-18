@@ -1,6 +1,7 @@
 'use client';
 
 import { Mic, MicOff, Captions } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { CommunicationMode } from '@/shared/call-types';
 
 interface AudioControlsProps {
@@ -16,6 +17,7 @@ export default function AudioControls({
   onToggleMute,
   communicationMode,
 }: AudioControlsProps) {
+  const t = useTranslations('call');
   // voice_to_text 모드: 자막 전용 모드 뱃지 표시
   if (communicationMode === 'voice_to_text') {
     return (
@@ -23,11 +25,11 @@ export default function AudioControls({
         <div className="flex items-center gap-2 flex-1">
           <Captions className="size-4 text-[#64748B]" />
           <span className="text-xs font-medium text-[#64748B]">
-            {'자막 전용 모드'}
+            {t('captionOnlyMode')}
           </span>
         </div>
         <div className="rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] px-3 py-1.5">
-          <span className="text-[10px] text-[#94A3B8]">{'음성은 녹음되지만 재생되지 않습니다'}</span>
+          <span className="text-[10px] text-[#94A3B8]">{t('audioNotPlayed')}</span>
         </div>
       </div>
     );
@@ -48,10 +50,10 @@ export default function AudioControls({
         />
         <span className="text-xs text-[#64748B]">
           {isMuted
-            ? '음소거 켜짐'
+            ? t('muted')
             : isSpeaking
-              ? '발화 중...'
-              : '듣고 있어요'}
+              ? t('speaking')
+              : t('listening')}
         </span>
       </div>
 
@@ -67,12 +69,12 @@ export default function AudioControls({
         {isMuted ? (
           <>
             <MicOff className="size-3.5" />
-            {'음소거 해제'}
+            {t('unmute')}
           </>
         ) : (
           <>
             <Mic className="size-3.5" />
-            {'음소거'}
+            {t('mute')}
           </>
         )}
       </button>

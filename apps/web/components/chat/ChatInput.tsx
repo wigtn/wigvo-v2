@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { ArrowUp } from 'lucide-react';
 
 interface ChatInputProps {
@@ -17,10 +18,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   {
     onSend,
     disabled = false,
-    placeholder = '전화할 내용을 입력하세요...',
+    placeholder,
   },
   ref
 ) {
+  const t = useTranslations('chat');
+  const resolvedPlaceholder = placeholder ?? t('inputPlaceholder');
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -67,7 +70,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           value={value}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-transparent text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed py-1"

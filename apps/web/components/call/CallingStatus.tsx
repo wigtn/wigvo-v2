@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
 import { Check, X } from 'lucide-react';
 
@@ -17,25 +18,20 @@ function formatElapsed(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
-function getStatusLabel(status: string | undefined): string {
-  switch (status) {
-    case 'PENDING':
-    case 'CALLING':
-      return '전화 연결 중';
-    case 'IN_PROGRESS':
-      return '용건 전달 중';
-    case 'COMPLETED':
-      return '통화 완료';
-    case 'FAILED':
-      return '통화 실패';
-    default:
-      return '준비 중';
-  }
-}
-
 export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
+  const t = useTranslations('callStatus');
   const isTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
   const isFailed = call?.status === 'FAILED';
+
+  const statusLabel = (() => {
+    switch (call?.status) {
+      case 'PENDING': case 'CALLING': return t('connecting');
+      case 'IN_PROGRESS': return t('delivering');
+      case 'COMPLETED': return t('completed');
+      case 'FAILED': return t('failed');
+      default: return t('preparing');
+    }
+  })();
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 px-6">
@@ -71,7 +67,7 @@ export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
         <p className={`text-sm font-medium mb-1 ${
           isFailed ? 'text-red-500' : 'text-[#64748B]'
         }`}>
-          {getStatusLabel(call?.status)}
+          {statusLabel}
           {!isTerminal && (
             <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 align-middle" />
           )}
@@ -89,7 +85,7 @@ export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
       {/* 경과 시간 */}
       <div className="flex flex-col items-center gap-1">
         <span className="text-[10px] uppercase tracking-wider text-[#94A3B8] font-semibold">
-          경과 시간
+          {t('elapsed')}
         </span>
         <span className="font-mono text-3xl font-bold tabular-nums tracking-tight text-[#0F172A]">
           {formatElapsed(elapsed)}
@@ -99,7 +95,7 @@ export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
       {/* 간단한 단계 표시 */}
       {!isTerminal && (
         <div className="flex items-center gap-2">
-          {['연결', '전달', '완료'].map((label, i) => {
+          {[t('stepConnect'), t('stepDeliver'), t('stepComplete')].map((label, i) => {
             const stepIndex = (() => {
               const s = call?.status || 'PENDING';
               if (s === 'PENDING' || s === 'CALLING') return 0;

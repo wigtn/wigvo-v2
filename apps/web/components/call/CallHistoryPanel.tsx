@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Loader2,
   AlertTriangle,
@@ -24,9 +25,9 @@ import { cn } from '@/lib/utils';
 import type { Call } from '@/shared/types';
 
 // ===========================================================================
-// 헬퍼 함수들
+// 헬퍼 함수들 (날짜 포맷 — 별도 리팩토링 대상, 로직 유지)
 // ===========================================================================
-function formatRelativeDate(dateStr: string) {
+function formatRelativeDate(dateStr: string, t: (key: string, values?: Record<string, string | number | Date>) => string) {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -35,9 +36,9 @@ function formatRelativeDate(dateStr: string) {
   if (days === 0) {
     return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   } else if (days === 1) {
-    return '어제';
+    return t('yesterday');
   } else if (days < 7) {
-    return `${days}일 전`;
+    return t('daysAgo', { count: days });
   }
   return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 }
@@ -87,15 +88,6 @@ function formatParsedTime(timeStr: string | null): string {
   }
 }
 
-function getRequestTypeLabel(type: string): string {
-  switch (type) {
-    case 'RESERVATION': return '예약';
-    case 'INQUIRY': return '문의';
-    case 'AS_REQUEST': return 'AS 요청';
-    default: return type;
-  }
-}
-
 function getRequestTypeIcon(type: string) {
   switch (type) {
     case 'RESERVATION': return <Calendar className="size-4 text-[#64748B]" />;
@@ -117,54 +109,36 @@ function getListStatusIcon(status: string, result: string | null) {
   return <Clock className="size-3.5 text-[#CBD5E1]" />;
 }
 
-function getStatusBadge(status: string, result: string | null) {
-  if (status === 'COMPLETED' && result === 'SUCCESS') {
-    return { label: '성공', bg: 'bg-teal-50', text: 'text-teal-600' };
-  }
-  if (status === 'COMPLETED' || status === 'FAILED') {
-    return { label: '실패', bg: 'bg-red-50', text: 'text-red-600' };
-  }
-  if (status === 'CALLING' || status === 'IN_PROGRESS') {
-    return { label: '통화중', bg: 'bg-amber-50', text: 'text-amber-600' };
-  }
-  return { label: '대기', bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
-}
-
-function getResultLabel(result: string | null): string {
-  switch (result) {
-    case 'SUCCESS': return '성공';
-    case 'NO_ANSWER': return '전화를 받지 않음';
-    case 'REJECTED': return '요청 거절됨';
-    case 'ERROR': return '오류 발생';
-    default: return '-';
-  }
-}
-
-function getCallStatusLabel(status: string): string {
-  switch (status) {
-    case 'PENDING': return '대기 중';
-    case 'CALLING': return '전화 거는 중...';
-    case 'IN_PROGRESS': return '통화 중...';
-    case 'COMPLETED': return '통화 완료';
-    case 'FAILED': return '통화 실패';
-    default: return status;
-  }
-}
-
-function getFailureMessage(result: string | null): string {
-  switch (result) {
-    case 'NO_ANSWER': return '상대방이 전화를 받지 않았습니다.';
-    case 'REJECTED': return '요청이 거절되었습니다.';
-    case 'ERROR': return '통화 중 오류가 발생했습니다.';
-    default: return '알 수 없는 오류가 발생했습니다.';
-  }
-}
-
 // ===========================================================================
 // CallHistoryPanel (메인 컴포넌트)
 // ===========================================================================
 export default function CallHistoryPanel() {
   const router = useRouter();
+  const t = useTranslations('history');
+  const tc = useTranslations('common');
+
+  // ── i18n-aware 헬퍼 (t() 필요) ──
+  const requestTypeLabel = (type: string) => {
+    switch (type) {
+      case 'RESERVATION': return t('requestType.reservation');
+      case 'INQUIRY': return t('requestType.inquiry');
+      case 'AS_REQUEST': return t('requestType.asRequest');
+      default: return type;
+    }
+  };
+
+  const getStatusBadge = (status: string, result: string | null) => {
+    if (status === 'COMPLETED' && result === 'SUCCESS') {
+      return { label: t('status.success'), bg: 'bg-teal-50', text: 'text-teal-600' };
+    }
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      return { label: t('status.failed'), bg: 'bg-red-50', text: 'text-red-600' };
+    }
+    if (status === 'CALLING' || status === 'IN_PROGRESS') {
+      return { label: t('status.inProgress'), bg: 'bg-amber-50', text: 'text-amber-600' };
+    }
+    return { label: t('status.pending'), bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
+  };
 
   // ── 통화 목록 상태 ──
   const [calls, setCalls] = useState<Call[]>([]);
@@ -197,7 +171,7 @@ export default function CallHistoryPanel() {
       }
 
       if (!res.ok) {
-        setListError('통화 기록을 불러오는 데 실패했습니다.');
+        setListError(t('loadFailed'));
         setListLoading(false);
         return;
       }
@@ -206,10 +180,10 @@ export default function CallHistoryPanel() {
       setCalls(data.calls || []);
       setListLoading(false);
     } catch {
-      setListError('네트워크 오류가 발생했습니다.');
+      setListError(tc('networkError'));
       setListLoading(false);
     }
-  }, [router]);
+  }, [router, t, tc]);
 
   useEffect(() => {
     if (listFetchedRef.current) return;
@@ -242,7 +216,7 @@ export default function CallHistoryPanel() {
           }
 
           if (!res.ok) {
-            setDetailError('통화 상세를 불러오는 데 실패했습니다.');
+            setDetailError(t('detailLoadFailed'));
             setDetailLoading(false);
             return;
           }
@@ -253,7 +227,7 @@ export default function CallHistoryPanel() {
         }
       } catch {
         if (!cancelled) {
-          setDetailError('네트워크 오류가 발생했습니다.');
+          setDetailError(tc('networkError'));
           setDetailLoading(false);
         }
       }
@@ -264,7 +238,7 @@ export default function CallHistoryPanel() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, router]);
+  }, [selectedId, router, t, tc]);
 
   // ────────────────────────────────────────────────────────────────
   // 핸들러
@@ -303,9 +277,9 @@ export default function CallHistoryPanel() {
                 <Phone className="size-4 text-[#0F172A]" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-[#0F172A] tracking-tight">통화 기록</h2>
+                <h2 className="text-sm font-bold text-[#0F172A] tracking-tight">{t('title')}</h2>
                 {!listLoading && !listError && (
-                  <p className="text-[10px] text-[#94A3B8] mt-0.5">총 {calls.length}건</p>
+                  <p className="text-[10px] text-[#94A3B8] mt-0.5">{t('totalCount', { count: calls.length })}</p>
                 )}
               </div>
             </div>
@@ -340,7 +314,7 @@ export default function CallHistoryPanel() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-[#E2E8F0] text-[#64748B] hover:bg-[#F8FAFC] transition-all"
               >
                 <RefreshCw className="size-3" />
-                다시 시도
+                {tc('retry')}
               </button>
             </div>
           ) : calls.length === 0 ? (
@@ -349,8 +323,8 @@ export default function CallHistoryPanel() {
                 <Inbox className="size-5 text-[#CBD5E1]" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-[#94A3B8]">통화 기록이 없습니다</p>
-                <p className="text-xs text-[#CBD5E1] mt-1">채팅에서 전화를 요청해보세요</p>
+                <p className="text-sm font-medium text-[#94A3B8]">{t('noRecords')}</p>
+                <p className="text-xs text-[#CBD5E1] mt-1">{t('noRecordsHint')}</p>
               </div>
             </div>
           ) : (
@@ -372,15 +346,15 @@ export default function CallHistoryPanel() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium text-[#0F172A] truncate">
-                            {call.targetName || '알 수 없음'}
+                            {call.targetName || tc('unknown')}
                           </p>
                           <span className="text-[10px] text-[#CBD5E1] shrink-0">
-                            {formatRelativeDate(call.createdAt)}
+                            {formatRelativeDate(call.createdAt, t)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-xs text-[#94A3B8]">
-                            {getRequestTypeLabel(call.requestType)}
+                            {requestTypeLabel(call.requestType)}
                           </span>
                           <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-semibold', badge.bg, badge.text)}>
                             {badge.label}
@@ -408,13 +382,13 @@ export default function CallHistoryPanel() {
             <div className="w-14 h-14 rounded-2xl bg-[#F1F5F9] flex items-center justify-center">
               <Phone className="size-6 text-[#CBD5E1]" />
             </div>
-            <p className="text-sm font-medium text-[#94A3B8]">통화를 선택해주세요</p>
-            <p className="text-xs text-[#CBD5E1]">좌측 목록에서 통화를 선택하면 상세 내용을 확인할 수 있습니다</p>
+            <p className="text-sm font-medium text-[#94A3B8]">{t('selectCall')}</p>
+            <p className="text-xs text-[#CBD5E1]">{t('selectCallHint')}</p>
           </div>
         ) : detailLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3">
             <Loader2 className="size-6 text-[#0F172A] animate-spin" />
-            <p className="text-sm text-[#94A3B8]">통화 정보를 불러오는 중...</p>
+            <p className="text-sm text-[#94A3B8]">{t('loadingDetail')}</p>
           </div>
         ) : detailError ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4">
@@ -427,7 +401,7 @@ export default function CallHistoryPanel() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-[#E2E8F0] text-[#64748B] hover:bg-[#F8FAFC] transition-all"
             >
               <RefreshCw className="size-3" />
-              다시 시도
+              {tc('retry')}
             </button>
           </div>
         ) : detail ? (
@@ -442,9 +416,65 @@ export default function CallHistoryPanel() {
 // CallDetailView (우측 상세 영역)
 // ===========================================================================
 function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
+  const t = useTranslations('history');
+  const tc = useTranslations('common');
+  const tr = useTranslations('result');
+
   const isSuccess = call.status === 'COMPLETED' && call.result === 'SUCCESS';
   const isFailed = call.status === 'FAILED' || (call.status === 'COMPLETED' && call.result !== 'SUCCESS');
   const isInProgress = call.status === 'CALLING' || call.status === 'IN_PROGRESS';
+
+  const requestTypeLabel = (type: string) => {
+    switch (type) {
+      case 'RESERVATION': return t('requestType.reservation');
+      case 'INQUIRY': return t('requestType.inquiry');
+      case 'AS_REQUEST': return t('requestType.asRequest');
+      default: return type;
+    }
+  };
+
+  const getStatusBadge = (status: string, result: string | null) => {
+    if (status === 'COMPLETED' && result === 'SUCCESS') {
+      return { label: t('status.success'), bg: 'bg-teal-50', text: 'text-teal-600' };
+    }
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      return { label: t('status.failed'), bg: 'bg-red-50', text: 'text-red-600' };
+    }
+    if (status === 'CALLING' || status === 'IN_PROGRESS') {
+      return { label: t('status.inProgress'), bg: 'bg-amber-50', text: 'text-amber-600' };
+    }
+    return { label: t('status.pending'), bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
+  };
+
+  const getResultLabel = (result: string | null): string => {
+    switch (result) {
+      case 'SUCCESS': return t('callResult.success');
+      case 'NO_ANSWER': return t('callResult.noAnswer');
+      case 'REJECTED': return t('callResult.rejected');
+      case 'ERROR': return t('callResult.error');
+      default: return '-';
+    }
+  };
+
+  const getCallStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'PENDING': return t('status.pending');
+      case 'CALLING': return t('status.calling');
+      case 'IN_PROGRESS': return t('status.callInProgress');
+      case 'COMPLETED': return t('status.callCompleted');
+      case 'FAILED': return t('status.callFailed');
+      default: return status;
+    }
+  };
+
+  const getFailureMessage = (result: string | null): string => {
+    switch (result) {
+      case 'NO_ANSWER': return tr('failureNoAnswer');
+      case 'REJECTED': return tr('failureRejected');
+      case 'ERROR': return tr('failureError');
+      default: return tr('failureUnknown');
+    }
+  };
 
   const badge = getStatusBadge(call.status, call.result);
 
@@ -467,7 +497,7 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-[#0F172A] truncate">
-                {call.targetName || '알 수 없는 대상'}
+                {call.targetName || tc('unknown')}
               </h2>
               <span className={cn('shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold', badge.bg, badge.text)}>
                 {badge.label}
@@ -510,7 +540,7 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-base font-bold text-[#0F172A] tracking-tight">
-                {isSuccess ? '통화 성공' : isFailed ? '통화 실패' : isInProgress ? '통화 진행 중' : '통화 대기 중'}
+                {isSuccess ? t('banner.success') : isFailed ? t('banner.failed') : isInProgress ? t('banner.inProgress') : t('banner.pending')}
               </p>
               <p className="text-sm text-[#64748B] mt-0.5">
                 {isSuccess
@@ -526,41 +556,41 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
           <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
             <div className="px-5 py-3 border-b border-[#E2E8F0] flex items-center gap-2">
               <Phone className="size-3.5 text-[#64748B]" />
-              <span className="text-xs font-semibold text-[#0F172A]">통화 정보</span>
+              <span className="text-xs font-semibold text-[#0F172A]">{t('callInfo')}</span>
               <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F1F5F9] text-[#64748B]">
-                {getRequestTypeLabel(call.requestType)}
+                {requestTypeLabel(call.requestType)}
               </span>
             </div>
 
             <div className="px-5 py-4 space-y-4">
               <DetailRow
                 icon={<MapPin className="size-4" />}
-                label="대상"
+                label={t('target')}
                 value={call.targetName || '-'}
               />
               <DetailRow
                 icon={<Phone className="size-4" />}
-                label="전화번호"
+                label={t('phoneNumber')}
                 value={call.targetPhone}
               />
               {call.parsedDate && (
                 <DetailRow
                   icon={<Calendar className="size-4" />}
-                  label="날짜"
+                  label={tr('date')}
                   value={formatParsedDate(call.parsedDate)}
                 />
               )}
               {call.parsedTime && (
                 <DetailRow
                   icon={<Clock className="size-4" />}
-                  label="시간"
+                  label={tr('time')}
                   value={formatParsedTime(call.parsedTime)}
                 />
               )}
               {call.parsedService && (
                 <DetailRow
                   icon={<Scissors className="size-4" />}
-                  label="서비스"
+                  label={tr('service')}
                   value={call.parsedService}
                 />
               )}
@@ -576,24 +606,24 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
                 ) : (
                   <XCircle className="size-3.5 text-red-500" />
                 )}
-                <span className="text-xs font-semibold text-[#0F172A]">결과 상세</span>
+                <span className="text-xs font-semibold text-[#0F172A]">{t('resultDetail')}</span>
               </div>
 
               <div className="px-5 py-4 space-y-4">
                 <DetailRow
                   icon={<PhoneCall className="size-4" />}
-                  label="통화 상태"
+                  label={t('callStatus')}
                   value={getCallStatusLabel(call.status)}
                 />
                 <DetailRow
                   icon={isSuccess ? <CheckCircle className="size-4" /> : <XCircle className="size-4" />}
-                  label="결과"
+                  label={t('resultLabel')}
                   value={getResultLabel(call.result)}
                 />
                 {call.completedAt && (
                   <DetailRow
                     icon={<Clock className="size-4" />}
-                    label="완료 시간"
+                    label={t('completedAt')}
                     value={formatFullDate(call.completedAt)}
                   />
                 )}
@@ -606,7 +636,7 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
             <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="px-5 py-3 border-b border-[#E2E8F0] flex items-center gap-2">
                 <FileText className="size-3.5 text-[#94A3B8]" />
-                <span className="text-xs font-semibold text-[#0F172A]">AI 통화 요약</span>
+                <span className="text-xs font-semibold text-[#0F172A]">{tr('aiSummary')}</span>
               </div>
               <div className="px-5 py-4">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#334155] pl-3 border-l-2 border-[#E2E8F0] italic">
@@ -619,8 +649,8 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
           {/* ── 타임스탬프 ── */}
           <div className="text-center pt-2 pb-4">
             <p className="text-[10px] text-[#CBD5E1]">
-              생성: {formatFullDate(call.createdAt)}
-              {call.completedAt && ` · 완료: ${formatFullDate(call.completedAt)}`}
+              {t('createdAt')}: {formatFullDate(call.createdAt)}
+              {call.completedAt && ` · ${t('completedAt')}: ${formatFullDate(call.completedAt)}`}
             </p>
           </div>
         </div>

@@ -1,30 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
 import { CheckCircle, XCircle, MapPin, Calendar, Clock, Scissors, FileText, RefreshCw, List, Home } from 'lucide-react';
 
 interface ResultCardProps {
   call: Call;
-}
-
-function getFailureMessage(result: string | null): string {
-  switch (result) {
-    case 'NO_ANSWER': return '상대방이 전화를 받지 않았습니다.';
-    case 'REJECTED': return '요청이 거절되었습니다.';
-    case 'ERROR': return '통화 중 오류가 발생했습니다.';
-    default: return '알 수 없는 오류가 발생했습니다.';
-  }
-}
-
-function getFailureHint(result: string | null): string {
-  switch (result) {
-    case 'NO_ANSWER': return '잠시 후 다시 시도해보세요.';
-    case 'REJECTED': return '다른 일정이나 조건으로 다시 시도해보세요.';
-    case 'ERROR': return '네트워크 상태를 확인하고 다시 시도해보세요.';
-    default: return '다시 시도해보세요.';
-  }
 }
 
 function formatDate(dateStr: string | null): string {
@@ -66,9 +49,29 @@ function formatTime(timeStr: string | null): string {
 
 export default function ResultCard({ call }: ResultCardProps) {
   const router = useRouter();
+  const t = useTranslations('result');
+  const tc = useTranslations('common');
   const { resetCalling, callingCallId } = useDashboard();
   const isInline = !!callingCallId; // 대시보드 인라인 모드 여부
   const isSuccess = call.result === 'SUCCESS';
+
+  const getFailureMessage = (result: string | null): string => {
+    switch (result) {
+      case 'NO_ANSWER': return t('failureNoAnswer');
+      case 'REJECTED': return t('failureRejected');
+      case 'ERROR': return t('failureError');
+      default: return t('failureUnknown');
+    }
+  };
+
+  const getFailureHint = (result: string | null): string => {
+    switch (result) {
+      case 'NO_ANSWER': return t('hintNoAnswer');
+      case 'REJECTED': return t('hintRejected');
+      case 'ERROR': return t('hintError');
+      default: return t('hintDefault');
+    }
+  };
 
   return (
     <div className="flex flex-col items-center gap-6 py-6">
@@ -92,7 +95,7 @@ export default function ResultCard({ call }: ResultCardProps) {
           )}
         </div>
         <h1 className="text-xl font-bold text-[#0F172A] tracking-tight">
-          {isSuccess ? '예약이 완료되었습니다' : '통화에 실패했습니다'}
+          {isSuccess ? t('reservationCompleted') : t('callFailed')}
         </h1>
         {!isSuccess && (
           <div className="text-center">
@@ -106,18 +109,18 @@ export default function ResultCard({ call }: ResultCardProps) {
       {isSuccess && (
         <div className="w-full rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
           <div className="px-5 py-3.5 border-b border-[#E2E8F0]">
-            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">예약 정보</h3>
+            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">{t('reservationInfo')}</h3>
           </div>
           <div className="px-5 py-4 space-y-4">
-            <InfoRow icon={<MapPin className="size-4" />} label="장소" value={call.targetName ?? '-'} />
+            <InfoRow icon={<MapPin className="size-4" />} label={t('place')} value={call.targetName ?? '-'} />
             {call.parsedDate && (
-              <InfoRow icon={<Calendar className="size-4" />} label="날짜" value={formatDate(call.parsedDate)} />
+              <InfoRow icon={<Calendar className="size-4" />} label={t('date')} value={formatDate(call.parsedDate)} />
             )}
             {call.parsedTime && (
-              <InfoRow icon={<Clock className="size-4" />} label="시간" value={formatTime(call.parsedTime)} />
+              <InfoRow icon={<Clock className="size-4" />} label={t('time')} value={formatTime(call.parsedTime)} />
             )}
             {call.parsedService && (
-              <InfoRow icon={<Scissors className="size-4" />} label="서비스" value={call.parsedService} />
+              <InfoRow icon={<Scissors className="size-4" />} label={t('service')} value={call.parsedService} />
             )}
           </div>
         </div>
@@ -128,7 +131,7 @@ export default function ResultCard({ call }: ResultCardProps) {
         <div className="w-full rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
           <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center gap-2">
             <FileText className="size-3.5 text-[#94A3B8]" />
-            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">AI 통화 요약</h3>
+            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">{t('aiSummary')}</h3>
           </div>
           <div className="px-5 py-4">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#334155]">
@@ -148,7 +151,7 @@ export default function ResultCard({ call }: ResultCardProps) {
             className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-[#0F172A] text-white hover:bg-[#1E293B] transition-all shadow-sm"
           >
             <RefreshCw className="size-4" />
-            다시 시도하기
+            {t('retryCall')}
           </button>
         )}
         <button
@@ -156,7 +159,7 @@ export default function ResultCard({ call }: ResultCardProps) {
           className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-white border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] transition-all"
         >
           <List className="size-4" />
-          기록 보기
+          {t('viewHistory')}
         </button>
         <button
           onClick={() => {
@@ -165,7 +168,7 @@ export default function ResultCard({ call }: ResultCardProps) {
           className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-[#94A3B8] hover:text-[#64748B] hover:bg-[#F8FAFC] transition-all"
         >
           <Home className="size-4" />
-          {isInline ? '새 대화' : '홈으로'}
+          {isInline ? tc('newChat') : tc('home')}
         </button>
       </div>
     </div>

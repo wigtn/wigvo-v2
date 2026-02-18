@@ -2,7 +2,14 @@
   "common": {
     "logout": "Logout",
     "loading": "Loading...",
-    "error": "An error occurred"
+    "error": "An error occurred",
+    "back": "Back",
+    "retry": "Retry",
+    "newChat": "New Chat",
+    "home": "Home",
+    "unknown": "Unknown",
+    "networkError": "A network error occurred.",
+    "agent": "Agent"
   },
   "metadata": {
     "title": "WIGVO - AI Voice Assistant",
@@ -51,25 +58,47 @@
   },
   "chat": {
     "loadingConversation": "Loading conversation...",
-    "header": "AI makes phone calls for you",
+    "header": "AI Phone Assistant",
     "heroTitle": "Phone calls, by AI",
     "heroSubtitle": "What call would you like me to make?",
     "emptyState": "Start a conversation",
     "example": "e.g. \"Book a haircut for tomorrow\"",
     "placeholder": "Type your message...",
+    "inputPlaceholder": "Type what you want to say...",
+    "callingPlaceholder": "Call is in progress...",
+    "completePlaceholder": "Choose to make a call or edit",
     "aiAssistant": "AI Assistant",
     "typing": "Typing",
     "cancel": "Cancel",
     "call": "Call",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "callingInProgress": "Call in progress",
+    "callingHint": "Check call status in the right panel",
+    "startError": "Failed to start conversation. Please refresh.",
+    "sendError": "Failed to send message. Please try again.",
+    "callError": "Failed to make the call. Please try again.",
+    "editPrompt": "Please tell me what you'd like to change."
   },
-  "sidebar": {
-    "menu": "Menu",
-    "newChat": "New Chat",
-    "history": "Chat History",
-    "reservations": "Reservations",
-    "recentChats": "Recent Chats",
-    "viewAllReservations": "View All Reservations"
+  "scenario": {
+    "modeTitle": "How would you like to <accent>call</accent>?",
+    "modeSubtitle": "Required info varies by call mode",
+    "scenarioTitle": "What's the purpose of your <accent>call</accent>?",
+    "scenarioSubtitle": "AI makes the call on your behalf",
+    "subtypeQuestion": "What type is it?",
+    "modes": {
+      "voiceToVoice": "Two-way Voice Translation",
+      "voiceToVoiceSubtitle": "Voice Translation",
+      "voiceToVoiceDesc": "Speak in your language, translated in real-time",
+      "textToVoice": "Text to Voice",
+      "textToVoiceSubtitle": "Text to Voice",
+      "textToVoiceDesc": "Type text and AI speaks for you",
+      "voiceToText": "Voice to Text",
+      "voiceToTextSubtitle": "Voice to Text",
+      "voiceToTextDesc": "Other party's speech shown as subtitles",
+      "fullAgent": "AI Auto Call",
+      "fullAgentSubtitle": "AI Agent",
+      "fullAgentDesc": "AI makes the call with your collected info"
+    }
   },
   "collection": {
     "collectionComplete": "Collection Complete",
@@ -78,7 +107,135 @@
     "edit": "Edit",
     "makeCall": "Make Call",
     "processing": "Processing...",
-    "newRequest": "New Request"
+    "newRequest": "New Request",
+    "modeLabel": {
+      "voiceToVoice": "Two-way Voice Translation",
+      "textToVoice": "Text to Voice",
+      "voiceToText": "Voice to Text",
+      "fullAgent": "AI Auto Call"
+    }
+  },
+  "call": {
+    "endCall": "End Call",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "speaking": "Speaking...",
+    "listening": "Listening",
+    "muted": "Muted",
+    "recording": "Recording...",
+    "waiting": "Waiting",
+    "captionOnlyMode": "Caption-only mode",
+    "audioNotPlayed": "Audio is recorded but not played",
+    "captions": "Captions",
+    "captionEmpty": "Captions will appear when the call starts",
+    "translating": "Translating...",
+    "sendMessage": "Type your message...",
+    "quickReplyYes": "Yes",
+    "quickReplyYesValue": "Yes, that's correct",
+    "quickReplyNo": "No",
+    "quickReplyNoValue": "No, that's not right",
+    "quickReplyWait": "Wait",
+    "quickReplyWaitValue": "Please wait a moment",
+    "quickReplyRepeat": "Repeat",
+    "quickReplyRepeatValue": "Could you say that again?",
+    "aiHandling": "AI is handling the conversation",
+    "aiHandlingHint": "Call content shown in real-time below",
+    "aiNoIntervention": "AI is handling the call autonomously. No user intervention needed.",
+    "loadingCallInfo": "Loading call info...",
+    "endTest": "End test",
+    "modeBadge": {
+      "voiceToVoice": "Two-way Voice Translation",
+      "textToVoice": "Text to Voice",
+      "voiceToText": "Voice to Text",
+      "fullAgent": "AI Auto Call"
+    }
+  },
+  "callStatus": {
+    "connecting": "Connecting call",
+    "delivering": "Delivering message",
+    "completed": "Call completed",
+    "failed": "Call failed",
+    "preparing": "Preparing",
+    "elapsed": "Elapsed time",
+    "stepConnect": "Connect",
+    "stepDeliver": "Deliver",
+    "stepComplete": "Complete"
+  },
+  "result": {
+    "reservationCompleted": "Reservation completed",
+    "callFailed": "Call failed",
+    "reservationInfo": "Reservation Info",
+    "aiSummary": "AI Call Summary",
+    "retryCall": "Try Again",
+    "viewHistory": "View History",
+    "place": "Place",
+    "date": "Date",
+    "time": "Time",
+    "service": "Service",
+    "failureNoAnswer": "The other party didn't answer.",
+    "failureRejected": "Your request was rejected.",
+    "failureError": "An error occurred during the call.",
+    "failureUnknown": "An unknown error occurred.",
+    "hintNoAnswer": "Please try again later.",
+    "hintRejected": "Try again with a different schedule or conditions.",
+    "hintError": "Check your network and try again.",
+    "hintDefault": "Please try again."
+  },
+  "history": {
+    "title": "Call History",
+    "totalCount": "{count} total",
+    "noRecords": "No call history",
+    "noRecordsHint": "Try making a call from the chat",
+    "selectCall": "Select a call",
+    "selectCallHint": "Select a call from the list to view details",
+    "loadingDetail": "Loading call details...",
+    "loadFailed": "Failed to load call history.",
+    "detailLoadFailed": "Failed to load call details.",
+    "callInfo": "Call Info",
+    "resultDetail": "Result Details",
+    "callStatus": "Call Status",
+    "resultLabel": "Result",
+    "completedAt": "Completed at",
+    "createdAt": "Created",
+    "target": "Target",
+    "phoneNumber": "Phone number",
+    "yesterday": "Yesterday",
+    "daysAgo": "{count} days ago",
+    "requestType": {
+      "reservation": "Reservation",
+      "inquiry": "Inquiry",
+      "asRequest": "Service Request"
+    },
+    "status": {
+      "success": "Success",
+      "failed": "Failed",
+      "inProgress": "In Call",
+      "pending": "Pending",
+      "calling": "Calling...",
+      "callInProgress": "In Call...",
+      "callCompleted": "Call Completed",
+      "callFailed": "Call Failed"
+    },
+    "callResult": {
+      "success": "Success",
+      "noAnswer": "No Answer",
+      "rejected": "Rejected",
+      "error": "Error"
+    },
+    "banner": {
+      "success": "Call Successful",
+      "failed": "Call Failed",
+      "inProgress": "Call in Progress",
+      "pending": "Call Pending"
+    }
+  },
+  "sidebar": {
+    "menu": "Menu",
+    "newChat": "New Chat",
+    "history": "Chat History",
+    "reservations": "Reservations",
+    "recentChats": "Recent Chats",
+    "viewAllReservations": "View All Reservations"
   },
   "oauth": {
     "google": "Continue with Google",

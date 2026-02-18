@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { useCallPolling } from '@/hooks/useCallPolling';
 import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
@@ -20,6 +21,8 @@ const TEST_CALL_ID = '__test__';
  * 그 외(레거시 ElevenLabs)는 기존 폴링 UI를 유지.
  */
 export default function CallingPanel() {
+  const t = useTranslations('call');
+  const tc = useTranslations('common');
   const { callingCallId, resetCalling } = useDashboard();
   const isTestMode = callingCallId === TEST_CALL_ID;
   const { call, loading, error } = useCallPolling(isTestMode ? '' : (callingCallId ?? ''));
@@ -100,7 +103,7 @@ export default function CallingPanel() {
         <button
           onClick={() => resetCalling()}
           className="absolute top-3 right-3 z-10 p-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] transition-colors"
-          title="테스트 종료"
+          title={t('endTest')}
         >
           <X className="size-4 text-[#64748B]" />
         </button>
@@ -118,7 +121,7 @@ export default function CallingPanel() {
             onClick={() => window.location.reload()}
             className="text-sm text-[#64748B] hover:text-[#334155] underline"
           >
-            다시 시도
+            {tc('retry')}
           </button>
         </div>
       </div>
@@ -129,7 +132,7 @@ export default function CallingPanel() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <Loader2 className="size-6 text-[#0F172A] animate-spin" />
-        <p className="text-sm text-[#94A3B8]">통화 정보를 불러오는 중...</p>
+        <p className="text-sm text-[#94A3B8]">{t('loadingCallInfo')}</p>
       </div>
     );
   }

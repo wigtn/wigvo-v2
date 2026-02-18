@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type { CallMode, CommunicationMode } from '@/shared/call-types';
 import { useRelayCall } from '@/hooks/useRelayCall';
 import CallStatusBar from './CallStatusBar';
@@ -16,19 +17,19 @@ interface RealtimeCallViewProps {
   onCallEnd?: () => void;
 }
 
-const modeBadgeConfig: Record<CommunicationMode, { icon: typeof Mic; label: string }> = {
-  voice_to_voice: { icon: Mic, label: '양방향 음성 번역' },
-  text_to_voice: { icon: MessageSquare, label: '텍스트 → 음성' },
-  voice_to_text: { icon: Captions, label: '음성 → 자막' },
-  full_agent: { icon: Bot, label: 'AI 자율 통화' },
+const modeBadgeIcon: Record<CommunicationMode, typeof Mic> = {
+  voice_to_voice: Mic,
+  text_to_voice: MessageSquare,
+  voice_to_text: Captions,
+  full_agent: Bot,
 };
 
-const QUICK_REPLIES = [
-  { label: '네', value: '네, 맞습니다' },
-  { label: '아니요', value: '아니요, 그건 아닙니다' },
-  { label: '잠시만요', value: '잠시만 기다려주세요' },
-  { label: '다시 말해주세요', value: '다시 한번 말씀해주세요' },
-];
+const COMM_MODE_KEYS: Record<CommunicationMode, string> = {
+  voice_to_voice: 'voiceToVoice',
+  text_to_voice: 'textToVoice',
+  voice_to_text: 'voiceToText',
+  full_agent: 'fullAgent',
+};
 
 export default function RealtimeCallView({
   callId,
@@ -38,11 +39,19 @@ export default function RealtimeCallView({
   targetName,
   onCallEnd,
 }: RealtimeCallViewProps) {
+  const t = useTranslations('call');
   const relay = useRelayCall(communicationMode);
   const [textInput, setTextInput] = useState('');
 
-  const badge = modeBadgeConfig[communicationMode];
-  const BadgeIcon = badge.icon;
+  const BadgeIcon = modeBadgeIcon[communicationMode];
+  const badgeLabel = t(`modeBadge.${COMM_MODE_KEYS[communicationMode]}`);
+
+  const quickReplies = [
+    { label: t('quickReplyYes'), value: t('quickReplyYesValue') },
+    { label: t('quickReplyNo'), value: t('quickReplyNoValue') },
+    { label: t('quickReplyWait'), value: t('quickReplyWaitValue') },
+    { label: t('quickReplyRepeat'), value: t('quickReplyRepeatValue') },
+  ];
 
   // Start the call on mount
   const startedRef = useState(() => {
@@ -87,21 +96,21 @@ export default function RealtimeCallView({
                 <div className="w-20 h-20 rounded-full bg-[#CBD5E1] flex items-center justify-center">
                   <MicOff className="size-8 text-white" />
                 </div>
-                <span className="text-sm text-[#94A3B8]">음소거</span>
+                <span className="text-sm text-[#94A3B8]">{t('muted')}</span>
               </>
             ) : relay.isRecording ? (
               <>
                 <div className="w-20 h-20 rounded-full bg-blue-500 animate-pulse flex items-center justify-center">
                   <Mic className="size-8 text-white" />
                 </div>
-                <span className="text-sm text-blue-600 font-medium">발화 중...</span>
+                <span className="text-sm text-blue-600 font-medium">{t('speaking')}</span>
               </>
             ) : (
               <>
                 <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
                   <Mic className="size-5 text-white" />
                 </div>
-                <span className="text-sm text-[#64748B]">듣고 있어요</span>
+                <span className="text-sm text-[#64748B]">{t('listening')}</span>
               </>
             )}
           </div>
@@ -131,12 +140,12 @@ export default function RealtimeCallView({
             {relay.isMuted ? (
               <>
                 <MicOff className="size-3.5" />
-                {'음소거 해제'}
+                {t('unmute')}
               </>
             ) : (
               <>
                 <Mic className="size-3.5" />
-                {'음소거'}
+                {t('mute')}
               </>
             )}
           </button>
@@ -145,7 +154,7 @@ export default function RealtimeCallView({
             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
           >
             <PhoneOff className="size-4" />
-            {'통화 종료'}
+            {t('endCall')}
           </button>
         </div>
       )}
@@ -167,7 +176,7 @@ export default function RealtimeCallView({
         <>
           {/* Quick reply chips */}
           <div className="flex items-center gap-2 px-4 py-2 border-t border-[#E2E8F0] overflow-x-auto">
-            {QUICK_REPLIES.map((reply) => (
+            {quickReplies.map((reply) => (
               <button
                 key={reply.label}
                 onClick={() => handleSendText(reply.value)}
@@ -185,7 +194,7 @@ export default function RealtimeCallView({
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={'직접 메시지 전달...'}
+              placeholder={t('sendMessage')}
               className="flex-1 rounded-xl border border-[#E2E8F0] px-3 py-2 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A]"
             />
             <button
@@ -204,7 +213,7 @@ export default function RealtimeCallView({
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
             >
               <PhoneOff className="size-4" />
-              {'통화 종료'}
+              {t('endCall')}
             </button>
           </div>
         </>
@@ -236,7 +245,7 @@ export default function RealtimeCallView({
               }`}
             />
             <span className="text-xs text-[#64748B]">
-              {relay.isRecording ? '녹음 중...' : '대기 중'}
+              {relay.isRecording ? t('recording') : t('waiting')}
             </span>
           </div>
 
@@ -245,7 +254,7 @@ export default function RealtimeCallView({
             className="flex items-center justify-center gap-2 rounded-xl bg-red-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
           >
             <PhoneOff className="size-4" />
-            {'통화 종료'}
+            {t('endCall')}
           </button>
         </div>
       )}
@@ -264,8 +273,8 @@ export default function RealtimeCallView({
               <Bot className="size-5 text-white" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-[#1E293B]">AI가 대화를 진행하고 있습니다</p>
-              <p className="text-xs text-[#94A3B8]">통화 내용이 아래에 실시간으로 표시됩니다</p>
+              <p className="text-sm font-medium text-[#1E293B]">{t('aiHandling')}</p>
+              <p className="text-xs text-[#94A3B8]">{t('aiHandlingHint')}</p>
             </div>
             <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
           </div>
@@ -285,7 +294,7 @@ export default function RealtimeCallView({
           {/* Info message + end call */}
           <div className="px-4 py-2 border-t border-[#E2E8F0] bg-[#F8FAFC]">
             <p className="text-xs text-center text-[#94A3B8]">
-              AI가 자율적으로 통화를 진행합니다. 사용자 개입이 필요하지 않습니다.
+              {t('aiNoIntervention')}
             </p>
           </div>
           <div className="px-4 py-3 border-t border-[#E2E8F0]">
@@ -294,7 +303,7 @@ export default function RealtimeCallView({
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
             >
               <PhoneOff className="size-4" />
-              {'통화 종료'}
+              {t('endCall')}
             </button>
           </div>
         </>
@@ -329,7 +338,7 @@ export default function RealtimeCallView({
       {/* Mode Badge */}
       <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[#E2E8F0] bg-[#F8FAFC]">
         <BadgeIcon className="size-3 text-[#64748B]" />
-        <span className="text-[10px] font-medium text-[#64748B]">{badge.label}</span>
+        <span className="text-[10px] font-medium text-[#64748B]">{badgeLabel}</span>
       </div>
 
       {/* Error display */}

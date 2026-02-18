@@ -5,11 +5,18 @@ import type { CollectedData } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
 import { Phone, Pencil, Plus, MapPin, Calendar, Scissors, User, Users, FileText, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
 
-const MODE_LABELS: Record<CommunicationMode, { label: string; icon: React.ReactNode }> = {
-  voice_to_voice: { label: '양방향 음성 번역', icon: <Mic className="size-3" /> },
-  text_to_voice: { label: '텍스트→음성', icon: <MessageSquare className="size-3" /> },
-  voice_to_text: { label: '음성→자막', icon: <Captions className="size-3" /> },
-  full_agent: { label: 'AI 자율 통화', icon: <Bot className="size-3" /> },
+const MODE_ICONS: Record<CommunicationMode, React.ReactNode> = {
+  voice_to_voice: <Mic className="size-3" />,
+  text_to_voice: <MessageSquare className="size-3" />,
+  voice_to_text: <Captions className="size-3" />,
+  full_agent: <Bot className="size-3" />,
+};
+
+const MODE_LABEL_KEYS: Record<CommunicationMode, string> = {
+  voice_to_voice: 'voiceToVoice',
+  text_to_voice: 'textToVoice',
+  voice_to_text: 'voiceToText',
+  full_agent: 'fullAgent',
 };
 
 interface CollectionSummaryProps {
@@ -30,8 +37,10 @@ export default function CollectionSummary({
   isLoading = false,
 }: CollectionSummaryProps) {
   const t = useTranslations('collection');
+  const tMode = useTranslations('collection.modeLabel');
 
-  const modeInfo = communicationMode ? MODE_LABELS[communicationMode] : null;
+  const modeIcon = communicationMode ? MODE_ICONS[communicationMode] : null;
+  const modeLabel = communicationMode ? tMode(MODE_LABEL_KEYS[communicationMode]) : null;
 
   return (
     <div className="mx-4 mb-2 rounded-xl surface-card shadow-sm p-4 space-y-3">
@@ -44,10 +53,10 @@ export default function CollectionSummary({
           </span>
         </div>
         {/* 통화 모드 배지 */}
-        {modeInfo && (
+        {modeIcon && modeLabel && (
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F1F5F9] border border-[#E2E8F0]">
-            {modeInfo.icon}
-            <span className="text-[10px] text-[#64748B] font-medium">{modeInfo.label}</span>
+            {modeIcon}
+            <span className="text-[10px] text-[#64748B] font-medium">{modeLabel}</span>
           </div>
         )}
       </div>

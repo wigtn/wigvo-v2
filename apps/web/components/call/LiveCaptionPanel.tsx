@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import type { CaptionEntry } from '@/shared/call-types';
 
 interface LiveCaptionPanelProps {
@@ -16,6 +17,7 @@ export default function LiveCaptionPanel({
   expanded = false,
   compact = false,
 }: LiveCaptionPanelProps) {
+  const t = useTranslations('call');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // In compact mode, show only the last 3 captions
@@ -33,10 +35,10 @@ export default function LiveCaptionPanel({
       {!compact && (
         <div className={`px-4 border-b border-[#E2E8F0] ${expanded ? 'py-3' : 'py-2'}`}>
           <h3 className={`font-semibold text-[#64748B] uppercase tracking-wider ${expanded ? 'text-sm' : 'text-xs'}`}>
-            {'자막'}
+            {t('captions')}
             {expanded && (
               <span className="ml-2 text-[10px] font-normal normal-case text-[#94A3B8]">
-                {'자막 전용 모드'}
+                {t('captionOnlyMode')}
               </span>
             )}
           </h3>
@@ -51,7 +53,7 @@ export default function LiveCaptionPanel({
       >
         {displayCaptions.length === 0 && (
           <p className={`text-center text-[#CBD5E1] ${expanded ? 'text-sm py-12' : compact ? 'text-xs py-4' : 'text-xs py-8'}`}>
-            {'통화가 시작되면 자막이 표시됩니다'}
+            {t('captionEmpty')}
           </p>
         )}
 
@@ -101,7 +103,7 @@ export default function LiveCaptionPanel({
           <div className="flex justify-start">
             <div className={`rounded-xl bg-[#F1F5F9] ${expanded ? 'px-4 py-3' : 'px-3 py-2'}`}>
               <p className={`text-[#94A3B8] animate-pulse ${expanded ? 'text-sm' : 'text-xs'}`}>
-                {'Translating...'}
+                {t('translating')}
               </p>
             </div>
           </div>

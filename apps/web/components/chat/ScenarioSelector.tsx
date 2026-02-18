@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, CalendarCheck, Search, Wrench, ArrowRight, ArrowLeftRight, Phone, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
 import type { ScenarioType, ScenarioSubType } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
@@ -16,39 +17,39 @@ const SCENARIO_ICONS: Record<string, React.ReactNode> = {
 interface ModeOption {
   mode: CommunicationMode;
   icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  description: string;
+  titleKey: string;
+  subtitleKey: string;
+  descKey: string;
 }
 
 const MODE_OPTIONS: ModeOption[] = [
   {
     mode: 'voice_to_voice',
     icon: <Mic className="size-5" />,
-    title: '양방향 음성 번역',
-    subtitle: 'Voice Translation',
-    description: '모국어로 말하면 실시간 번역됩니다',
+    titleKey: 'voiceToVoice',
+    subtitleKey: 'voiceToVoiceSubtitle',
+    descKey: 'voiceToVoiceDesc',
   },
   {
     mode: 'text_to_voice',
     icon: <MessageSquare className="size-5" />,
-    title: '텍스트 → 음성',
-    subtitle: 'Text to Voice',
-    description: '텍스트를 입력하면 AI가 대신 말합니다',
+    titleKey: 'textToVoice',
+    subtitleKey: 'textToVoiceSubtitle',
+    descKey: 'textToVoiceDesc',
   },
   {
     mode: 'voice_to_text',
     icon: <Captions className="size-5" />,
-    title: '음성 → 자막',
-    subtitle: 'Voice to Text',
-    description: '상대방 말이 자막으로 표시됩니다',
+    titleKey: 'voiceToText',
+    subtitleKey: 'voiceToTextSubtitle',
+    descKey: 'voiceToTextDesc',
   },
   {
     mode: 'full_agent',
     icon: <Bot className="size-5" />,
-    title: 'AI 자율 통화',
-    subtitle: 'AI Agent',
-    description: 'AI가 수집된 정보로 통화를 진행합니다',
+    titleKey: 'fullAgent',
+    subtitleKey: 'fullAgentSubtitle',
+    descKey: 'fullAgentDesc',
   },
 ];
 
@@ -60,6 +61,9 @@ interface ScenarioSelectorProps {
 type Screen = 'mode' | 'scenario' | 'subtype';
 
 export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelectorProps) {
+  const t = useTranslations('scenario');
+  const tModes = useTranslations('scenario.modes');
+  const tc = useTranslations('common');
   const [screen, setScreen] = useState<Screen>('mode');
   const [selectedMode, setSelectedMode] = useState<CommunicationMode | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
@@ -144,15 +148,15 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               <Phone className="size-5 text-[#0F172A]" />
             </div>
             <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1.5">
-              어떤 방식으로 <span className="text-gradient">통화</span>할까요?
+              {t.rich('modeTitle', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
             </h2>
             <p className="text-sm text-[#94A3B8]">
-              통화 방식에 따라 필요한 정보가 달라집니다
+              {t('modeSubtitle')}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5 max-w-sm mx-auto w-full">
-            {MODE_OPTIONS.map(({ mode, icon, title, subtitle, description }) => (
+            {MODE_OPTIONS.map(({ mode, icon, titleKey, subtitleKey, descKey }) => (
               <button
                 key={mode}
                 type="button"
@@ -166,13 +170,13 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
                   </div>
                 </div>
                 <h3 className="text-[13px] font-bold text-[#0F172A] leading-tight mb-0.5">
-                  {title}
+                  {tModes(titleKey)}
                 </h3>
                 <p className="text-[10px] text-[#94A3B8] leading-tight mb-1">
-                  {subtitle}
+                  {tModes(subtitleKey)}
                 </p>
                 <p className="text-[10px] text-[#64748B] leading-snug">
-                  {description}
+                  {tModes(descKey)}
                 </p>
               </button>
             ))}
@@ -194,7 +198,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
             className="flex items-center gap-1 text-sm text-[#64748B] hover:text-[#334155] transition-colors disabled:opacity-40"
           >
             <ChevronLeft className="size-4" />
-            뒤로
+            {tc('back')}
           </button>
         </div>
 
@@ -204,10 +208,10 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
               <Phone className="size-5 text-[#0F172A]" />
             </div>
             <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1.5">
-              어떤 용건으로 <span className="text-gradient">전화</span>할까요?
+              {t.rich('scenarioTitle', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
             </h2>
             <p className="text-sm text-[#94A3B8]">
-              AI가 대신 전화를 걸어드립니다
+              {t('scenarioSubtitle')}
             </p>
           </div>
 
@@ -256,7 +260,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
           className="flex items-center gap-1 text-sm text-[#64748B] hover:text-[#334155] transition-colors disabled:opacity-40"
         >
           <ChevronLeft className="size-4" />
-          뒤로
+          {tc('back')}
         </button>
       </div>
 
@@ -269,7 +273,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
             {scenarioConfig.label}
           </h2>
           <p className="text-sm text-[#94A3B8]">
-            어떤 종류인가요?
+            {t('subtypeQuestion')}
           </p>
         </div>
 
