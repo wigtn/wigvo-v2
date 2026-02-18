@@ -1,296 +1,261 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronLeft, CalendarCheck, Search, Wrench, ArrowRight, ArrowLeftRight, Phone, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Phone,
+  Mic,
+  MessageSquare,
+  Captions,
+  Bot,
+  ChevronDown,
+  Send,
+} from 'lucide-react';
 import type { ScenarioType, ScenarioSubType } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE_PAIR } from '@/shared/call-types';
-import { SCENARIO_CONFIG } from '@/lib/scenarios/config';
 
-const SCENARIO_ICONS: Record<string, React.ReactNode> = {
-  calendar: <CalendarCheck className="size-5 text-[#0F172A]" />,
-  search: <Search className="size-5 text-[#0F172A]" />,
-  wrench: <Wrench className="size-5 text-[#0F172A]" />,
-};
-
-interface ModeOption {
-  mode: CommunicationMode;
-  icon: React.ReactNode;
-  titleKey: string;
-  subtitleKey: string;
+// ── Quick Action 정의 ─────────────────────────────────────────
+interface QuickAction {
+  emoji: string;
+  scenarioType: ScenarioType;
+  subType: ScenarioSubType;
+  labelKey: string;
   descKey: string;
 }
 
-const MODE_OPTIONS: ModeOption[] = [
-  {
-    mode: 'voice_to_voice',
-    icon: <Mic className="size-5" />,
-    titleKey: 'voiceToVoice',
-    subtitleKey: 'voiceToVoiceSubtitle',
-    descKey: 'voiceToVoiceDesc',
-  },
-  {
-    mode: 'text_to_voice',
-    icon: <MessageSquare className="size-5" />,
-    titleKey: 'textToVoice',
-    subtitleKey: 'textToVoiceSubtitle',
-    descKey: 'textToVoiceDesc',
-  },
-  {
-    mode: 'voice_to_text',
-    icon: <Captions className="size-5" />,
-    titleKey: 'voiceToText',
-    subtitleKey: 'voiceToTextSubtitle',
-    descKey: 'voiceToTextDesc',
-  },
-  {
-    mode: 'full_agent',
-    icon: <Bot className="size-5" />,
-    titleKey: 'fullAgent',
-    subtitleKey: 'fullAgentSubtitle',
-    descKey: 'fullAgentDesc',
-  },
+const QUICK_ACTIONS: QuickAction[] = [
+  { emoji: '🍽️', scenarioType: 'RESERVATION', subType: 'RESTAURANT', labelKey: 'restaurant', descKey: 'restaurantDesc' },
+  { emoji: '💇', scenarioType: 'RESERVATION', subType: 'SALON', labelKey: 'salon', descKey: 'salonDesc' },
+  { emoji: '🏥', scenarioType: 'RESERVATION', subType: 'HOSPITAL', labelKey: 'hospital', descKey: 'hospitalDesc' },
+  { emoji: '🏨', scenarioType: 'RESERVATION', subType: 'HOTEL', labelKey: 'hotel', descKey: 'hotelDesc' },
+  { emoji: '🔍', scenarioType: 'INQUIRY', subType: 'OTHER', labelKey: 'inquiry', descKey: 'inquiryDesc' },
+  { emoji: '🔧', scenarioType: 'AS_REQUEST', subType: 'OTHER', labelKey: 'asRequest', descKey: 'asRequestDesc' },
 ];
 
-interface ScenarioSelectorProps {
-  onSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode, sourceLang: string, targetLang: string) => void;
-  disabled?: boolean;
+// ── Mode Option 정의 ─────────────────────────────────────────
+interface ModeOption {
+  mode: CommunicationMode;
+  icon: typeof Mic;
+  labelKey: string;
 }
 
-type Screen = 'mode' | 'scenario' | 'subtype';
+const MODE_OPTIONS: ModeOption[] = [
+  { mode: 'voice_to_voice', icon: Mic, labelKey: 'voiceToVoice' },
+  { mode: 'text_to_voice', icon: MessageSquare, labelKey: 'textToVoice' },
+  { mode: 'voice_to_text', icon: Captions, labelKey: 'voiceToText' },
+  { mode: 'full_agent', icon: Bot, labelKey: 'fullAgent' },
+];
+
+// ── Props ────────────────────────────────────────────────────
+interface ScenarioSelectorProps {
+  onSelect: (
+    scenarioType: ScenarioType,
+    subType: ScenarioSubType,
+    communicationMode: CommunicationMode,
+    sourceLang: string,
+    targetLang: string,
+  ) => void;
+  disabled?: boolean;
+}
 
 export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelectorProps) {
   const t = useTranslations('scenario');
   const tModes = useTranslations('scenario.modes');
-  const tc = useTranslations('common');
-  const [screen, setScreen] = useState<Screen>('mode');
-  const [selectedMode, setSelectedMode] = useState<CommunicationMode | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
+  const tQuick = useTranslations('scenario.quick');
+
   const [sourceLang, setSourceLang] = useState(DEFAULT_LANGUAGE_PAIR.source.code);
   const [targetLang, setTargetLang] = useState(DEFAULT_LANGUAGE_PAIR.target.code);
+  const [communicationMode, setCommunicationMode] = useState<CommunicationMode>('voice_to_voice');
+  const [isModeOpen, setIsModeOpen] = useState(false);
+  const [freeText, setFreeText] = useState('');
 
   const handleSwapLanguages = () => {
     setSourceLang(targetLang);
     setTargetLang(sourceLang);
   };
 
-  const handleModeClick = (mode: CommunicationMode) => {
-    setSelectedMode(mode);
-    setScreen('scenario');
-  };
+  const handleQuickAction = useCallback(
+    (action: QuickAction) => {
+      if (disabled) return;
+      onSelect(action.scenarioType, action.subType, communicationMode, sourceLang, targetLang);
+    },
+    [communicationMode, sourceLang, targetLang, disabled, onSelect],
+  );
 
-  const handleScenarioClick = (scenarioType: ScenarioType) => {
-    setSelectedScenario(scenarioType);
-    setScreen('subtype');
-  };
+  const handleFreeTextSubmit = useCallback(() => {
+    const text = freeText.trim();
+    if (!text || disabled) return;
+    // 자유 입력 → INQUIRY/OTHER로 시작, AI가 대화에서 판별
+    onSelect('INQUIRY', 'OTHER', communicationMode, sourceLang, targetLang);
+  }, [freeText, communicationMode, sourceLang, targetLang, disabled, onSelect]);
 
-  const handleSubTypeClick = (subType: ScenarioSubType) => {
-    if (selectedScenario && selectedMode) {
-      onSelect(selectedScenario, subType, selectedMode, sourceLang, targetLang);
-    }
-  };
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleFreeTextSubmit();
+      }
+    },
+    [handleFreeTextSubmit],
+  );
 
-  const handleBack = () => {
-    if (screen === 'subtype') {
-      setSelectedScenario(null);
-      setScreen('scenario');
-    } else if (screen === 'scenario') {
-      setSelectedMode(null);
-      setScreen('mode');
-    }
-  };
-
-  // Screen 1: 통화 모드 선택
-  if (screen === 'mode') {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex flex-col justify-center px-6 py-8">
-          {/* 언어 페어 선택기 */}
-          <div className="flex items-center justify-center gap-2 mb-6 max-w-sm mx-auto w-full">
-            <select
-              value={sourceLang}
-              onChange={(e) => setSourceLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleSwapLanguages}
-              disabled={disabled}
-              className="shrink-0 w-8 h-8 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] transition-colors disabled:opacity-50"
-              aria-label="Swap languages"
-            >
-              <ArrowLeftRight className="size-3.5" />
-            </button>
-            <select
-              value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.flag} {lang.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-5 glow-accent">
-              <Phone className="size-5 text-[#0F172A]" />
-            </div>
-            <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1.5">
-              {t.rich('modeTitle', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
-            </h2>
-            <p className="text-sm text-[#94A3B8]">
-              {t('modeSubtitle')}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5 max-w-sm mx-auto w-full">
-            {MODE_OPTIONS.map(({ mode, icon, titleKey, subtitleKey, descKey }) => (
-              <button
-                key={mode}
-                type="button"
-                disabled={disabled}
-                onClick={() => handleModeClick(mode)}
-                className="group flex flex-col p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 text-left disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#F1F5F9] flex items-center justify-center shrink-0 text-[#0F172A] group-hover:bg-[#0F172A] group-hover:text-white transition-colors">
-                    {icon}
-                  </div>
-                </div>
-                <h3 className="text-[13px] font-bold text-[#0F172A] leading-tight mb-0.5">
-                  {tModes(titleKey)}
-                </h3>
-                <p className="text-[10px] text-[#94A3B8] leading-tight mb-1">
-                  {tModes(subtitleKey)}
-                </p>
-                <p className="text-[10px] text-[#64748B] leading-snug">
-                  {tModes(descKey)}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Screen 2: 시나리오 선택
-  if (screen === 'scenario') {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="shrink-0 px-4 py-3 border-b border-[#E2E8F0]">
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={disabled}
-            className="flex items-center gap-1 text-sm text-[#64748B] hover:text-[#334155] transition-colors disabled:opacity-40"
-          >
-            <ChevronLeft className="size-4" />
-            {tc('back')}
-          </button>
-        </div>
-
-        <div className="flex-1 flex flex-col justify-center px-6 py-8">
-          <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-5 glow-accent">
-              <Phone className="size-5 text-[#0F172A]" />
-            </div>
-            <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1.5">
-              {t.rich('scenarioTitle', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
-            </h2>
-            <p className="text-sm text-[#94A3B8]">
-              {t('scenarioSubtitle')}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2.5 max-w-sm mx-auto w-full">
-            {(Object.entries(SCENARIO_CONFIG) as [ScenarioType, typeof SCENARIO_CONFIG[ScenarioType]][]).map(
-              ([type, config]) => (
-                <button
-                  key={type}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => handleScenarioClick(type)}
-                  className="group relative flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#F1F5F9] flex items-center justify-center shrink-0">
-                    {SCENARIO_ICONS[config.icon] ?? <Phone className="size-5 text-[#0F172A]" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-[14px] font-semibold text-[#0F172A] mb-0.5">
-                      {config.label}
-                    </h3>
-                    <p className="text-[12px] text-[#94A3B8] leading-relaxed truncate">
-                      {config.description}
-                    </p>
-                  </div>
-                  <ArrowRight className="size-4 text-[#CBD5E1] group-hover:text-[#94A3B8] shrink-0 transition-colors" />
-                </button>
-              )
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Screen 3: 서브타입 선택
-  const scenarioConfig = SCENARIO_CONFIG[selectedScenario!];
-  const subTypes = Object.entries(scenarioConfig.subTypes);
+  const selectedModeOption = MODE_OPTIONS.find((m) => m.mode === communicationMode)!;
+  const SelectedIcon = selectedModeOption.icon;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 px-4 py-3 border-b border-[#E2E8F0]">
-        <button
-          type="button"
-          onClick={handleBack}
-          disabled={disabled}
-          className="flex items-center gap-1 text-sm text-[#64748B] hover:text-[#334155] transition-colors disabled:opacity-40"
-        >
-          <ChevronLeft className="size-4" />
-          {tc('back')}
-        </button>
-      </div>
+      <div className="flex-1 flex flex-col justify-center px-5 py-6 overflow-y-auto">
+        {/* 언어 페어 */}
+        <div className="flex items-center justify-center gap-2 mb-5 max-w-xs mx-auto w-full">
+          <select
+            value={sourceLang}
+            onChange={(e) => setSourceLang(e.target.value)}
+            disabled={disabled}
+            className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.flag} {lang.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleSwapLanguages}
+            disabled={disabled}
+            className="shrink-0 w-8 h-8 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] transition-colors disabled:opacity-50"
+            aria-label="Swap languages"
+          >
+            <ArrowLeftRight className="size-3.5" />
+          </button>
+          <select
+            value={targetLang}
+            onChange={(e) => setTargetLang(e.target.value)}
+            disabled={disabled}
+            className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.flag} {lang.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="flex-1 flex flex-col justify-center px-6 py-8">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-4">
-            {SCENARIO_ICONS[scenarioConfig.icon] ?? <Phone className="size-5 text-[#0F172A]" />}
-          </div>
-          <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1.5">
-            {scenarioConfig.label}
+        {/* 헤더 */}
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1">
+            {t.rich('quickTitle', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
           </h2>
           <p className="text-sm text-[#94A3B8]">
-            {t('subtypeQuestion')}
+            {t('quickSubtitle')}
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 max-w-sm mx-auto w-full">
-          {subTypes.map(([subType, subConfig]) => (
+        {/* 퀵액션 그리드 */}
+        <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto w-full mb-5">
+          {QUICK_ACTIONS.map((action) => (
             <button
-              key={subType}
+              key={`${action.scenarioType}-${action.subType}`}
               type="button"
               disabled={disabled}
-              onClick={() => handleSubTypeClick(subType as ScenarioSubType)}
-              className="group flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 min-h-[72px] disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleQuickAction(action)}
+              className="group flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.97] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="text-[13px] font-semibold text-[#0F172A]">
-                {subConfig.label}
+              <span className="text-2xl leading-none">{action.emoji}</span>
+              <span className="text-[11px] font-semibold text-[#0F172A] leading-tight text-center">
+                {tQuick(action.labelKey)}
+              </span>
+              <span className="text-[9px] text-[#94A3B8] leading-tight text-center hidden sm:block">
+                {tQuick(action.descKey)}
               </span>
             </button>
           ))}
+        </div>
+
+        {/* 통화 모드 셀렉터 (축소형) */}
+        <div className="max-w-xs mx-auto w-full mb-4">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsModeOpen(!isModeOpen)}
+              disabled={disabled}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-sm text-[#64748B] hover:bg-[#F1F5F9] transition-colors disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <SelectedIcon className="size-3.5" />
+                <span className="text-xs font-medium">
+                  {t('modeLabel')}: {tModes(selectedModeOption.labelKey)}
+                </span>
+              </div>
+              <ChevronDown className={`size-3.5 transition-transform ${isModeOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* 드롭다운 */}
+            {isModeOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl border border-[#E2E8F0] shadow-[0_4px_16px_rgba(0,0,0,0.08)] overflow-hidden z-10">
+                {MODE_OPTIONS.map(({ mode, icon: Icon, labelKey }) => {
+                  const isSelected = mode === communicationMode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setCommunicationMode(mode);
+                        setIsModeOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                        isSelected
+                          ? 'bg-[#F1F5F9] text-[#0F172A]'
+                          : 'text-[#64748B] hover:bg-[#F8FAFC]'
+                      }`}
+                    >
+                      <Icon className="size-3.5" />
+                      <span className={`text-xs ${isSelected ? 'font-semibold' : 'font-medium'}`}>
+                        {tModes(labelKey)}
+                      </span>
+                      {isSelected && (
+                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#0F172A]" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 구분선 + 자유 입력 */}
+        <div className="max-w-xs mx-auto w-full">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-1 h-px bg-[#E2E8F0]" />
+            <span className="text-[10px] text-[#CBD5E1] font-medium uppercase tracking-wider">
+              {t('orFreeInput')}
+            </span>
+            <div className="flex-1 h-px bg-[#E2E8F0]" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              placeholder={t('freeInputPlaceholder')}
+              className="flex-1 rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A] disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={handleFreeTextSubmit}
+              disabled={!freeText.trim() || disabled}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B] disabled:opacity-30"
+            >
+              <Send className="size-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

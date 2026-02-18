@@ -7,7 +7,7 @@ steps:
     args:
       - run
       - deploy
-      - wigvu-ai
+      - wigvo-relay
       - --source=apps/relay-server
       - --region=asia-northeast3
       - --platform=managed

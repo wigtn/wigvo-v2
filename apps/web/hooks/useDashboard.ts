@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { NaverPlaceResult } from '@/lib/naver-maps';
+import type { CommunicationMode } from '@/shared/call-types';
 
 // 대화 요약 (사이드바용)
 export interface ConversationSummary {
@@ -33,6 +34,7 @@ interface DashboardState {
 
   // 통화 상태 (인라인)
   callingCallId: string | null;
+  callingCommunicationMode: CommunicationMode | null;
 
   // Actions
   setSidebarOpen: (open: boolean) => void;
@@ -46,7 +48,8 @@ interface DashboardState {
   setConversations: (conversations: ConversationSummary[]) => void;
   setActiveConversationId: (id: string | null) => void;
   setCallingCallId: (id: string | null) => void;
-  
+  setCallingCommunicationMode: (mode: CommunicationMode | null) => void;
+
   // 복합 액션
   updateFromChatResponse: (searchResults?: NaverPlaceResult[], mapCenter?: { lat: number; lng: number } | null) => void;
   resetDashboard: () => void;
@@ -69,6 +72,7 @@ export const useDashboard = create<DashboardState>((set) => ({
   conversations: [],
   activeConversationId: null,
   callingCallId: null,
+  callingCommunicationMode: null,
 
   // Actions
   setSidebarOpen: (open) => set({ isSidebarOpen: open }),
@@ -82,6 +86,7 @@ export const useDashboard = create<DashboardState>((set) => ({
   setConversations: (conversations) => set({ conversations }),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   setCallingCallId: (id) => set({ callingCallId: id }),
+  setCallingCommunicationMode: (mode) => set({ callingCommunicationMode: mode }),
 
   // 복합 액션: 채팅 응답에서 지도/검색 결과 업데이트
   updateFromChatResponse: (searchResults, mapCenter) =>
@@ -105,5 +110,6 @@ export const useDashboard = create<DashboardState>((set) => ({
   resetCalling: () =>
     set({
       callingCallId: null,
+      callingCommunicationMode: null,
     }),
 }));

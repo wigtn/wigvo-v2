@@ -9,7 +9,8 @@ import MobileDrawer from "./MobileDrawer";
 import ChatContainer from "@/components/chat/ChatContainer";
 import NaverMapContainer from "@/components/map/NaverMapContainer";
 import PlaceInfoPanel from "@/components/place/PlaceInfoPanel";
-import CallingPanel from "@/components/call/CallingPanel";
+import RelayCallProvider from "@/components/call/RelayCallProvider";
+import CallEffectPanel from "@/components/call/CallEffectPanel";
 import CallHistoryPanel from "@/components/call/CallHistoryPanel";
 import ConversationHistoryPanel from "@/components/chat/ConversationHistoryPanel";
 import PricingPanel from "./PricingPanel";
@@ -30,6 +31,7 @@ export default function DashboardLayout() {
     setSidebarOpen,
     resetDashboard,
     callingCallId,
+    callingCommunicationMode,
   } = useDashboard();
 
   const { handleNewConversation } = useChat();
@@ -207,7 +209,7 @@ export default function DashboardLayout() {
             </div>
           </div>
 
-          {/* 우측: 통화 패널 (calling 중) */}
+          {/* 우측: 이펙트 패널 (calling 중) */}
           <div
             className={cn(
               "h-full transition-all duration-500 ease-in-out overflow-hidden",
@@ -219,10 +221,15 @@ export default function DashboardLayout() {
                 : "lg:w-0 lg:opacity-0 hidden",
             )}
           >
-            {isCalling && (
-              <div className="h-full bg-white lg:rounded-2xl lg:border lg:border-[#E2E8F0] lg:shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-                <CallingPanel />
-              </div>
+            {isCalling && callingCallId && (
+              <RelayCallProvider
+                callingCallId={callingCallId}
+                communicationMode={callingCommunicationMode ?? 'voice_to_voice'}
+              >
+                <div className="h-full bg-white lg:rounded-2xl lg:border lg:border-[#E2E8F0] lg:shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                  <CallEffectPanel />
+                </div>
+              </RelayCallProvider>
             )}
           </div>
           {/* 우측: 지도 + 장소 정보 카드 (평상시) */}

@@ -57,7 +57,7 @@ export function useChat(): UseChatReturn {
   const router = useRouter();
 
   // ── Dashboard State ─────────────────────────────────────────
-  const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, setCallingCallId, resetCalling, resetDashboard } = useDashboard();
+  const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
 
   // ── State ───────────────────────────────────────────────────
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -429,6 +429,7 @@ export function useChat(): UseChatReturn {
 
       // 3. 인라인 calling 상태로 전환 (페이지 이동 없음)
       setCallingCallId(call.id);
+      setCallingCommunicationMode(communicationMode || null);
     } catch (err) {
       if (err instanceof Error && err.message === 'Unauthorized') {
         handle401();
@@ -439,7 +440,7 @@ export function useChat(): UseChatReturn {
       setIsLoading(false);
       confirmingRef.current = false;
     }
-  }, [conversationId, communicationMode, handle401, setCallingCallId, setErrorWithAutoDismiss]);
+  }, [conversationId, communicationMode, handle401, setCallingCallId, setCallingCommunicationMode, setErrorWithAutoDismiss]);
 
   // ── handleEdit: 수정하기 ──────────────────────────────────
   const handleEdit = useCallback(() => {

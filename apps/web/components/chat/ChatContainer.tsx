@@ -1,14 +1,26 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useChat } from "@/hooks/useChat";
 import { useDashboard } from "@/hooks/useDashboard";
+import { useRelayCallStore } from "@/hooks/useRelayCallStore";
 import ChatMessage from "./ChatMessage";
+import CaptionMessage from "./CaptionMessage";
+import CallStatusMessage from "./CallStatusMessage";
+import CallChatInput from "./CallChatInput";
 import ChatInput, { type ChatInputHandle } from "./ChatInput";
 import CollectionSummary from "./CollectionSummary";
+import ResultCard from "@/components/call/ResultCard";
 import ScenarioSelector from "./ScenarioSelector";
-import { Phone, Loader2, Plus, PhoneCall } from "lucide-react";
+import { Phone, Loader2, Plus } from "lucide-react";
+import { useCallPolling } from "@/hooks/useCallPolling";
+
+function formatDuration(seconds: number): string {
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
 
 export default function ChatContainer() {
   const {
@@ -31,8 +43,46 @@ export default function ChatContainer() {
   const t = useTranslations("chat");
   const tc = useTranslations("common");
 
-  const { callingCallId } = useDashboard();
+  const { callingCallId, callingCommunicationMode } = useDashboard();
   const isCalling = !!callingCallId;
+
+  // Relay call store (통화 중 자막/상태)
+  const {
+    captions,
+    callStatus,
+    translationState,
+    callDuration,
+    sendText,
+  } = useRelayCallStore();
+
+  // Call 메타데이터 (targetName 등) - 통화 중에만 폴링
+  const { call } = useCallPolling(callingCallId ?? '');
+
+  // 통화 상태 추적 (연결 중/연결됨/종료 상태 메시지용)
+  const prevCallStatusRef = useRef(callStatus);
+  const shownStatusesRef = useRef<Set<string>>(new Set());
+
+  // callId 변경 시 상태 리셋
+  useEffect(() => {
+    shownStatusesRef.current = new Set();
+    prevCallStatusRef.current = 'idle';
+  }, [callingCallId]);
+
+  // callStatus 변화 추적
+  useEffect(() => {
+    if (callStatus !== prevCallStatusRef.current) {
+      if (callStatus === 'connecting' || callStatus === 'waiting') {
+        shownStatusesRef.current.add('connecting');
+      }
+      if (callStatus === 'connected') {
+        shownStatusesRef.current.add('connected');
+      }
+      if (callStatus === 'ended') {
+        shownStatusesRef.current.add('ended');
+      }
+      prevCallStatusRef.current = callStatus;
+    }
+  }, [callStatus]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -41,7 +91,7 @@ export default function ChatContainer() {
   // 스크롤 + 포커스
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, captions.length, callStatus]);
 
   // AI 답변 완료 후 입력창 자동 포커스
   useEffect(() => {
@@ -50,6 +100,10 @@ export default function ChatContainer() {
     }
     prevLoadingRef.current = isLoading;
   }, [isLoading, isComplete, isCalling]);
+
+  const isCallEnded = callStatus === 'ended';
+  const isTextMode = callingCommunicationMode === 'text_to_voice';
+  const isCallTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
 
   if (isInitializing) {
     return (
@@ -105,11 +159,12 @@ export default function ChatContainer() {
 
       {/* 메시지 영역 */}
       <div className="flex-1 overflow-y-auto styled-scrollbar px-5 pt-4 pb-2">
+        {/* 기존 채팅 메시지 */}
         {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
 
-        {/* 로딩 */}
+        {/* 로딩 (비통화 중) */}
         {isLoading && !isCalling && (
           <div className="flex justify-start mb-3">
             <div className="max-w-[80%] rounded-2xl rounded-bl-md px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0]">
@@ -126,6 +181,55 @@ export default function ChatContainer() {
           </div>
         )}
 
+        {/* === 통화 인라인 자막 영역 === */}
+        {isCalling && (
+          <>
+            {/* 통화 시작 상태 메시지 */}
+            {shownStatusesRef.current.has('connecting') && (
+              <CallStatusMessage
+                type="connecting"
+                targetName={call?.targetName}
+              />
+            )}
+
+            {/* 연결됨 상태 메시지 */}
+            {shownStatusesRef.current.has('connected') && (
+              <CallStatusMessage type="connected" />
+            )}
+
+            {/* 실시간 자막 */}
+            {captions.map((entry) => (
+              <CaptionMessage key={entry.id} entry={entry} />
+            ))}
+
+            {/* 번역 중 타이핑 인디케이터 */}
+            {translationState === 'processing' && (
+              <div className="flex justify-start mb-3">
+                <div className="rounded-2xl rounded-bl-md px-4 py-2 bg-[#F1F5F9]">
+                  <p className="text-xs text-[#94A3B8] animate-pulse">
+                    Translating...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 통화 종료 상태 메시지 */}
+            {isCallEnded && (
+              <CallStatusMessage
+                type="ended"
+                duration={formatDuration(callDuration)}
+              />
+            )}
+
+            {/* 통화 종료 후 결과 카드 인라인 */}
+            {(isCallEnded || isCallTerminal) && call && (
+              <div className="my-4 px-0">
+                <ResultCard call={call} />
+              </div>
+            )}
+          </>
+        )}
+
         {/* 에러 */}
         {error && (
           <div className="mb-3 text-center">
@@ -137,24 +241,6 @@ export default function ChatContainer() {
 
         <div ref={messagesEndRef} />
       </div>
-      {/* 통화 중 인디케이터 */}
-      {isCalling && (
-        <div className="mx-4 mb-2 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center">
-              <PhoneCall className="size-4 text-white animate-pulse" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#0F172A]">{t("callingInProgress")}</p>
-              <p className="text-xs text-[#94A3B8]">{t("callingHint")}</p>
-            </div>
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-500" />
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* 수집 완료 시 요약 카드 */}
       {!isCalling && collectedData && (isComplete || conversationStatus === "READY") && (
@@ -168,19 +254,26 @@ export default function ChatContainer() {
         />
       )}
 
-      {/* 입력창 */}
-      <ChatInput
-        ref={chatInputRef}
-        onSend={sendMessage}
-        disabled={isLoading || isComplete || isCalling}
-        placeholder={
-          isCalling
-            ? t("callingPlaceholder")
-            : isComplete
-              ? t("completePlaceholder")
-              : t("placeholder")
-        }
-      />
+      {/* 입력 영역: 모드별 전환 */}
+      {isCalling && isTextMode && !isCallEnded ? (
+        <CallChatInput
+          onSend={(text) => sendText?.(text)}
+          disabled={callStatus !== 'connected'}
+        />
+      ) : (
+        <ChatInput
+          ref={chatInputRef}
+          onSend={sendMessage}
+          disabled={isLoading || isComplete || isCalling}
+          placeholder={
+            isCalling
+              ? t("callingPlaceholder")
+              : isComplete
+                ? t("completePlaceholder")
+                : t("placeholder")
+          }
+        />
+      )}
     </div>
   );
 }

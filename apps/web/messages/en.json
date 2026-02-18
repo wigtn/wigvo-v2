@@ -80,11 +80,30 @@
     "editPrompt": "Please tell me what you'd like to change."
   },
   "scenario": {
+    "quickTitle": "What <accent>call</accent> can I make for you?",
+    "quickSubtitle": "Start with a single tap",
+    "modeLabel": "Call mode",
+    "orFreeInput": "or type your request",
+    "freeInputPlaceholder": "e.g. Book a dental cleaning for tomorrow",
     "modeTitle": "How would you like to <accent>call</accent>?",
     "modeSubtitle": "Required info varies by call mode",
     "scenarioTitle": "What's the purpose of your <accent>call</accent>?",
     "scenarioSubtitle": "AI makes the call on your behalf",
     "subtypeQuestion": "What type is it?",
+    "quick": {
+      "restaurant": "Restaurant",
+      "restaurantDesc": "Dining, cafe",
+      "salon": "Hair Salon",
+      "salonDesc": "Hair, nails",
+      "hospital": "Hospital",
+      "hospitalDesc": "Clinic, dental",
+      "hotel": "Hotel",
+      "hotelDesc": "Lodging, stays",
+      "inquiry": "Inquiry",
+      "inquiryDesc": "Hours, pricing",
+      "asRequest": "Repair/AS",
+      "asRequestDesc": "Appliance, tech"
+    },
     "modes": {
       "voiceToVoice": "Two-way Voice Translation",
       "voiceToVoiceSubtitle": "Voice Translation",
@@ -241,7 +260,8 @@
   "dashboard": {
     "tabChat": "Chat",
     "tabCalling": "Call",
-    "tabMap": "Map"
+    "tabMap": "Map",
+    "tabEffect": "Effect"
   },
   "oauth": {
     "google": "Continue with Google",

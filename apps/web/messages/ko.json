@@ -80,11 +80,30 @@
     "editPrompt": "수정할 내용을 말씀해주세요."
   },
   "scenario": {
+    "quickTitle": "어떤 <accent>전화</accent>를 걸어드릴까요?",
+    "quickSubtitle": "탭 한 번으로 바로 시작하세요",
+    "modeLabel": "통화 모드",
+    "orFreeInput": "또는 직접 입력",
+    "freeInputPlaceholder": "예: 00치과에 스케일링 예약해줘",
     "modeTitle": "어떤 방식으로 <accent>통화</accent>할까요?",
     "modeSubtitle": "통화 방식에 따라 필요한 정보가 달라집니다",
     "scenarioTitle": "어떤 용건으로 <accent>전화</accent>할까요?",
     "scenarioSubtitle": "AI가 대신 전화를 걸어드립니다",
     "subtypeQuestion": "어떤 종류인가요?",
+    "quick": {
+      "restaurant": "식당 예약",
+      "restaurantDesc": "맛집, 레스토랑",
+      "salon": "미용실 예약",
+      "salonDesc": "헤어, 네일",
+      "hospital": "병원 예약",
+      "hospitalDesc": "병원, 치과",
+      "hotel": "호텔 예약",
+      "hotelDesc": "숙소, 호텔",
+      "inquiry": "문의하기",
+      "inquiryDesc": "영업시간, 가격",
+      "asRequest": "AS/수리",
+      "asRequestDesc": "가전, 전자기기"
+    },
     "modes": {
       "voiceToVoice": "양방향 음성 번역",
       "voiceToVoiceSubtitle": "Voice Translation",
@@ -241,7 +260,8 @@
   "dashboard": {
     "tabChat": "채팅",
     "tabCalling": "통화",
-    "tabMap": "지도"
+    "tabMap": "지도",
+    "tabEffect": "이펙트"
   },
   "oauth": {
     "google": "Google로 로그인",
