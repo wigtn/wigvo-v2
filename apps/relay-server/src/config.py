@@ -27,7 +27,7 @@ class Settings(BaseSettings):
         default=[
             "http://localhost:3000",
             "https://wigvo.run",
-            "https://wigvo-web-uqbeq7ixdq-du.a.run.app",
+            "https://wigvo-web-gzjzn35jyq-du.a.run.app",
         ],
         description="CORS allowed origins",
     )
