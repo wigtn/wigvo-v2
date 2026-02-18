@@ -7,14 +7,19 @@ interface LiveCaptionPanelProps {
   captions: CaptionEntry[];
   translationState: 'idle' | 'processing' | 'done';
   expanded?: boolean;
+  compact?: boolean;
 }
 
 export default function LiveCaptionPanel({
   captions,
   translationState,
   expanded = false,
+  compact = false,
 }: LiveCaptionPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // In compact mode, show only the last 3 captions
+  const displayCaptions = compact ? captions.slice(-3) : captions;
 
   // Auto-scroll to bottom on new captions
   useEffect(() => {
@@ -25,30 +30,32 @@ export default function LiveCaptionPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className={`px-4 border-b border-[#E2E8F0] ${expanded ? 'py-3' : 'py-2'}`}>
-        <h3 className={`font-semibold text-[#64748B] uppercase tracking-wider ${expanded ? 'text-sm' : 'text-xs'}`}>
-          {'자막'}
-          {expanded && (
-            <span className="ml-2 text-[10px] font-normal normal-case text-[#94A3B8]">
-              {'자막 전용 모드'}
-            </span>
-          )}
-        </h3>
-      </div>
+      {!compact && (
+        <div className={`px-4 border-b border-[#E2E8F0] ${expanded ? 'py-3' : 'py-2'}`}>
+          <h3 className={`font-semibold text-[#64748B] uppercase tracking-wider ${expanded ? 'text-sm' : 'text-xs'}`}>
+            {'자막'}
+            {expanded && (
+              <span className="ml-2 text-[10px] font-normal normal-case text-[#94A3B8]">
+                {'자막 전용 모드'}
+              </span>
+            )}
+          </h3>
+        </div>
+      )}
 
       <div
         ref={scrollRef}
         className={`flex-1 overflow-y-auto styled-scrollbar space-y-2 ${
-          expanded ? 'px-5 py-4' : 'px-4 py-3'
+          compact ? 'px-4 py-2' : expanded ? 'px-5 py-4' : 'px-4 py-3'
         }`}
       >
-        {captions.length === 0 && (
-          <p className={`text-center text-[#CBD5E1] ${expanded ? 'text-sm py-12' : 'text-xs py-8'}`}>
+        {displayCaptions.length === 0 && (
+          <p className={`text-center text-[#CBD5E1] ${expanded ? 'text-sm py-12' : compact ? 'text-xs py-4' : 'text-xs py-8'}`}>
             {'통화가 시작되면 자막이 표시됩니다'}
           </p>
         )}
 
-        {captions.map((entry) => {
+        {displayCaptions.map((entry) => {
           const isUser = entry.speaker === 'user';
           const isStage1 = entry.stage === 1;
 
@@ -79,7 +86,7 @@ export default function LiveCaptionPanel({
                 <p
                   className={`leading-relaxed ${
                     expanded
-                      ? isStage1 ? 'text-sm' : 'text-xl font-medium'
+                      ? isStage1 ? 'text-base' : 'text-2xl font-medium'
                       : isStage1 ? 'text-xs' : 'text-sm'
                   }`}
                 >

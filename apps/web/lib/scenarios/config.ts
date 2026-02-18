@@ -238,6 +238,8 @@ export function getFieldLabel(field: keyof CollectedData): string {
     customer_name: '예약자 이름',
     party_size: '인원수',
     special_request: '특별 요청',
+    source_language: '출발 언어',
+    target_language: '도착 언어',
   };
   return labels[field] || field;
 }

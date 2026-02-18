@@ -26,26 +26,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. v5: 모드 + 시나리오 타입 파라미터 파싱
+    // 2. v5: 모드 + 시나리오 타입 + 언어 파라미터 파싱
     let scenarioType: ScenarioType | undefined;
     let subType: ScenarioSubType | undefined;
     let communicationMode: CommunicationMode | undefined;
+    let sourceLang: string | undefined;
+    let targetLang: string | undefined;
 
     try {
       const body = await request.json();
       scenarioType = body.scenarioType;
       subType = body.subType;
       communicationMode = body.communicationMode;
+      sourceLang = body.sourceLang;
+      targetLang = body.targetLang;
     } catch {
       // body가 없거나 파싱 실패해도 OK (기존 호환성)
     }
 
-    // 3. 대화 세션 생성 (모드 + 시나리오 타입 전달)
+    // 3. 대화 세션 생성 (모드 + 시나리오 타입 + 언어 전달)
     const { conversation, greeting } = await createConversation(
       user.id,
       scenarioType,
       subType,
-      communicationMode
+      communicationMode,
+      sourceLang,
+      targetLang
     );
 
     // 4. 응답 (snake_case → camelCase 변환)

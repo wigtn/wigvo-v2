@@ -53,17 +53,25 @@ export async function createConversation(
   userId: string,
   scenarioType?: ScenarioType,
   subType?: ScenarioSubType,
-  communicationMode?: CommunicationMode
+  communicationMode?: CommunicationMode,
+  sourceLang?: string,
+  targetLang?: string
 ) {
   const supabase = await createClient();
 
-  // 1. v5: 시나리오 타입 + 모드 설정
+  // 1. v5: 시나리오 타입 + 모드 + 언어 설정
   const initialCollectedData = createEmptyCollectedData();
   if (scenarioType) {
     initialCollectedData.scenario_type = scenarioType;
   }
   if (subType) {
     initialCollectedData.scenario_sub_type = subType;
+  }
+  if (sourceLang) {
+    initialCollectedData.source_language = sourceLang;
+  }
+  if (targetLang) {
+    initialCollectedData.target_language = targetLang;
   }
 
   // 2. 대화 세션 생성

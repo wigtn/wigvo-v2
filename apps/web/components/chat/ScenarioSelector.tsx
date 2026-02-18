@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, CalendarCheck, Search, Wrench, ArrowRight, Phone, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
+import { ChevronLeft, CalendarCheck, Search, Wrench, ArrowRight, ArrowLeftRight, Phone, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
 import type { ScenarioType, ScenarioSubType } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE_PAIR } from '@/shared/call-types';
 import { SCENARIO_CONFIG } from '@/lib/scenarios/config';
 
 const SCENARIO_ICONS: Record<string, React.ReactNode> = {
@@ -52,7 +53,7 @@ const MODE_OPTIONS: ModeOption[] = [
 ];
 
 interface ScenarioSelectorProps {
-  onSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode) => void;
+  onSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode, sourceLang: string, targetLang: string) => void;
   disabled?: boolean;
 }
 
@@ -62,6 +63,13 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
   const [screen, setScreen] = useState<Screen>('mode');
   const [selectedMode, setSelectedMode] = useState<CommunicationMode | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
+  const [sourceLang, setSourceLang] = useState(DEFAULT_LANGUAGE_PAIR.source.code);
+  const [targetLang, setTargetLang] = useState(DEFAULT_LANGUAGE_PAIR.target.code);
+
+  const handleSwapLanguages = () => {
+    setSourceLang(targetLang);
+    setTargetLang(sourceLang);
+  };
 
   const handleModeClick = (mode: CommunicationMode) => {
     setSelectedMode(mode);
@@ -75,7 +83,7 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
 
   const handleSubTypeClick = (subType: ScenarioSubType) => {
     if (selectedScenario && selectedMode) {
-      onSelect(selectedScenario, subType, selectedMode);
+      onSelect(selectedScenario, subType, selectedMode, sourceLang, targetLang);
     }
   };
 
@@ -94,6 +102,43 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex flex-col justify-center px-6 py-8">
+          {/* 언어 페어 선택기 */}
+          <div className="flex items-center justify-center gap-2 mb-6 max-w-sm mx-auto w-full">
+            <select
+              value={sourceLang}
+              onChange={(e) => setSourceLang(e.target.value)}
+              disabled={disabled}
+              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.flag} {lang.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleSwapLanguages}
+              disabled={disabled}
+              className="shrink-0 w-8 h-8 rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] transition-colors disabled:opacity-50"
+              aria-label="Swap languages"
+            >
+              <ArrowLeftRight className="size-3.5" />
+            </button>
+            <select
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value)}
+              disabled={disabled}
+              className="flex-1 px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-white text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.flag} {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="text-center mb-8">
             <div className="w-12 h-12 rounded-2xl bg-[#F1F5F9] flex items-center justify-center mx-auto mb-5 glow-accent">
               <Phone className="size-5 text-[#0F172A]" />

@@ -79,6 +79,8 @@ export interface CollectedData {
   customer_name: string | null;
   party_size: number | null;
   special_request: string | null;
+  source_language?: string | null;
+  target_language?: string | null;
 }
 
 /**

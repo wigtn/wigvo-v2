@@ -18,6 +18,7 @@ import type {
   ScenarioSubType,
 } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
+import { DEFAULT_LANGUAGE_PAIR } from '@/shared/call-types';
 import { createEmptyCollectedData } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
 import {
@@ -26,6 +27,8 @@ import {
 } from '@/lib/constants';
 
 const STORAGE_KEY_COMMUNICATION_MODE = 'currentCommunicationMode';
+const STORAGE_KEY_SOURCE_LANG = 'currentSourceLang';
+const STORAGE_KEY_TARGET_LANG = 'currentTargetLang';
 
 interface UseChatReturn {
   conversationId: string | null;
@@ -40,7 +43,9 @@ interface UseChatReturn {
   selectedScenario: ScenarioType | null;
   selectedSubType: ScenarioSubType | null;
   communicationMode: CommunicationMode | null;
-  handleScenarioSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode) => Promise<void>;
+  sourceLang: string;
+  targetLang: string;
+  handleScenarioSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode, sourceLang: string, targetLang: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   handleConfirm: () => Promise<void>;
   handleEdit: () => void;
@@ -69,6 +74,8 @@ export function useChat(): UseChatReturn {
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
   const [selectedSubType, setSelectedSubType] = useState<ScenarioSubType | null>(null);
   const [communicationMode, setCommunicationMode] = useState<CommunicationMode | null>(null);
+  const [sourceLang, setSourceLang] = useState(DEFAULT_LANGUAGE_PAIR.source.code);
+  const [targetLang, setTargetLang] = useState(DEFAULT_LANGUAGE_PAIR.target.code);
 
   // ── Refs (StrictMode 이중 초기화 방지) ─────────────────────
   const initializedRef = useRef(false);
@@ -87,14 +94,16 @@ export function useChat(): UseChatReturn {
     router.push('/login');
   }, [router]);
 
-  // ── startConversation (v5: 모드 + 시나리오 타입 지원) ───────
+  // ── startConversation (v5: 모드 + 시나리오 타입 + 언어 지원) ───────
   const startConversation = useCallback(async (
     scenarioType?: ScenarioType,
     subType?: ScenarioSubType,
-    mode?: CommunicationMode
+    mode?: CommunicationMode,
+    srcLang?: string,
+    tgtLang?: string
   ) => {
     try {
-      const data = await createConversation(scenarioType, subType, mode);
+      const data = await createConversation(scenarioType, subType, mode, srcLang, tgtLang);
       setConversationId(data.id);
       setConversationStatus(data.status);
       setCollectedData(data.collectedData ?? createEmptyCollectedData());
@@ -109,6 +118,14 @@ export function useChat(): UseChatReturn {
       if (mode) {
         setCommunicationMode(mode);
         localStorage.setItem(STORAGE_KEY_COMMUNICATION_MODE, mode);
+      }
+      if (srcLang) {
+        setSourceLang(srcLang);
+        localStorage.setItem(STORAGE_KEY_SOURCE_LANG, srcLang);
+      }
+      if (tgtLang) {
+        setTargetLang(tgtLang);
+        localStorage.setItem(STORAGE_KEY_TARGET_LANG, tgtLang);
       }
 
       // greeting 메시지 추가
@@ -143,11 +160,15 @@ export function useChat(): UseChatReturn {
         if (data.status === 'COMPLETED' || data.status === 'CALLING') {
           localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
           localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
+          localStorage.removeItem(STORAGE_KEY_SOURCE_LANG);
+          localStorage.removeItem(STORAGE_KEY_TARGET_LANG);
           // v5: 모드 선택 화면으로 돌아감
           setScenarioSelected(false);
           setSelectedScenario(null);
           setSelectedSubType(null);
           setCommunicationMode(null);
+          setSourceLang(DEFAULT_LANGUAGE_PAIR.source.code);
+          setTargetLang(DEFAULT_LANGUAGE_PAIR.target.code);
           setIsInitializing(false);
           return;
         }
@@ -158,11 +179,15 @@ export function useChat(): UseChatReturn {
         setIsComplete(data.status === 'READY');
         setMessages(data.messages ?? []);
 
-        // v5: 모드 + 시나리오 상태 복원
+        // v5: 모드 + 시나리오 + 언어 상태 복원
         const savedMode = localStorage.getItem(STORAGE_KEY_COMMUNICATION_MODE) as CommunicationMode | null;
         if (savedMode) {
           setCommunicationMode(savedMode);
         }
+        const savedSourceLang = localStorage.getItem(STORAGE_KEY_SOURCE_LANG);
+        const savedTargetLang = localStorage.getItem(STORAGE_KEY_TARGET_LANG);
+        if (savedSourceLang) setSourceLang(savedSourceLang);
+        if (savedTargetLang) setTargetLang(savedTargetLang);
 
         if (data.collectedData?.scenario_type && data.collectedData?.scenario_sub_type) {
           setScenarioSelected(true);
@@ -181,10 +206,14 @@ export function useChat(): UseChatReturn {
         // 404 또는 기타 에러: localStorage 삭제 후 모드 선택 화면으로
         localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
         localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
+        localStorage.removeItem(STORAGE_KEY_SOURCE_LANG);
+        localStorage.removeItem(STORAGE_KEY_TARGET_LANG);
         setScenarioSelected(false);
         setSelectedScenario(null);
         setSelectedSubType(null);
         setCommunicationMode(null);
+        setSourceLang(DEFAULT_LANGUAGE_PAIR.source.code);
+        setTargetLang(DEFAULT_LANGUAGE_PAIR.target.code);
       }
     },
     [handle401]
@@ -216,17 +245,19 @@ export function useChat(): UseChatReturn {
     init();
   }, [resumeConversation]);
   
-  // ── handleScenarioSelect (v5: 모드 + 시나리오 선택 후 대화 시작) ───
+  // ── handleScenarioSelect (v5: 모드 + 시나리오 + 언어 선택 후 대화 시작) ───
   const handleScenarioSelect = useCallback(async (
     scenarioType: ScenarioType,
     subType: ScenarioSubType,
-    mode: CommunicationMode
+    mode: CommunicationMode,
+    srcLang: string,
+    tgtLang: string
   ) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      await startConversation(scenarioType, subType, mode);
+      await startConversation(scenarioType, subType, mode, srcLang, tgtLang);
     } catch (err) {
       if (err instanceof Error && err.message === 'Unauthorized') {
         handle401();
@@ -429,6 +460,8 @@ export function useChat(): UseChatReturn {
   const handleNewConversation = useCallback(async () => {
     localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
     localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
+    localStorage.removeItem(STORAGE_KEY_SOURCE_LANG);
+    localStorage.removeItem(STORAGE_KEY_TARGET_LANG);
     setMessages([]);
     setCollectedData(null);
     setIsComplete(false);
@@ -440,6 +473,8 @@ export function useChat(): UseChatReturn {
     setSelectedScenario(null);
     setSelectedSubType(null);
     setCommunicationMode(null);
+    setSourceLang(DEFAULT_LANGUAGE_PAIR.source.code);
+    setTargetLang(DEFAULT_LANGUAGE_PAIR.target.code);
     // 대시보드 초기화 (지도, 검색결과, 통화)
     resetDashboard();
     resetCalling();
@@ -458,6 +493,8 @@ export function useChat(): UseChatReturn {
     selectedScenario,
     selectedSubType,
     communicationMode,
+    sourceLang,
+    targetLang,
     handleScenarioSelect,
     sendMessage,
     handleConfirm,

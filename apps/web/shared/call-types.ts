@@ -26,6 +26,32 @@ export enum WsMessageType {
   ERROR = 'error',
 }
 
+// --- Supported Languages ---
+
+export interface SupportedLanguage {
+  code: string;
+  label: string;
+  flag: string;
+}
+
+export const SUPPORTED_LANGUAGES: readonly SupportedLanguage[] = [
+  { code: 'ko', label: '\uD55C\uAD6D\uC5B4', flag: '\uD83C\uDDF0\uD83C\uDDF7' },
+  { code: 'en', label: 'English', flag: '\uD83C\uDDFA\uD83C\uDDF8' },
+  { code: 'ja', label: '\u65E5\u672C\u8A9E', flag: '\uD83C\uDDEF\uD83C\uDDF5' },
+  { code: 'zh', label: '\u4E2D\u6587', flag: '\uD83C\uDDE8\uD83C\uDDF3' },
+  { code: 'vi', label: 'Ti\u1EBFng Vi\u1EC7t', flag: '\uD83C\uDDFB\uD83C\uDDF3' },
+] as const;
+
+export interface LanguagePair {
+  source: SupportedLanguage;
+  target: SupportedLanguage;
+}
+
+export const DEFAULT_LANGUAGE_PAIR: LanguagePair = {
+  source: SUPPORTED_LANGUAGES[0], // ko
+  target: SUPPORTED_LANGUAGES[1], // en
+};
+
 // --- Call Mode ---
 
 export type CallMode = 'agent' | 'relay';

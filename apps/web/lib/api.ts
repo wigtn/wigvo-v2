@@ -29,17 +29,19 @@ async function handleResponse<T>(response: Response): Promise<T> {
 // ── Conversation ──────────────────────────────────────────────
 
 /**
- * 새 대화 시작 (v5: 모드 + 시나리오 타입 지원)
+ * 새 대화 시작 (v5: 모드 + 시나리오 타입 + 언어 지원)
  */
 export async function createConversation(
   scenarioType?: ScenarioType,
   subType?: ScenarioSubType,
-  communicationMode?: CommunicationMode
+  communicationMode?: CommunicationMode,
+  sourceLang?: string,
+  targetLang?: string
 ): Promise<CreateConversationResponse> {
   const response = await fetch('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenarioType, subType, communicationMode }),
+    body: JSON.stringify({ scenarioType, subType, communicationMode, sourceLang, targetLang }),
   });
   return handleResponse<CreateConversationResponse>(response);
 }
