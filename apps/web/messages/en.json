@@ -234,8 +234,14 @@
     "newChat": "New Chat",
     "history": "Chat History",
     "reservations": "Reservations",
+    "pricing": "Pricing",
     "recentChats": "Recent Chats",
     "viewAllReservations": "View All Reservations"
+  },
+  "dashboard": {
+    "tabChat": "Chat",
+    "tabCalling": "Call",
+    "tabMap": "Map"
   },
   "oauth": {
     "google": "Continue with Google",

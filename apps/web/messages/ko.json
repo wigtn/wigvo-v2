@@ -234,8 +234,14 @@
     "newChat": "새 대화",
     "history": "대화 기록",
     "reservations": "예약 기록",
+    "pricing": "요금제",
     "recentChats": "최근 대화",
     "viewAllReservations": "전체 예약 기록 보기"
+  },
+  "dashboard": {
+    "tabChat": "채팅",
+    "tabCalling": "통화",
+    "tabMap": "지도"
   },
   "oauth": {
     "google": "Google로 로그인",

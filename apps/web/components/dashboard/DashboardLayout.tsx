@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Menu, Map, MessageSquare, Phone } from "lucide-react";
+import LanguageSwitcher from "@/components/common/LanguageSwitcher";
 import Sidebar from "./Sidebar";
 import MobileDrawer from "./MobileDrawer";
 import ChatContainer from "@/components/chat/ChatContainer";
@@ -30,6 +32,7 @@ export default function DashboardLayout() {
   } = useDashboard();
 
   const { handleNewConversation } = useChat();
+  const t = useTranslations("dashboard");
 
   const [mobileTab, setMobileTab] = useState<"chat" | "map" | "calling">(
     "chat",
@@ -136,7 +139,7 @@ export default function DashboardLayout() {
                 )}
               >
                 <MessageSquare className="size-4" />
-                채팅
+                {t("tabChat")}
               </button>
               {isCalling ? (
                 <button
@@ -149,7 +152,7 @@ export default function DashboardLayout() {
                   )}
                 >
                   <Phone className="size-4" />
-                  통화
+                  {t("tabCalling")}
                 </button>
               ) : (
                 <button
@@ -162,12 +165,12 @@ export default function DashboardLayout() {
                   )}
                 >
                   <Map className="size-4" />
-                  지도
+                  {t("tabMap")}
                 </button>
               )}
             </div>
 
-            <div className="w-10" />
+            <LanguageSwitcher />
           </div>
 
           {/* 좌측: 채팅 카드 */}

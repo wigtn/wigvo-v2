@@ -7,11 +7,13 @@ import {
   MessageSquarePlus,
   History,
   Calendar,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
   Zap,
   LogOut,
 } from "lucide-react";
+import LanguageSwitcher from "@/components/common/LanguageSwitcher";
 import SidebarMenu from "./SidebarMenu";
 import { useDashboard } from "@/hooks/useDashboard";
 import { cn } from "@/lib/utils";
@@ -113,6 +115,13 @@ export default function Sidebar({
             isActive={activeMenu === "reservations"}
             onClick={() => handleMenuClick("reservations")}
           />
+          <SidebarMenu
+            icon={<CreditCard className="size-[18px]" />}
+            label={t("pricing")}
+            isCollapsed={isSidebarCollapsed}
+            isActive={false}
+            onClick={() => {/* TODO: pricing page */}}
+          />
         </div>
       </nav>
 
@@ -123,8 +132,11 @@ export default function Sidebar({
 
       <div className="flex-1" />
 
-      {/* 로그아웃 */}
+      {/* Language Switcher + 로그아웃 */}
       <div className="px-2 pb-4">
+        <div className={cn("mb-3", isSidebarCollapsed ? "flex justify-center" : "px-1")}>
+          <LanguageSwitcher />
+        </div>
         <div className="mx-1 mb-3 border-t border-[#E2E8F0]" />
         <button
           onClick={handleSignOut}

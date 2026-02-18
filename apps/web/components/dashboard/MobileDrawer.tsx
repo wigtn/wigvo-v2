@@ -9,9 +9,11 @@ import {
   MessageSquarePlus,
   History,
   Calendar,
+  CreditCard,
   Zap,
   LogOut,
 } from "lucide-react";
+import LanguageSwitcher from "@/components/common/LanguageSwitcher";
 import { useDashboard } from "@/hooks/useDashboard";
 import SidebarMenu from "./SidebarMenu";
 import { cn } from "@/lib/utils";
@@ -128,15 +130,25 @@ export default function MobileDrawer({
               isActive={activeMenu === "reservations"}
               onClick={() => handleMenuClick("reservations")}
             />
+            <SidebarMenu
+              icon={<CreditCard className="size-[18px]" />}
+              label={t("pricing")}
+              isCollapsed={false}
+              isActive={false}
+              onClick={() => {/* TODO: pricing page */}}
+            />
           </div>
         </nav>
 
         {/* 구분선 */}
         <div className="mx-3 mt-3 border-t border-[#E2E8F0]" />
 
-        {/* 하단 여백 채움 + 로그아웃 */}
+        {/* 하단 여백 채움 + Language Switcher + 로그아웃 */}
         <div className="flex-1" />
         <div className="px-2 pb-5">
+          <div className="px-1 mb-3">
+            <LanguageSwitcher />
+          </div>
           <div className="mx-1 mb-3 border-t border-[#E2E8F0]" />
           <button
             onClick={handleSignOut}
