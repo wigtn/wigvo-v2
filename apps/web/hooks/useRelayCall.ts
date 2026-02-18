@@ -94,11 +94,53 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
               if (prev.length === 0) return prev;
               const updated = [...prev];
               const last = updated[updated.length - 1];
+              // Stage 2 스트리밍 중: 원문도 함께 누적
               updated[updated.length - 1] = { ...last, text: last.text + text };
               return updated;
             });
+          } else if (stage === 2 && direction === 'inbound') {
+            // Stage 2(번역) 시작 시: 직전 Stage 1(원문)을 찾아 병합
+            setCaptions((prev) => {
+              // 직전 Stage 1 엔트리 찾기 (같은 speaker, inbound)
+              const lastStage1Idx = prev.length > 0 && prev[prev.length - 1].stage === 1
+                  && prev[prev.length - 1].speaker === speaker
+                ? prev.length - 1
+                : -1;
+
+              if (lastStage1Idx >= 0) {
+                // Stage 1을 제거하고 originalText로 보존한 Stage 2 엔트리 생성
+                const stage1 = prev[lastStage1Idx];
+                captionCounterRef.current += 1;
+                const merged: CaptionEntry = {
+                  id: `caption-${captionCounterRef.current}`,
+                  speaker,
+                  text,
+                  originalText: stage1.text,
+                  language: (msg.data.language as string) ?? '',
+                  isFinal: false,
+                  timestamp: Date.now(),
+                  stage: 2,
+                };
+                const updated = prev.slice(0, lastStage1Idx);
+                return [...updated, merged];
+              }
+
+              // Stage 1이 없으면 단독 Stage 2
+              captionCounterRef.current += 1;
+              const entry: CaptionEntry = {
+                id: `caption-${captionCounterRef.current}`,
+                speaker,
+                text,
+                language: (msg.data.language as string) ?? '',
+                isFinal: false,
+                timestamp: Date.now(),
+                stage,
+              };
+              return [...prev, entry];
+            });
+            streamingRef.current = { direction, stage, speaker };
           } else {
-            // New caption entry
+            // New caption entry (Stage 1 원문 또는 outbound)
             captionCounterRef.current += 1;
             const entry: CaptionEntry = {
               id: `caption-${captionCounterRef.current}`,

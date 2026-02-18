@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     recovery_backoff_multiplier: float = 2.0
     recovery_timeout_s: float = 10.0  # 10초 초과 시 Degraded Mode
     heartbeat_interval_s: float = 5.0
-    heartbeat_timeout_s: float = 45.0
+    heartbeat_timeout_s: float = 120.0  # 45→120s: 대화 중 자연스러운 침묵(타이핑 대기 등)을 disconnect로 오판 방지
     ring_buffer_capacity_slots: int = 1500  # 30초 / 20ms
 
     # Whisper fallback (Degraded Mode)

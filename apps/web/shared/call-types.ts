@@ -121,6 +121,7 @@ export interface CaptionEntry {
   isFinal: boolean;
   timestamp: number;
   stage?: 1 | 2;
+  originalText?: string;  // Stage 1 원문 (Stage 2와 합쳐서 표시)
 }
 
 // --- WebSocket Message ---

@@ -60,6 +60,7 @@ export default function LiveCaptionPanel({
         {displayCaptions.map((entry) => {
           const isUser = entry.speaker === 'user';
           const isStage1 = entry.stage === 1;
+          const hasMergedOriginal = !!entry.originalText;
 
           return (
             <div
@@ -79,12 +80,18 @@ export default function LiveCaptionPanel({
               >
                 <p className={`font-medium mb-0.5 opacity-70 ${expanded ? 'text-xs' : 'text-[10px]'}`}>
                   {entry.speaker === 'user'
-                    ? 'You'
+                    ? t('caption.you')
                     : entry.speaker === 'ai'
-                      ? 'AI'
-                      : '수신자'}
-                  {isStage1 && ' (원문)'}
+                      ? t('caption.ai')
+                      : t('caption.recipient')}
+                  {isStage1 && ` (${t('caption.original')})`}
                 </p>
+                {/* 원문 + 번역이 합쳐진 경우: 원문을 작게, 번역을 크게 표시 */}
+                {hasMergedOriginal && (
+                  <p className={`leading-relaxed text-[#94A3B8] mb-1 ${expanded ? 'text-sm' : 'text-xs'}`}>
+                    {entry.originalText}
+                  </p>
+                )}
                 <p
                   className={`leading-relaxed ${
                     expanded
