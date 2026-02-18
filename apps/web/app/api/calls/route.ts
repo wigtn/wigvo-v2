@@ -13,6 +13,8 @@ import {
   updateConversationStatus,
 } from '@/lib/supabase/chat';
 import { CreateCallRequest, CollectedData, CallRow } from '@/shared/types';
+import { communicationModeToCallMode } from '@/shared/call-types';
+import type { CommunicationMode } from '@/shared/call-types';
 import { toCallResponse } from '@/lib/supabase/helpers';
 
 // -----------------------------------------------------------------------------
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // 2. 요청 파싱
     const body = (await request.json()) as CreateCallRequest;
-    const { conversationId } = body;
+    const { conversationId, communicationMode } = body;
 
     if (!conversationId) {
       return NextResponse.json(
@@ -103,6 +105,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. Call 레코드 생성
+    const selectedMode: CommunicationMode = communicationMode || 'voice_to_voice';
+    const callMode = communicationModeToCallMode(selectedMode);
+
     const { data: call, error: callError } = await supabase
       .from('calls')
       .insert({
@@ -115,6 +120,8 @@ export async function POST(request: NextRequest) {
         parsed_time: collectedData.primary_datetime?.split(' ')[1] || null,
         parsed_service: collectedData.service,
         status: 'PENDING',
+        call_mode: callMode,
+        communication_mode: selectedMode,
       })
       .select()
       .single();

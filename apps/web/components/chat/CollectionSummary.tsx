@@ -1,12 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CollectedData } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
+import CallModeSelector from '@/components/call/CallModeSelector';
 import { Phone, Pencil, Plus, MapPin, Calendar, Scissors, User, Users, FileText } from 'lucide-react';
 
 interface CollectionSummaryProps {
   data: CollectedData;
-  onConfirm: () => void;
+  onConfirm: (communicationMode: CommunicationMode) => void;
   onEdit: () => void;
   onNewConversation: () => void;
   isLoading?: boolean;
@@ -20,6 +23,7 @@ export default function CollectionSummary({
   isLoading = false,
 }: CollectionSummaryProps) {
   const t = useTranslations('collection');
+  const [communicationMode, setCommunicationMode] = useState<CommunicationMode>('voice_to_voice');
 
   return (
     <div className="mx-4 mb-2 rounded-xl surface-card shadow-sm p-4 space-y-3">
@@ -76,6 +80,12 @@ export default function CollectionSummary({
         )}
       </div>
 
+      {/* 통화 모드 선택 */}
+      <CallModeSelector
+        selectedMode={communicationMode}
+        onModeSelect={setCommunicationMode}
+      />
+
       {/* 버튼 그룹 */}
       <div className="flex gap-2 pt-1">
         <button
@@ -87,7 +97,7 @@ export default function CollectionSummary({
           {t('edit')}
         </button>
         <button
-          onClick={onConfirm}
+          onClick={() => onConfirm(communicationMode)}
           disabled={isLoading}
           className="flex-1 h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-medium bg-[#0F172A] text-white hover:bg-[#1E293B] transition-all disabled:opacity-40 shadow-sm"
         >

@@ -8,7 +8,7 @@ import CallingStatus from './CallingStatus';
 import ResultCard from './ResultCard';
 import RealtimeCallView from './RealtimeCallView';
 import { Loader2, X } from 'lucide-react';
-import type { CallMode } from '@/shared/call-types';
+import type { CallMode, CommunicationMode } from '@/shared/call-types';
 
 const TEST_CALL_ID = '__test__';
 
@@ -151,6 +151,7 @@ export default function CallingPanel() {
           callId={activeCall.id}
           relayWsUrl={activeCall.relayWsUrl!}
           callMode={activeCall.callMode as CallMode}
+          communicationMode={(activeCall.communicationMode as CommunicationMode) ?? 'voice_to_voice'}
           targetName={activeCall.targetName}
           onCallEnd={() => setRealtimeCallEnded(true)}
         />

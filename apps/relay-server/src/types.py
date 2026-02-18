@@ -24,6 +24,13 @@ class CallStatus(str, Enum):
     FAILED = "failed"
 
 
+class CommunicationMode(str, Enum):
+    VOICE_TO_VOICE = "voice_to_voice"
+    TEXT_TO_VOICE = "text_to_voice"
+    VOICE_TO_TEXT = "voice_to_text"
+    FULL_AGENT = "full_agent"
+
+
 class VadMode(str, Enum):
     CLIENT = "client"
     SERVER = "server"
@@ -65,6 +72,7 @@ class CallStartRequest(BaseModel):
     collected_data: dict[str, Any] | None = None
     vad_mode: VadMode = VadMode.CLIENT
     system_prompt_override: str | None = None
+    communication_mode: CommunicationMode = CommunicationMode.VOICE_TO_VOICE
 
     @field_validator("phone_number")
     @classmethod
@@ -197,6 +205,7 @@ class ActiveCall(BaseModel):
     source_language: str = "en"
     target_language: str = "ko"
     status: CallStatus = CallStatus.PENDING
+    communication_mode: CommunicationMode = CommunicationMode.VOICE_TO_VOICE
     stream_sid: str = ""
     session_a_id: str = ""
     session_b_id: str = ""

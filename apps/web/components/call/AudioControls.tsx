@@ -1,14 +1,38 @@
 'use client';
 
-import { Mic, MicOff } from 'lucide-react';
+import { Mic, MicOff, Captions } from 'lucide-react';
+import type { CommunicationMode } from '@/shared/call-types';
 
 interface AudioControlsProps {
   isMuted: boolean;
   isSpeaking: boolean;
   onToggleMute: () => void;
+  communicationMode?: CommunicationMode;
 }
 
-export default function AudioControls({ isMuted, isSpeaking, onToggleMute }: AudioControlsProps) {
+export default function AudioControls({
+  isMuted,
+  isSpeaking,
+  onToggleMute,
+  communicationMode,
+}: AudioControlsProps) {
+  // voice_to_text 모드: 자막 전용 모드 뱃지 표시
+  if (communicationMode === 'voice_to_text') {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 border-t border-[#E2E8F0]">
+        <div className="flex items-center gap-2 flex-1">
+          <Captions className="size-4 text-[#64748B]" />
+          <span className="text-xs font-medium text-[#64748B]">
+            {'자막 전용 모드'}
+          </span>
+        </div>
+        <div className="rounded-lg bg-[#F1F5F9] border border-[#E2E8F0] px-3 py-1.5">
+          <span className="text-[10px] text-[#94A3B8]">{'음성은 녹음되지만 재생되지 않습니다'}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-t border-[#E2E8F0]">
       {/* VAD indicator */}
@@ -24,10 +48,10 @@ export default function AudioControls({ isMuted, isSpeaking, onToggleMute }: Aud
         />
         <span className="text-xs text-[#64748B]">
           {isMuted
-            ? '\uC74C\uC18C\uAC70 \uCF1C\uC9D0'
+            ? '음소거 켜짐'
             : isSpeaking
-              ? '\uBC1C\uD654 \uC911...'
-              : '\uB4E3\uACE0 \uC788\uC5B4\uC694'}
+              ? '발화 중...'
+              : '듣고 있어요'}
         </span>
       </div>
 
@@ -43,12 +67,12 @@ export default function AudioControls({ isMuted, isSpeaking, onToggleMute }: Aud
         {isMuted ? (
           <>
             <MicOff className="size-3.5" />
-            {'\uC74C\uC18C\uAC70 \uD574\uC81C'}
+            {'음소거 해제'}
           </>
         ) : (
           <>
             <Mic className="size-3.5" />
-            {'\uC74C\uC18C\uAC70'}
+            {'음소거'}
           </>
         )}
       </button>

@@ -24,6 +24,7 @@ export function toCallResponse(row: CallRow): Call {
     result: row.result,
     summary: row.summary,
     callMode: row.call_mode ?? undefined,
+    communicationMode: row.communication_mode ?? undefined,
     relayWsUrl: row.relay_ws_url ?? undefined,
     callId: row.call_id,
     callSid: row.call_sid,

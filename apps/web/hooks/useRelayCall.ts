@@ -1,7 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { WsMessageType, type CallMode, type CaptionEntry, type RelayWsMessage } from '@/shared/call-types';
+import {
+  WsMessageType,
+  getModeUIConfig,
+  type CallMode,
+  type CaptionEntry,
+  type CommunicationMode,
+  type RelayWsMessage,
+} from '@/shared/call-types';
 import { useRelayWebSocket } from './useRelayWebSocket';
 import { useClientVad } from './useClientVad';
 import { useWebAudioPlayer } from './useWebAudioPlayer';
@@ -25,7 +32,7 @@ interface UseRelayCallReturn {
   error: string | null;
 }
 
-export function useRelayCall(): UseRelayCallReturn {
+export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_voice'): UseRelayCallReturn {
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [translationState, setTranslationState] = useState<TranslationState>('idle');
   const [captions, setCaptions] = useState<CaptionEntry[]>([]);
@@ -37,6 +44,9 @@ export function useRelayCall(): UseRelayCallReturn {
 
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userSpeakingRef = useRef(false);
+
+  // Mode UI config
+  const modeConfig = getModeUIConfig(communicationMode);
 
   // Audio player
   const player = useWebAudioPlayer();
@@ -70,6 +80,8 @@ export function useRelayCall(): UseRelayCallReturn {
         }
 
         case WsMessageType.RECIPIENT_AUDIO: {
+          // voice_to_text 모드: 수신자 음성은 재생하지 않음 (자막만 표시)
+          if (!modeConfig.audioOutput) break;
           const audio = msg.data.audio as string;
           if (audio) {
             player.play(audio);
@@ -111,7 +123,7 @@ export function useRelayCall(): UseRelayCallReturn {
           break;
       }
     },
-    [player],
+    [player, modeConfig.audioOutput],
   );
 
   // WebSocket connection
@@ -130,8 +142,8 @@ export function useRelayCall(): UseRelayCallReturn {
     }
   }, [ws.status, callStatus]);
 
-  // Client VAD — only active in relay mode when not muted
-  const vadEnabled = callMode === 'relay' && !isMuted && wsUrl !== null && ws.status === 'connected';
+  // Client VAD — active only when audioInput is enabled and not muted
+  const vadEnabled = modeConfig.audioInput && !isMuted && wsUrl !== null && ws.status === 'connected';
 
   const { isSpeaking } = useClientVad({
     onSpeechAudio: (base64Audio: string) => {

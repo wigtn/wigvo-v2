@@ -33,7 +33,7 @@ from src.realtime.session_b import SessionBHandler
 from src.realtime.session_manager import DualSessionManager
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.tools.definitions import get_tools_for_mode
-from src.types import ActiveCall, CallMode, WsMessage, WsMessageType
+from src.types import ActiveCall, CallMode, CommunicationMode, WsMessage, WsMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +295,9 @@ class AudioRouter:
 
     async def _on_session_b_audio(self, audio_bytes: bytes) -> None:
         """Session B의 번역 음성을 App으로 전달."""
+        # voice_to_text mode: 오디오 출력 생략, 자막만 전송
+        if self.call.communication_mode == CommunicationMode.VOICE_TO_TEXT:
+            return
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self._app_ws_send(
             WsMessage(

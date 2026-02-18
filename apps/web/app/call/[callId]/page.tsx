@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getCall } from '@/lib/api';
 import type { Call } from '@/shared/types';
-import type { CallMode } from '@/shared/call-types';
+import type { CallMode, CommunicationMode } from '@/shared/call-types';
 import RealtimeCallView from '@/components/call/RealtimeCallView';
 import ResultCard from '@/components/call/ResultCard';
 import { Loader2 } from 'lucide-react';
@@ -107,6 +107,7 @@ export default function CallPage() {
           callId={callId}
           relayWsUrl={call.relayWsUrl}
           callMode={(call.callMode as CallMode) ?? 'agent'}
+          communicationMode={(call.communicationMode as CommunicationMode) ?? 'voice_to_voice'}
           targetName={call.targetName}
           onCallEnd={handleCallEnd}
         />

@@ -17,6 +17,7 @@ import type {
   ScenarioType,
   ScenarioSubType,
 } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 import { createEmptyCollectedData } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
 import {
@@ -38,7 +39,7 @@ interface UseChatReturn {
   selectedSubType: ScenarioSubType | null;
   handleScenarioSelect: (scenarioType: ScenarioType, subType: ScenarioSubType) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
-  handleConfirm: () => Promise<void>;
+  handleConfirm: (communicationMode?: CommunicationMode) => Promise<void>;
   handleEdit: () => void;
   handleNewConversation: () => Promise<void>;
   error: string | null;
@@ -357,7 +358,7 @@ export function useChat(): UseChatReturn {
 
   // ── handleConfirm: 전화 걸기 (더블클릭 방지 포함) ─────────
   const confirmingRef = useRef(false);
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(async (communicationMode?: CommunicationMode) => {
     if (!conversationId || confirmingRef.current) return;
     confirmingRef.current = true;
 
@@ -365,8 +366,8 @@ export function useChat(): UseChatReturn {
     setError(null);
 
     try {
-      // 1. Call 생성
-      const call = await createCall(conversationId);
+      // 1. Call 생성 (communicationMode 전달)
+      const call = await createCall(conversationId, communicationMode);
 
       // 2. Call 시작
       await startCall(call.id);

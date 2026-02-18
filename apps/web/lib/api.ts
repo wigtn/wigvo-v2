@@ -1,11 +1,12 @@
-import type { 
-  Conversation, 
-  ChatResponse, 
+import type {
+  Conversation,
+  ChatResponse,
   Call,
   CreateConversationResponse,
   ScenarioType,
   ScenarioSubType,
 } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 
 // ============================================================
 // API Helper Functions
@@ -68,11 +69,14 @@ export async function sendChatMessage(
 
 // ── Calls ─────────────────────────────────────────────────────
 
-export async function createCall(conversationId: string): Promise<Call> {
+export async function createCall(
+  conversationId: string,
+  communicationMode?: CommunicationMode,
+): Promise<Call> {
   const response = await fetch('/api/calls', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversationId }),
+    body: JSON.stringify({ conversationId, communicationMode }),
   });
   return handleResponse<Call>(response);
 }

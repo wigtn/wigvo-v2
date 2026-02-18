@@ -30,6 +30,38 @@ export enum WsMessageType {
 
 export type CallMode = 'agent' | 'relay';
 
+// --- Communication Mode (v4: 4가지 통화 모드) ---
+
+export type CommunicationMode =
+  | 'voice_to_voice'   // 양방향 음성 번역
+  | 'text_to_voice'    // 텍스트 입력 → AI 음성 전달
+  | 'voice_to_text'    // 상대방 음성 → 자막 표시
+  | 'full_agent';      // AI 자율 통화
+
+export interface ModeUIConfig {
+  audioInput: boolean;   // 마이크 녹음 활성화
+  audioOutput: boolean;  // 수신자 음성 재생
+  textInput: boolean;    // 텍스트 입력 UI 표시
+  captionOnly: boolean;  // 자막 확대 모드
+}
+
+export function communicationModeToCallMode(mode: CommunicationMode): CallMode {
+  return mode === 'full_agent' ? 'agent' : 'relay';
+}
+
+export function getModeUIConfig(mode: CommunicationMode): ModeUIConfig {
+  switch (mode) {
+    case 'voice_to_voice':
+      return { audioInput: true, audioOutput: true, textInput: false, captionOnly: false };
+    case 'text_to_voice':
+      return { audioInput: false, audioOutput: true, textInput: true, captionOnly: false };
+    case 'voice_to_text':
+      return { audioInput: true, audioOutput: false, textInput: false, captionOnly: true };
+    case 'full_agent':
+      return { audioInput: false, audioOutput: true, textInput: true, captionOnly: false };
+  }
+}
+
 // --- Caption ---
 
 export interface CaptionEntry {
@@ -60,6 +92,7 @@ export interface CallStartParams {
   vad_mode: 'client' | 'server' | 'push_to_talk';
   collected_data: Record<string, unknown> | null;
   system_prompt_override?: string;
+  communication_mode?: CommunicationMode;
 }
 
 export interface CallStartResult {

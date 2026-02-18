@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.call_manager import call_manager
 from src.config import settings
+from src.middleware.rate_limit import RateLimitMiddleware
 from src.routes.calls import router as calls_router
 from src.routes.health import router as health_router
 from src.routes.stream import router as stream_router
@@ -44,11 +45,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(RateLimitMiddleware, calls_per_minute=60)
 
 app.include_router(health_router)
 app.include_router(calls_router, prefix="/relay")

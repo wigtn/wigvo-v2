@@ -56,6 +56,7 @@ async def start_call(req: CallStartRequest):
         target_language=req.target_language,
         status=CallStatus.CALLING,
         collected_data=req.collected_data or {},
+        communication_mode=req.communication_mode,
     )
 
     # 2. System Prompt 생성

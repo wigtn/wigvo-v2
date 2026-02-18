@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateDynamicPrompt } from "@/lib/prompt-generator";
 import { startRelayCall, formatPhoneToE164 } from "@/lib/relay-client";
-import type { CallMode } from "@/shared/call-types";
+import type { CallMode, CommunicationMode } from "@/shared/call-types";
 import type { CollectedData } from "@/shared/types";
 
 // --- ElevenLabs imports (주석 처리 — 레거시 fallback) ---
@@ -33,6 +33,7 @@ interface CallWithConversation {
   status: string;
   parsed_service: string | null;
   call_mode: CallMode | null;
+  communication_mode: CommunicationMode | null;
   conversations: {
     collected_data: CollectedData;
     status: string;
@@ -130,7 +131,9 @@ export async function POST(
       .eq("id", typedCall.conversation_id);
 
     // ── 6. 통화 모드 결정 + 프롬프트 ──
-    const callMode: CallMode = typedCall.call_mode || "agent";
+    const callMode: CallMode = typedCall.call_mode || "relay";
+    const communicationMode: CommunicationMode =
+      typedCall.communication_mode || "voice_to_voice";
 
     // Agent Mode일 때 system_prompt_override 생성
     let systemPromptOverride: string | undefined;
@@ -158,6 +161,7 @@ export async function POST(
         vad_mode: callMode === "relay" ? "client" : "server",
         collected_data: collectedData as unknown as Record<string, unknown>,
         system_prompt_override: systemPromptOverride,
+        communication_mode: communicationMode,
       });
     } catch (error) {
       console.error("[Start] Relay Server call failed:", error);

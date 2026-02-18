@@ -1,3 +1,4 @@
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,6 +21,19 @@ class Settings(BaseSettings):
     relay_server_url: str = "http://localhost:8000"
     relay_server_port: int = 8000
     relay_server_host: str = "0.0.0.0"
+
+    # CORS
+    allowed_origins: list[str] = Field(
+        default=["http://localhost:3000", "https://wigvo.run"],
+        description="CORS allowed origins",
+    )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_origins(cls, v):
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",")]
+        return v
 
     # Call limits (M-3: 최대 통화 시간 10분)
     max_call_duration_ms: int = 600_000

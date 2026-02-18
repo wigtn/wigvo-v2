@@ -9,11 +9,11 @@ steps:
       - --build-arg=NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}
       - --build-arg=OPENAI_API_KEY=${_OPENAI_API_KEY}
       - -t
-      - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvu-repo/wigvo-web:latest
+      - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvo-repo/wigvo-web:latest
       - .
 
 images:
-  - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvu-repo/wigvo-web:latest
+  - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvo-repo/wigvo-web:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY

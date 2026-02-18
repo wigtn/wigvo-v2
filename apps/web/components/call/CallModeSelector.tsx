@@ -1,65 +1,94 @@
 'use client';
 
-import type { CallMode } from '@/shared/call-types';
-import type { ScenarioType } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
+import { Card } from '@/components/ui/card';
+import { Mic, MessageSquare, Captions, Bot } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface CallModeSelectorProps {
-  onSelect: (mode: CallMode) => void;
-  scenarioType?: ScenarioType | null;
+  selectedMode: CommunicationMode;
+  onModeSelect: (mode: CommunicationMode) => void;
+  className?: string;
 }
 
-const modes: {
-  mode: CallMode;
-  icon: string;
+interface ModeOption {
+  mode: CommunicationMode;
+  icon: LucideIcon;
   title: string;
+  subtitle: string;
   description: string;
-  recommendedFor: ScenarioType[];
-}[] = [
+}
+
+const modeOptions: ModeOption[] = [
   {
-    mode: 'agent',
-    icon: '\u{1F916}',
-    title: 'AI \uC790\uB3D9\uD1B5\uD654',
-    description: 'AI\uAC00 \uC54C\uC544\uC11C \uC804\uD654\uD569\uB2C8\uB2E4',
-    recommendedFor: ['RESERVATION', 'AS_REQUEST'],
+    mode: 'voice_to_voice',
+    icon: Mic,
+    title: '양방향 음성 번역',
+    subtitle: 'Voice Translation',
+    description: '모국어로 말하면 실시간 번역됩니다',
   },
   {
-    mode: 'relay',
-    icon: '\u{1F399}\uFE0F',
-    title: '\uC9C1\uC811 \uD1B5\uD654',
-    description: '\uB0B4\uAC00 \uB9D0\uD558\uBA74 \uBC88\uC5ED\uD574\uC90D\uB2C8\uB2E4',
-    recommendedFor: ['INQUIRY'],
+    mode: 'text_to_voice',
+    icon: MessageSquare,
+    title: '텍스트 → 음성',
+    subtitle: 'Text to Voice',
+    description: '텍스트를 입력하면 AI가 대신 말합니다',
+  },
+  {
+    mode: 'voice_to_text',
+    icon: Captions,
+    title: '음성 → 자막',
+    subtitle: 'Voice to Text',
+    description: '상대방 말이 자막으로 표시됩니다',
+  },
+  {
+    mode: 'full_agent',
+    icon: Bot,
+    title: 'AI 자율 통화',
+    subtitle: 'AI Agent',
+    description: 'AI가 수집된 정보로 통화를 진행합니다',
   },
 ];
 
-export default function CallModeSelector({ onSelect, scenarioType }: CallModeSelectorProps) {
+export default function CallModeSelector({
+  selectedMode,
+  onModeSelect,
+  className,
+}: CallModeSelectorProps) {
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium text-[#334155]">
-        {'\uD1B5\uD654 \uBC29\uC2DD\uC744 \uC120\uD0DD\uD558\uC138\uC694'}
+    <div className={className}>
+      <p className="text-sm font-medium text-[#334155] mb-2">
+        {'통화 방식을 선택하세요'}
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        {modes.map(({ mode, icon, title, description, recommendedFor }) => {
-          const isRecommended = scenarioType ? recommendedFor.includes(scenarioType) : false;
+      <div className="grid grid-cols-2 gap-2">
+        {modeOptions.map(({ mode, icon: Icon, title, subtitle, description }) => {
+          const isSelected = selectedMode === mode;
 
           return (
-            <button
+            <Card
               key={mode}
-              onClick={() => onSelect(mode)}
-              className={`relative flex flex-col items-center gap-2 rounded-2xl border p-5 text-center transition-all hover:shadow-md ${
-                isRecommended
-                  ? 'border-[#0F172A] bg-[#F8FAFC] shadow-sm'
+              onClick={() => onModeSelect(mode)}
+              className={`relative cursor-pointer p-3 py-3 gap-2 transition-all hover:shadow-md ${
+                isSelected
+                  ? 'ring-2 ring-[#0F172A] border-[#0F172A] bg-[#F8FAFC]'
                   : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
               }`}
             >
-              {isRecommended && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[10px] font-semibold text-white">
-                  {'\uCD94\uCC9C'}
-                </span>
-              )}
-              <span className="text-3xl">{icon}</span>
-              <span className="text-sm font-bold text-[#0F172A]">{title}</span>
-              <span className="text-xs text-[#94A3B8] leading-tight">{description}</span>
-            </button>
+              <div className="flex items-center gap-2">
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                    isSelected ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}
+                >
+                  <Icon className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[#0F172A] leading-tight">{title}</p>
+                  <p className="text-[10px] text-[#94A3B8] leading-tight">{subtitle}</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-[#64748B] leading-snug">{description}</p>
+            </Card>
           );
         })}
       </div>

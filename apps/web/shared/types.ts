@@ -204,6 +204,7 @@ export interface Call {
   result: CallResult | null;
   summary: string | null;
   callMode?: 'agent' | 'relay';
+  communicationMode?: 'voice_to_voice' | 'text_to_voice' | 'voice_to_text' | 'full_agent';
   relayWsUrl?: string;
   callId?: string | null;
   callSid?: string | null;
@@ -252,6 +253,7 @@ export interface CallRow {
   result: CallResult | null;
   summary: string | null;
   call_mode: 'agent' | 'relay' | null;
+  communication_mode: 'voice_to_voice' | 'text_to_voice' | 'voice_to_text' | 'full_agent' | null;
   relay_ws_url: string | null;
   call_id: string | null;
   call_sid: string | null;
@@ -322,6 +324,7 @@ export interface LocationContextBasic {
 // POST /api/calls
 export interface CreateCallRequest {
   conversationId: string;
+  communicationMode?: 'voice_to_voice' | 'text_to_voice' | 'voice_to_text' | 'full_agent';
 }
 
 // POST /api/conversations request (v3: 시나리오 선택)

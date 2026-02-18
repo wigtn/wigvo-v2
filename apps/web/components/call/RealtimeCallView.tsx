@@ -1,30 +1,44 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import type { CallMode } from '@/shared/call-types';
+import { useState, useCallback, useMemo } from 'react';
+import type { CallMode, CommunicationMode } from '@/shared/call-types';
+import { getModeUIConfig } from '@/shared/call-types';
 import { useRelayCall } from '@/hooks/useRelayCall';
 import CallStatusBar from './CallStatusBar';
 import LiveCaptionPanel from './LiveCaptionPanel';
 import AudioControls from './AudioControls';
-import { PhoneOff, Send } from 'lucide-react';
+import { PhoneOff, Send, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
 
 interface RealtimeCallViewProps {
   callId: string;
   relayWsUrl: string;
   callMode: CallMode;
+  communicationMode?: CommunicationMode;
   targetName?: string | null;
   onCallEnd?: () => void;
 }
+
+const modeBadgeConfig: Record<CommunicationMode, { icon: typeof Mic; label: string }> = {
+  voice_to_voice: { icon: Mic, label: '양방향 음성 번역' },
+  text_to_voice: { icon: MessageSquare, label: '텍스트 → 음성' },
+  voice_to_text: { icon: Captions, label: '음성 → 자막' },
+  full_agent: { icon: Bot, label: 'AI 자율 통화' },
+};
 
 export default function RealtimeCallView({
   callId,
   relayWsUrl,
   callMode,
+  communicationMode = 'voice_to_voice',
   targetName,
   onCallEnd,
 }: RealtimeCallViewProps) {
-  const relay = useRelayCall();
+  const relay = useRelayCall(communicationMode);
   const [textInput, setTextInput] = useState('');
+
+  const config = useMemo(() => getModeUIConfig(communicationMode), [communicationMode]);
+  const badge = modeBadgeConfig[communicationMode];
+  const BadgeIcon = badge.icon;
 
   // Start the call on mount
   const startedRef = useState(() => {
@@ -65,11 +79,18 @@ export default function RealtimeCallView({
         callMode={callMode}
       />
 
+      {/* Mode Badge */}
+      <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-[#E2E8F0] bg-[#F8FAFC]">
+        <BadgeIcon className="size-3 text-[#64748B]" />
+        <span className="text-[10px] font-medium text-[#64748B]">{badge.label}</span>
+      </div>
+
       {/* Captions */}
       <div className="flex-1 min-h-0">
         <LiveCaptionPanel
           captions={relay.captions}
           translationState={relay.translationState}
+          expanded={config.captionOnly}
         />
       </div>
 
@@ -80,24 +101,25 @@ export default function RealtimeCallView({
         </div>
       )}
 
-      {/* Audio Controls (Relay Mode only) */}
-      {callMode === 'relay' && relay.callStatus !== 'ended' && (
+      {/* Audio Controls - only if audioInput is enabled */}
+      {config.audioInput && relay.callStatus !== 'ended' && (
         <AudioControls
           isMuted={relay.isMuted}
           isSpeaking={relay.isRecording}
           onToggleMute={relay.toggleMute}
+          communicationMode={communicationMode}
         />
       )}
 
-      {/* Text Input (Agent Mode) */}
-      {callMode === 'agent' && relay.callStatus !== 'ended' && (
+      {/* Text Input - only if textInput is enabled */}
+      {config.textInput && relay.callStatus !== 'ended' && (
         <div className="flex items-center gap-2 px-4 py-3 border-t border-[#E2E8F0]">
           <input
             type="text"
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={'\uC9C1\uC811 \uBA54\uC2DC\uC9C0 \uC804\uB2EC...'}
+            placeholder={'직접 메시지 전달...'}
             className="flex-1 rounded-xl border border-[#E2E8F0] px-3 py-2 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A]"
           />
           <button
@@ -118,7 +140,7 @@ export default function RealtimeCallView({
             className="w-full flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
           >
             <PhoneOff className="size-4" />
-            {'\uD1B5\uD654 \uC885\uB8CC'}
+            {'통화 종료'}
           </button>
         </div>
       )}
