@@ -61,7 +61,7 @@ def _make_router(echo_detector_enabled: bool = True) -> AudioRouter:
 
     app_ws_send = AsyncMock()
 
-    with patch("src.realtime.audio_router.settings") as mock_settings:
+    with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
         mock_settings.guardrail_enabled = False
         mock_settings.ring_buffer_capacity_slots = 100
         mock_settings.echo_gate_cooldown_s = 0.3
@@ -137,7 +137,7 @@ class TestEchoDetectorIntegration:
         # 완전히 다른 패턴의 genuine speech
         speech = bytes([0x70] * 160)
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.audio_energy_gate_enabled = False
             await router.handle_twilio_audio(speech)
 
@@ -209,7 +209,7 @@ class TestLegacyEchoGate:
         router._activate_echo_suppression()
         assert router._echo_suppressed is True
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.echo_gate_cooldown_s = 0.05  # 빠른 테스트
             router._start_echo_cooldown()
             await asyncio.sleep(0.1)
@@ -255,7 +255,7 @@ class TestLegacyEchoGate:
 
         router._activate_echo_suppression()
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.echo_gate_cooldown_s = 0.05
             router._start_echo_cooldown()
             await asyncio.sleep(0.1)
@@ -312,7 +312,7 @@ class TestLegacyEchoGate:
 
         router._activate_echo_suppression()
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.echo_gate_cooldown_s = 0.05
             await router._on_session_a_done()
             await asyncio.sleep(0.1)
@@ -470,7 +470,7 @@ class TestUlawRmsAndEnergyGate:
 
         silence = bytes([0xFF] * 160)
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.audio_energy_gate_enabled = True
             mock_settings.audio_energy_min_rms = 150.0
             await router.handle_twilio_audio(silence)
@@ -485,7 +485,7 @@ class TestUlawRmsAndEnergyGate:
 
         speech = bytes([0x10] * 160)
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.audio_energy_gate_enabled = True
             mock_settings.audio_energy_min_rms = 150.0
             await router.handle_twilio_audio(speech)
@@ -500,7 +500,7 @@ class TestUlawRmsAndEnergyGate:
 
         silence = bytes([0xFF] * 160)
 
-        with patch("src.realtime.audio_router.settings") as mock_settings:
+        with patch("src.realtime.pipeline.voice_to_voice.settings") as mock_settings:
             mock_settings.audio_energy_gate_enabled = False
             mock_settings.audio_energy_min_rms = 150.0
             await router.handle_twilio_audio(silence)

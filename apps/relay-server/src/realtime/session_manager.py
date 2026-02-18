@@ -16,7 +16,7 @@ import websockets
 from websockets.asyncio.client import ClientConnection
 
 from src.config import settings
-from src.types import CallMode, SessionConfig, VadMode
+from src.types import CallMode, CommunicationMode, SessionConfig, VadMode
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class RealtimeSession:
 
         # 세션 설정
         session_config: dict[str, Any] = {
-            "modalities": ["text", "audio"],
+            "modalities": self.config.modalities,
             "instructions": system_prompt,
             "input_audio_format": self.config.input_audio_format,
             "output_audio_format": self.config.output_audio_format,
@@ -131,6 +131,36 @@ class RealtimeSession:
             }
         )
         await self._send({"type": "response.create"})
+
+    async def send_text_item(self, text: str) -> None:
+        """텍스트 아이템만 생성한다 (response.create는 별도 호출).
+
+        per-response instruction override 패턴에서 사용:
+          1. send_text_item(text)  — 아이템 생성
+          2. create_response(instructions=...)  — 지시와 함께 응답 요청
+        """
+        await self._send(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": text}],
+                },
+            }
+        )
+
+    async def create_response(self, instructions: str | None = None) -> None:
+        """응답 생성을 요청한다. instructions로 per-response override 가능.
+
+        Args:
+            instructions: 이번 응답에만 적용할 지시 (hskim 패턴 이식).
+                         None이면 세션 기본 instructions 사용.
+        """
+        payload: dict[str, Any] = {"type": "response.create"}
+        if instructions:
+            payload["response"] = {"instructions": instructions}
+        await self._send(payload)
 
     async def commit_audio(self) -> None:
         """오디오 버퍼를 커밋하고 응답을 요청한다 (Client VAD 사용 시)."""
@@ -250,11 +280,19 @@ class DualSessionManager:
         source_language: str,
         target_language: str,
         vad_mode: VadMode = VadMode.SERVER,
+        communication_mode: CommunicationMode = CommunicationMode.VOICE_TO_VOICE,
     ):
         self.mode = mode
         self.source_language = source_language
         self.target_language = target_language
         self.vad_mode = vad_mode
+        self.communication_mode = communication_mode
+
+        # Session B modalities 분기:
+        # TEXT_TO_VOICE / FULL_AGENT → ['text'] (TTS 불필요, 토큰 절약)
+        # VOICE_TO_VOICE / VOICE_TO_TEXT → ['text', 'audio'] (기존 동작 유지)
+        text_only_modes = {CommunicationMode.TEXT_TO_VOICE, CommunicationMode.FULL_AGENT}
+        session_b_modalities = ["text"] if communication_mode in text_only_modes else ["text", "audio"]
 
         # Session A: User → 수신자 (PRD 3.2 / M-4)
         # Client VAD 시 turn_detection=null (서버가 아닌 클라이언트가 발화 종료 판단)
@@ -281,6 +319,7 @@ class DualSessionManager:
                 input_audio_format="g711_ulaw",  # Twilio에서 입력
                 output_audio_format="pcm16",  # App으로 출력
                 vad_mode=VadMode.SERVER,
+                modalities=session_b_modalities,
                 input_audio_transcription={"model": "whisper-1", "language": target_language},  # 2단계 자막: 원문 STT + 언어 힌트 (PRD 5.4)
             ),
         )

@@ -134,6 +134,7 @@ class SessionConfig(BaseModel):
     output_audio_format: str = "g711_ulaw"
     vad_mode: VadMode = VadMode.SERVER
     input_audio_transcription: dict[str, str] | None = None  # e.g. {"model": "whisper-1"}
+    modalities: list[str] = Field(default_factory=lambda: ["text", "audio"])
 
 
 # --- Twilio Media Stream Events ---

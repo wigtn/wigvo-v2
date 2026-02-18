@@ -1,0 +1,461 @@
+"""VoiceToVoicePipeline — 양방향 음성 번역 파이프라인.
+
+VOICE_TO_VOICE: User 음성 → 번역 → Twilio TTS + 수신자 음성 → 번역 → App TTS
+VOICE_TO_TEXT:  suppress_b_audio=True — Session B 오디오 출력 생략 (자막만)
+
+핵심 컴포넌트:
+  - EchoDetector (dual-path: new + legacy fallback)
+  - Echo Gate (legacy blanket block)
+  - Audio Energy Gate
+  - Interrupt Handler (3-level priority)
+  - First Message Handler
+  - Context Manager (6턴 슬라이딩)
+  - Session Recovery + degraded mode
+  - Guardrail
+"""
+
+import asyncio
+import base64
+import logging
+import time
+from typing import Any, Callable, Coroutine
+
+from src.config import settings
+from src.guardrail.checker import GuardrailChecker
+from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
+from src.realtime.context_manager import ConversationContextManager
+from src.realtime.echo_detector import EchoDetector
+from src.realtime.first_message import FirstMessageHandler
+from src.realtime.interrupt_handler import InterruptHandler
+from src.realtime.pipeline.base import BasePipeline
+from src.realtime.recovery import SessionRecoveryManager
+from src.realtime.ring_buffer import AudioRingBuffer
+from src.realtime.session_a import SessionAHandler
+from src.realtime.session_b import SessionBHandler
+from src.realtime.session_manager import DualSessionManager
+from src.tools.definitions import get_tools_for_mode
+from src.twilio.media_stream import TwilioMediaStreamHandler
+from src.types import (
+    ActiveCall,
+    CallMode,
+    CommunicationMode,
+    WsMessage,
+    WsMessageType,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class VoiceToVoicePipeline(BasePipeline):
+    """양방향 음성 번역 파이프라인 (EchoDetector + Interrupt + Recovery)."""
+
+    def __init__(
+        self,
+        call: ActiveCall,
+        dual_session: DualSessionManager,
+        twilio_handler: TwilioMediaStreamHandler,
+        app_ws_send: Callable[[WsMessage], Coroutine[Any, Any, None]],
+        prompt_a: str = "",
+        prompt_b: str = "",
+        suppress_b_audio: bool = False,
+    ):
+        super().__init__(call)
+        self.dual_session = dual_session
+        self.twilio_handler = twilio_handler
+        self._app_ws_send = app_ws_send
+        self._call_timer_task: asyncio.Task | None = None
+        self._prompt_a = prompt_a
+        self._prompt_b = prompt_b
+        self._suppress_b_audio = suppress_b_audio
+
+        # Guardrail (PRD Phase 4 / M-2)
+        self.guardrail: GuardrailChecker | None = None
+        if settings.guardrail_enabled:
+            self.guardrail = GuardrailChecker(
+                target_language=call.target_language,
+                enabled=True,
+            )
+
+        # 대화 컨텍스트 매니저 (번역 일관성)
+        self.context_manager = ConversationContextManager()
+
+        # Session A 핸들러: User -> 수신자
+        self.session_a = SessionAHandler(
+            session=dual_session.session_a,
+            call=call,
+            on_tts_audio=self._on_session_a_tts,
+            on_caption=self._on_session_a_caption,
+            on_response_done=self._on_session_a_done,
+            guardrail=self.guardrail,
+            on_guardrail_filler=self._on_guardrail_filler,
+            on_guardrail_corrected_tts=self._on_guardrail_corrected_tts,
+            on_guardrail_event=self._on_guardrail_event,
+            on_function_call_result=self._on_function_call_result,
+            on_transcript_complete=self._on_turn_complete,
+        )
+
+        # Session B 핸들러: 수신자 -> User
+        self.session_b = SessionBHandler(
+            session=dual_session.session_b,
+            call=call,
+            on_translated_audio=self._on_session_b_audio,
+            on_caption=self._on_session_b_caption,
+            on_original_caption=self._on_session_b_original_caption,
+            on_recipient_speech_started=self._on_recipient_started,
+            on_recipient_speech_stopped=self._on_recipient_stopped,
+            on_transcript_complete=self._on_turn_complete,
+        )
+
+        # First Message 핸들러
+        self.first_message = FirstMessageHandler(
+            call=call,
+            session_a=self.session_a,
+            on_notify_app=self._notify_app,
+        )
+
+        # Interrupt 핸들러
+        self.interrupt = InterruptHandler(
+            session_a=self.session_a,
+            twilio_handler=twilio_handler,
+            on_notify_app=self._notify_app,
+        )
+
+        # Ring Buffers
+        self.ring_buffer_a = AudioRingBuffer(
+            capacity=settings.ring_buffer_capacity_slots,
+        )
+        self.ring_buffer_b = AudioRingBuffer(
+            capacity=settings.ring_buffer_capacity_slots,
+        )
+
+        # Echo Gate: 에코 피드백 루프 차단
+        self._echo_suppressed = False
+        self._echo_cooldown_task: asyncio.Task | None = None
+
+        # Echo Detector: 에너지 핑거프린트 기반 에코 감지
+        self._echo_detector: EchoDetector | None = None
+        if settings.echo_detector_enabled:
+            self._echo_detector = EchoDetector(
+                correlation_window_chunks=settings.echo_detector_correlation_window,
+                min_delay_chunks=settings.echo_detector_min_delay_chunks,
+                max_delay_chunks=settings.echo_detector_max_delay_chunks,
+                echo_threshold=settings.echo_detector_threshold,
+                safety_cooldown_s=settings.echo_detector_safety_cooldown_s,
+            )
+
+        # Recovery Managers
+        tools_a = get_tools_for_mode(call.mode) if call.mode == CallMode.AGENT else None
+        self.recovery_a = SessionRecoveryManager(
+            session=dual_session.session_a,
+            ring_buffer=self.ring_buffer_a,
+            call=call,
+            system_prompt=prompt_a,
+            on_notify_app=self._notify_app,
+            tools=tools_a,
+        )
+        self.recovery_b = SessionRecoveryManager(
+            session=dual_session.session_b,
+            ring_buffer=self.ring_buffer_b,
+            call=call,
+            system_prompt=prompt_b,
+            on_notify_app=self._notify_app,
+            on_recovered_caption=self._on_session_b_caption,
+        )
+
+    async def start(self) -> None:
+        self.call.started_at = time.time()
+        self._call_timer_task = asyncio.create_task(self._call_duration_timer())
+        self.recovery_a.start_monitoring()
+        self.recovery_b.start_monitoring()
+        logger.info("VoiceToVoicePipeline started for call %s", self.call.call_id)
+
+    async def stop(self) -> None:
+        if self._call_timer_task:
+            self._call_timer_task.cancel()
+            try:
+                await self._call_timer_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            try:
+                await self._echo_cooldown_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._echo_detector is not None:
+            self._echo_detector.reset()
+
+        await self.recovery_a.stop()
+        await self.recovery_b.stop()
+        logger.info("VoiceToVoicePipeline stopped for call %s", self.call.call_id)
+
+    # --- User App -> Session A ---
+
+    async def handle_user_audio(self, audio_b64: str) -> None:
+        audio_bytes = base64.b64decode(audio_b64)
+        seq = self.ring_buffer_a.write(audio_bytes)
+
+        if self.recovery_a.is_recovering:
+            return
+        if self.recovery_a.is_degraded:
+            transcript = await self.recovery_a.process_degraded_audio(audio_bytes)
+            if transcript:
+                await self._on_session_a_caption("user", f"[지연] {transcript}")
+            return
+
+        await self.session_a.send_user_audio(audio_b64)
+        self.ring_buffer_a.mark_sent(seq)
+
+    async def handle_user_audio_commit(self) -> None:
+        if self.recovery_a.is_recovering or self.recovery_a.is_degraded:
+            return
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.TRANSLATION_STATE,
+                data={"state": "processing"},
+            )
+        )
+        await self.context_manager.inject_context(self.dual_session.session_a)
+        await self.session_a.commit_user_audio()
+
+    async def handle_user_text(self, text: str) -> None:
+        self.call.transcript_history.append({"role": "user", "text": text})
+
+        if self.interrupt.is_recipient_speaking:
+            logger.info("Recipient is speaking — holding text until they finish...")
+            await self.interrupt.wait_for_recipient_done(timeout=10.0)
+
+        if self.session_a.is_generating:
+            logger.debug("Waiting for Session A to finish before sending text...")
+            await self.session_a.wait_for_done(timeout=5.0)
+
+        if self.call.mode == CallMode.RELAY:
+            await self.session_a.send_user_text(
+                f"[User says in {self.call.source_language}]: {text}"
+            )
+        else:
+            await self.session_a.send_user_text(text)
+
+    # --- Twilio -> Session B ---
+
+    async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
+        seq = self.ring_buffer_b.write(audio_bytes)
+
+        if self.recovery_b.is_recovering:
+            return
+        if self.recovery_b.is_degraded:
+            return
+
+        # Echo Detector: per-chunk 에코 감지
+        if self._echo_detector is not None:
+            if self._echo_detector.is_active and self._echo_detector.is_echo(audio_bytes):
+                return
+        else:
+            # 레거시: 2.5s blanket block
+            if self._echo_suppressed:
+                return
+
+        # 오디오 에너지 게이트
+        if settings.audio_energy_gate_enabled:
+            rms = _ulaw_rms(audio_bytes)
+            if rms < settings.audio_energy_min_rms:
+                return
+
+        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+        await self.session_b.send_recipient_audio(audio_b64)
+        self.ring_buffer_b.mark_sent(seq)
+
+    # --- Session A 콜백 ---
+
+    async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
+        if self.interrupt.is_recipient_speaking:
+            return
+        if self._echo_detector is not None:
+            self._echo_detector.record_sent_chunk(audio_bytes)
+        else:
+            self._activate_echo_suppression()
+        await self.twilio_handler.send_audio(audio_bytes)
+
+    async def _on_session_a_caption(self, role: str, text: str) -> None:
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.CAPTION,
+                data={"role": role, "text": text, "direction": "outbound"},
+            )
+        )
+
+    async def _on_session_a_done(self) -> None:
+        if self._echo_detector is not None:
+            self._echo_detector.mark_tts_done()
+        else:
+            self._start_echo_cooldown()
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.TRANSLATION_STATE,
+                data={"state": "done"},
+            )
+        )
+
+    # --- Session B 콜백 ---
+
+    async def _on_session_b_audio(self, audio_bytes: bytes) -> None:
+        if self._suppress_b_audio:
+            return
+        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.RECIPIENT_AUDIO,
+                data={"audio": audio_b64},
+            )
+        )
+
+    async def _on_session_b_caption(self, role: str, text: str) -> None:
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.CAPTION_TRANSLATED,
+                data={
+                    "role": role,
+                    "text": text,
+                    "stage": 2,
+                    "language": self.call.source_language,
+                    "direction": "inbound",
+                },
+            )
+        )
+
+    async def _on_session_b_original_caption(self, role: str, text: str) -> None:
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.CAPTION_ORIGINAL,
+                data={
+                    "role": role,
+                    "text": text,
+                    "stage": 1,
+                    "language": self.call.target_language,
+                    "direction": "inbound",
+                },
+            )
+        )
+
+    # --- Echo Gate ---
+
+    def _activate_echo_suppression(self) -> None:
+        self._echo_suppressed = True
+        self.session_b.output_suppressed = True
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            self._echo_cooldown_task = None
+
+    def _start_echo_cooldown(self) -> None:
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+        self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
+
+    async def _echo_cooldown_timer(self) -> None:
+        try:
+            await asyncio.sleep(settings.echo_gate_cooldown_s)
+            self._echo_suppressed = False
+            self.session_b.output_suppressed = False
+            self.session_b.clear_pending_output()
+            await self.session_b.clear_input_buffer()
+            logger.info(
+                "Echo gate released after %.1fs cooldown (pending output discarded, input buffer cleared)",
+                settings.echo_gate_cooldown_s,
+            )
+        except asyncio.CancelledError:
+            pass
+
+    # --- 수신자 발화 감지 ---
+
+    async def _on_recipient_started(self) -> None:
+        if self._echo_detector is not None:
+            pass  # per-chunk 감지가 에코를 걸러줌
+        else:
+            if self._echo_suppressed:
+                logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
+                return
+
+        if not self.call.first_message_sent:
+            await self.first_message.on_recipient_speech_detected()
+        else:
+            await self.interrupt.on_recipient_speech_started()
+
+    async def _on_recipient_stopped(self) -> None:
+        await self.context_manager.inject_context(self.dual_session.session_b)
+        await self.interrupt.on_recipient_speech_stopped()
+
+    # --- 대화 컨텍스트 ---
+
+    async def _on_turn_complete(self, role: str, text: str) -> None:
+        self.context_manager.add_turn(role, text)
+        if role == "recipient" and self.call.mode == CallMode.AGENT:
+            await self._forward_recipient_to_session_a(text)
+
+    async def _forward_recipient_to_session_a(self, text: str) -> None:
+        self.call.transcript_history.append({"role": "recipient", "text": text})
+        if self.session_a.is_generating:
+            logger.debug("Waiting for Session A before forwarding recipient translation...")
+            await self.session_a.wait_for_done(timeout=5.0)
+        logger.info("Agent Mode: forwarding recipient translation to Session A: %s", text[:80])
+        await self.session_a.send_user_text(f"[Recipient says]: {text}")
+
+    # --- Guardrail 콜백 ---
+
+    async def _on_guardrail_filler(self, filler_text: str) -> None:
+        logger.info("Guardrail: sending filler to Twilio: '%s'", filler_text)
+        await self.twilio_handler.send_clear()
+
+    async def _on_guardrail_corrected_tts(self, corrected_text: str) -> None:
+        logger.info("Guardrail: re-generating TTS with corrected text: '%s'", corrected_text[:60])
+        await self.dual_session.session_a.send_text(corrected_text)
+
+    async def _on_guardrail_event(self, event_data: dict) -> None:
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.GUARDRAIL_TRIGGERED,
+                data=event_data,
+            )
+        )
+
+    # --- Function Call 결과 ---
+
+    async def _on_function_call_result(self, result: str, data: dict) -> None:
+        logger.info("Function call result: %s", result)
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.CALL_STATUS,
+                data={"status": "call_result", "result": result, "data": data},
+            )
+        )
+
+    # --- App 알림 ---
+
+    async def _notify_app(self, msg: WsMessage) -> None:
+        await self._app_ws_send(msg)
+
+    # --- 통화 시간 제한 ---
+
+    async def _call_duration_timer(self) -> None:
+        try:
+            warning_s = settings.call_warning_ms / 1000
+            max_s = settings.max_call_duration_ms / 1000
+
+            await asyncio.sleep(warning_s)
+            await self._notify_app(
+                WsMessage(
+                    type=WsMessageType.CALL_STATUS,
+                    data={"status": "warning", "message": "통화 종료까지 2분 남았습니다."},
+                )
+            )
+            await asyncio.sleep(max_s - warning_s)
+            await self._notify_app(
+                WsMessage(
+                    type=WsMessageType.CALL_STATUS,
+                    data={"status": "timeout", "message": "최대 통화 시간을 초과하여 자동 종료됩니다."},
+                )
+            )
+            logger.info("Call %s timed out (max duration reached)", self.call.call_id)
+        except asyncio.CancelledError:
+            pass

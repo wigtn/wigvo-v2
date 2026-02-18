@@ -61,6 +61,9 @@ class SessionBHandler:
         self.session.on("response.audio.delta", self._handle_audio_delta)
         self.session.on("response.audio_transcript.delta", self._handle_transcript_delta)
         self.session.on("response.audio_transcript.done", self._handle_transcript_done)
+        # modalities=['text'] 전용: response.text.delta/done 핸들러
+        self.session.on("response.text.delta", self._handle_text_delta)
+        self.session.on("response.text.done", self._handle_text_done)
         self.session.on("response.done", self._handle_response_done)
         self.session.on(
             "input_audio_buffer.speech_started", self._handle_speech_started
@@ -142,11 +145,40 @@ class SessionBHandler:
         if self._on_caption:
             await self._on_caption("recipient", delta)
 
+    async def _handle_text_delta(self, event: dict[str, Any]) -> None:
+        """modalities=['text'] 모드: 번역 텍스트 스트리밍 → App 자막.
+
+        response.text.delta는 response.audio_transcript.delta와 동일한
+        'delta' 필드를 사용하므로 동일 로직으로 처리한다.
+        """
+        delta = event.get("delta", "")
+        if not delta:
+            return
+        if self._output_suppressed:
+            self._pending_output.append(("caption", ("recipient", delta)))
+            return
+        if self._on_caption:
+            await self._on_caption("recipient", delta)
+
     async def _handle_transcript_done(self, event: dict[str, Any]) -> None:
         """번역 텍스트 완료 + 양방향 transcript 저장 (억제 중에도 항상 저장)."""
         transcript = event.get("transcript", "")
         if not transcript:
             return
+        await self._save_transcript_and_notify(transcript)
+
+    async def _handle_text_done(self, event: dict[str, Any]) -> None:
+        """modalities=['text'] 모드: 번역 텍스트 완료.
+
+        Spike 검증 결과: response.text.done은 'text' 필드를 사용한다 (NOT 'transcript').
+        """
+        text = event.get("text", "")
+        if not text:
+            return
+        await self._save_transcript_and_notify(text)
+
+    async def _save_transcript_and_notify(self, transcript: str) -> None:
+        """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
         logger.info("[SessionB] Translation complete: %s", transcript[:80])
 
         # 양방향 transcript 저장 — 억제 상태와 무관하게 항상 저장
