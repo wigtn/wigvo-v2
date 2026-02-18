@@ -3,7 +3,7 @@
 > **Generated from**: docs/prd/PRD_PIPELINE_SEPARATION.md
 > **Created**: 2026-02-18
 > **Updated**: 2026-02-18
-> **Status**: pending
+> **Status**: completed
 
 ## Execution Config
 
@@ -72,12 +72,12 @@
 - [x] 3.8 TextToVoicePipeline 단위 테스트 작성 (14개)
 
 ### Phase 4: FullAgentPipeline + 마무리
-- [ ] 4.1 `src/realtime/pipeline/full_agent.py` 생성 (TextToVoice 기반 + Function Calling)
-- [ ] 4.2 Agent Mode 피드백 루프 (Session B 번역 → Session A) 이전
-- [ ] 4.3 FullAgentPipeline 단위 테스트 작성
-- [ ] 4.4 기존 AudioRouter의 불필요 코드 정리
-- [ ] 4.5 전체 테스트 (기존 124개 + 신규) 통과 확인
-- [ ] 4.6 최종 커밋
+- [x] 4.1 `src/realtime/pipeline/full_agent.py` 생성 (TextToVoice 상속 + Agent 피드백 루프)
+- [x] 4.2 Agent Mode 피드백 루프 (Session B 번역 → Session A) 구현
+- [x] 4.3 FullAgentPipeline 단위 테스트 작성 (9개)
+- [x] 4.4 AudioRouter에서 모든 Pipeline placeholder 제거 (4개 모드 모두 실제 Pipeline 연결)
+- [x] 4.5 전체 테스트 (기존 124개 + 신규 23개 = 147개) 통과 확인
+- [x] 4.6 최종 커밋
 
 ## Key Files
 
@@ -113,9 +113,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 25/29 |
-| Current Phase | 3 (TextToVoice) — 완료 |
-| Status | in_progress |
+| Total Tasks | 29/29 |
+| Current Phase | - |
+| Status | ✅ completed |
 
 ## Execution Log
 
@@ -139,3 +139,8 @@
 | 2026-02-18 | 3 | 3.4 first_message.py exact utterance 패턴 | done |
 | 2026-02-18 | 3 | 3.5-3.7 audio no-op + 에코 비초기화 + 에너지 게이트 유지 | done |
 | 2026-02-18 | 3 | 3.8 단위 테스트 14개 작성 (전체 138/138 통과) | done |
+| 2026-02-18 | 4 | 4.1-4.2 FullAgentPipeline 생성 (TextToVoice 상속 + 피드백 루프) | done |
+| 2026-02-18 | 4 | 4.3 단위 테스트 9개 작성 | done |
+| 2026-02-18 | 4 | 4.4 AudioRouter placeholder 제거, 4개 모드 모두 실제 Pipeline 연결 | done |
+| 2026-02-18 | 4 | 4.5 전체 147/147 테스트 통과 | done |
+| 2026-02-18 | 4 | 4.6 최종 커밋 | done |

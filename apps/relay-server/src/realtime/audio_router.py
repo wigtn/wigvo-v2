@@ -17,6 +17,7 @@ import logging
 from typing import Any, Callable, Coroutine
 
 from src.realtime.pipeline.base import BasePipeline
+from src.realtime.pipeline.full_agent import FullAgentPipeline
 from src.realtime.pipeline.text_to_voice import TextToVoicePipeline
 from src.realtime.pipeline.voice_to_voice import VoiceToVoicePipeline
 from src.realtime.session_manager import DualSessionManager
@@ -105,8 +106,7 @@ class AudioRouter:
                     prompt_b=prompt_b,
                 )
             case CommunicationMode.FULL_AGENT:
-                # Phase 4에서 FullAgentPipeline으로 교체
-                return VoiceToVoicePipeline(
+                return FullAgentPipeline(
                     call=call,
                     dual_session=dual_session,
                     twilio_handler=twilio_handler,
