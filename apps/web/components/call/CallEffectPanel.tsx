@@ -21,6 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { CommunicationMode } from '@/shared/call-types';
+import { getCallCategory } from '@/shared/call-types';
 
 const Orb = dynamic(() => import('@/components/ui/Orb'), { ssr: false });
 

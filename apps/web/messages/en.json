@@ -80,6 +80,8 @@
     "editPrompt": "Please tell me what you'd like to change."
   },
   "scenario": {
+    "title": "How would you like to <accent>call</accent>?",
+    "subtitle": "Choose your call method",
     "quickTitle": "What <accent>call</accent> can I make for you?",
     "quickSubtitle": "Start with a single tap",
     "modeLabel": "Call mode",
@@ -90,6 +92,33 @@
     "scenarioTitle": "What's the purpose of your <accent>call</accent>?",
     "scenarioSubtitle": "AI makes the call on your behalf",
     "subtypeQuestion": "What type is it?",
+    "category": {
+      "directTitle": "Direct Call",
+      "directSubtitle": "Real-time Translation",
+      "directDesc": "Talk directly with real-time AI translation assistance",
+      "aiAutoTitle": "AI Auto Call",
+      "aiAutoSubtitle": "AI Agent",
+      "aiAutoDesc": "Tell us what you need and AI makes the call for you"
+    },
+    "direct": {
+      "title": "Choose your call options",
+      "subtitle": "Pick the best mode for your needs",
+      "inputLabel": "Your input method",
+      "inputVoice": "Speak with voice",
+      "inputVoiceDesc": "Talk directly into the mic",
+      "inputText": "Type text",
+      "inputTextDesc": "Send messages by typing",
+      "outputLabel": "Recipient audio",
+      "outputVoice": "Listen to voice",
+      "outputVoiceDesc": "Hear translated voice playback",
+      "outputCaption": "Read captions",
+      "outputCaptionDesc": "See translated text only",
+      "startCall": "Start Call"
+    },
+    "aiAuto": {
+      "title": "What's the <accent>purpose</accent> of your call?",
+      "subtitle": "AI will make the call on your behalf"
+    },
     "quick": {
       "restaurant": "Restaurant",
       "restaurantDesc": "Dining, cafe",
@@ -132,6 +161,10 @@
       "textToVoice": "Text to Voice",
       "voiceToText": "Voice to Text",
       "fullAgent": "AI Auto Call"
+    },
+    "categoryLabel": {
+      "direct": "Direct Call",
+      "aiAuto": "AI Auto Call"
     }
   },
   "call": {

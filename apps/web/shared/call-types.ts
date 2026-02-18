@@ -64,6 +64,29 @@ export type CommunicationMode =
   | 'voice_to_text'    // 상대방 음성 → 자막 표시
   | 'full_agent';      // AI 자율 통화
 
+// --- Call Category (v5: 2-category UI) ---
+
+export type CallCategory = 'direct' | 'ai_auto';
+
+/** Map CommunicationMode → CallCategory */
+export function getCallCategory(mode: CommunicationMode): CallCategory {
+  return mode === 'full_agent' ? 'ai_auto' : 'direct';
+}
+
+/** Direct call sub-options for UI */
+export interface DirectCallOptions {
+  translation: boolean;    // 번역 on/off
+  inputMethod: 'voice' | 'text';  // 사용자 입력 방식
+  outputMethod: 'voice' | 'caption';  // 상대방 출력 방식
+}
+
+/** Resolve DirectCallOptions to CommunicationMode */
+export function resolveDirectMode(options: DirectCallOptions): CommunicationMode {
+  if (options.inputMethod === 'text') return 'text_to_voice';
+  if (options.outputMethod === 'caption') return 'voice_to_text';
+  return 'voice_to_voice';
+}
+
 export interface ModeUIConfig {
   audioInput: boolean;   // 마이크 녹음 활성화
   audioOutput: boolean;  // 수신자 음성 재생
