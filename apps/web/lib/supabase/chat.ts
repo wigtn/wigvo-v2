@@ -13,6 +13,7 @@ import {
   ScenarioSubType,
   createEmptyCollectedData,
 } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 import { GREETING_MESSAGE } from '@/lib/prompts';
 import { getScenarioGreeting } from '@/lib/scenarios/config';
 import { CONVERSATION_HISTORY_LIMIT } from '@/lib/constants';
@@ -46,15 +47,17 @@ interface MessageRow {
  * @param userId - 사용자 ID
  * @param scenarioType - 시나리오 타입 (선택적)
  * @param subType - 서브 시나리오 타입 (선택적)
+ * @param communicationMode - 통화 모드 (선택적, v5: 모드별 인사 분기)
  */
 export async function createConversation(
   userId: string,
   scenarioType?: ScenarioType,
-  subType?: ScenarioSubType
+  subType?: ScenarioSubType,
+  communicationMode?: CommunicationMode
 ) {
   const supabase = await createClient();
 
-  // 1. v4: 시나리오 타입이 있으면 초기 collected_data에 설정
+  // 1. v5: 시나리오 타입 + 모드 설정
   const initialCollectedData = createEmptyCollectedData();
   if (scenarioType) {
     initialCollectedData.scenario_type = scenarioType;
@@ -78,9 +81,9 @@ export async function createConversation(
     throw new Error(`Failed to create conversation: ${convError?.message}`);
   }
 
-  // 3. v4: 시나리오별 인사 메시지 선택
+  // 3. v5: 모드 + 시나리오별 인사 메시지 선택
   const greeting = scenarioType && subType
-    ? getScenarioGreeting(scenarioType, subType)
+    ? getScenarioGreeting(scenarioType, subType, communicationMode)
     : GREETING_MESSAGE;
 
   // 4. 초기 인사 메시지 저장

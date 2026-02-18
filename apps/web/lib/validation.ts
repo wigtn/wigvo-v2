@@ -38,6 +38,9 @@ export const ChatRequestSchema = z.object({
     .min(1, 'message is required')
     .max(MAX_MESSAGE_LENGTH, `message must be ${MAX_MESSAGE_LENGTH} characters or less`)
     .transform((val) => val.trim()),
+  communicationMode: z
+    .enum(['voice_to_voice', 'text_to_voice', 'voice_to_text', 'full_agent'])
+    .optional(),
   location: LocationSchema.optional(),
   previousSearchResults: z
     .array(

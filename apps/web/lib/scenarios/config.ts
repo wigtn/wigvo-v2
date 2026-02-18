@@ -12,6 +12,7 @@ import type {
   AsRequestSubType,
   CollectedData,
 } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 
 // -----------------------------------------------------------------------------
 // 서브타입별 필수 필드 정의
@@ -159,17 +160,36 @@ export function getSubTypeConfig(
 }
 
 /**
+ * 모드별 필수 필드 반환
+ * - full_agent: 시나리오별 전체 필수 필드 (기존 동작)
+ * - relay 모드 (voice_to_voice, text_to_voice, voice_to_text): target_name + target_phone만 필수
+ */
+export function getRequiredFieldsForMode(
+  scenarioType: ScenarioType,
+  subType: ScenarioSubType,
+  communicationMode?: CommunicationMode
+): (keyof CollectedData)[] {
+  if (communicationMode && communicationMode !== 'full_agent') {
+    // relay 모드: 최소 필드만 필요
+    return ['target_name', 'target_phone'];
+  }
+  // full_agent 또는 모드 미지정: 기존 시나리오별 필수 필드
+  const config = getSubTypeConfig(scenarioType, subType);
+  return config ? config.requiredFields : ['target_name', 'target_phone'];
+}
+
+/**
  * 필수 필드가 모두 수집되었는지 확인
  */
 export function isCollectionComplete(
   scenarioType: ScenarioType,
   subType: ScenarioSubType,
-  collected: CollectedData
+  collected: CollectedData,
+  communicationMode?: CommunicationMode
 ): boolean {
-  const config = getSubTypeConfig(scenarioType, subType);
-  if (!config) return false;
+  const requiredFields = getRequiredFieldsForMode(scenarioType, subType, communicationMode);
 
-  return config.requiredFields.every((field) => {
+  return requiredFields.every((field) => {
     const value = collected[field];
     if (Array.isArray(value)) {
       return value.length > 0;
@@ -184,18 +204,17 @@ export function isCollectionComplete(
 export function getNextRequiredField(
   scenarioType: ScenarioType,
   subType: ScenarioSubType,
-  collected: CollectedData
+  collected: CollectedData,
+  communicationMode?: CommunicationMode
 ): keyof CollectedData | null {
-  const config = getSubTypeConfig(scenarioType, subType);
-  if (!config) return null;
+  const requiredFields = getRequiredFieldsForMode(scenarioType, subType, communicationMode);
 
-  for (const field of config.requiredFields) {
+  for (const field of requiredFields) {
     const value = collected[field];
     if (value === null || value === undefined || value === '') {
       return field;
     }
     if (Array.isArray(value) && value.length === 0) {
-      // 배열 필드는 빈 배열이어도 OK (선택적)
       continue;
     }
   }
@@ -241,17 +260,30 @@ export function getScenarioOptions() {
 }
 
 /**
- * 시나리오별 초기 인사 메시지 생성
+ * 시나리오별 초기 인사 메시지 생성 (모드별 분기)
  */
 export function getScenarioGreeting(
   scenarioType: ScenarioType,
-  subType: ScenarioSubType
+  subType: ScenarioSubType,
+  communicationMode?: CommunicationMode
 ): string {
   const config = getSubTypeConfig(scenarioType, subType);
   if (!config) {
     return '안녕하세요! 어떤 전화를 대신 걸어드릴까요?';
   }
 
+  // relay 모드: 간결한 인사 (전화할 곳 + 번호만 수집)
+  if (communicationMode && communicationMode !== 'full_agent') {
+    const modeLabels: Record<string, string> = {
+      voice_to_voice: '양방향 음성 번역',
+      text_to_voice: '텍스트→음성',
+      voice_to_text: '음성→자막',
+    };
+    const modeLabel = modeLabels[communicationMode] || communicationMode;
+    return `${modeLabel} 모드로 전화를 걸어드릴게요! 어디에 전화하시겠어요? (장소 이름과 전화번호만 알려주세요)`;
+  }
+
+  // full_agent: 기존 상세 인사
   const greetings: Record<ScenarioType, Record<string, string>> = {
     RESERVATION: {
       RESTAURANT: '식당 예약을 도와드릴게요! 어느 식당에 예약하시겠어요?',

@@ -1,15 +1,21 @@
 'use client';
 
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CollectedData } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
-import CallModeSelector from '@/components/call/CallModeSelector';
-import { Phone, Pencil, Plus, MapPin, Calendar, Scissors, User, Users, FileText } from 'lucide-react';
+import { Phone, Pencil, Plus, MapPin, Calendar, Scissors, User, Users, FileText, Mic, MessageSquare, Captions, Bot } from 'lucide-react';
+
+const MODE_LABELS: Record<CommunicationMode, { label: string; icon: React.ReactNode }> = {
+  voice_to_voice: { label: '양방향 음성 번역', icon: <Mic className="size-3" /> },
+  text_to_voice: { label: '텍스트→음성', icon: <MessageSquare className="size-3" /> },
+  voice_to_text: { label: '음성→자막', icon: <Captions className="size-3" /> },
+  full_agent: { label: 'AI 자율 통화', icon: <Bot className="size-3" /> },
+};
 
 interface CollectionSummaryProps {
   data: CollectedData;
-  onConfirm: (communicationMode: CommunicationMode) => void;
+  communicationMode?: CommunicationMode | null;
+  onConfirm: () => void;
   onEdit: () => void;
   onNewConversation: () => void;
   isLoading?: boolean;
@@ -17,22 +23,33 @@ interface CollectionSummaryProps {
 
 export default function CollectionSummary({
   data,
+  communicationMode,
   onConfirm,
   onEdit,
   onNewConversation,
   isLoading = false,
 }: CollectionSummaryProps) {
   const t = useTranslations('collection');
-  const [communicationMode, setCommunicationMode] = useState<CommunicationMode>('voice_to_voice');
+
+  const modeInfo = communicationMode ? MODE_LABELS[communicationMode] : null;
 
   return (
     <div className="mx-4 mb-2 rounded-xl surface-card shadow-sm p-4 space-y-3">
       {/* 헤더 */}
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-        <span className="text-[10px] text-teal-600 font-medium uppercase tracking-wider">
-          {t('collectionComplete')}
-        </span>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+          <span className="text-[10px] text-teal-600 font-medium uppercase tracking-wider">
+            {t('collectionComplete')}
+          </span>
+        </div>
+        {/* 통화 모드 배지 */}
+        {modeInfo && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F1F5F9] border border-[#E2E8F0]">
+            {modeInfo.icon}
+            <span className="text-[10px] text-[#64748B] font-medium">{modeInfo.label}</span>
+          </div>
+        )}
       </div>
 
       {/* 수집된 정보 */}
@@ -80,12 +97,6 @@ export default function CollectionSummary({
         )}
       </div>
 
-      {/* 통화 모드 선택 */}
-      <CallModeSelector
-        selectedMode={communicationMode}
-        onModeSelect={setCommunicationMode}
-      />
-
       {/* 버튼 그룹 */}
       <div className="flex gap-2 pt-1">
         <button
@@ -97,7 +108,7 @@ export default function CollectionSummary({
           {t('edit')}
         </button>
         <button
-          onClick={() => onConfirm(communicationMode)}
+          onClick={onConfirm}
           disabled={isLoading}
           className="flex-1 h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-medium bg-[#0F172A] text-white hover:bg-[#1E293B] transition-all disabled:opacity-40 shadow-sm"
         >

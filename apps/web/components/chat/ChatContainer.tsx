@@ -18,6 +18,7 @@ export default function ChatContainer() {
     isLoading,
     isInitializing,
     scenarioSelected,
+    communicationMode,
     handleScenarioSelect,
     sendMessage,
     handleConfirm,
@@ -155,6 +156,7 @@ export default function ChatContainer() {
       {!isCalling && collectedData && (isComplete || conversationStatus === "READY") && (
         <CollectionSummary
           data={collectedData}
+          communicationMode={communicationMode}
           onConfirm={handleConfirm}
           onEdit={handleEdit}
           onNewConversation={handleNewConversation}

@@ -29,16 +29,17 @@ async function handleResponse<T>(response: Response): Promise<T> {
 // ── Conversation ──────────────────────────────────────────────
 
 /**
- * 새 대화 시작 (v4: 시나리오 타입 지원)
+ * 새 대화 시작 (v5: 모드 + 시나리오 타입 지원)
  */
 export async function createConversation(
   scenarioType?: ScenarioType,
-  subType?: ScenarioSubType
+  subType?: ScenarioSubType,
+  communicationMode?: CommunicationMode
 ): Promise<CreateConversationResponse> {
   const response = await fetch('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenarioType, subType }),
+    body: JSON.stringify({ scenarioType, subType, communicationMode }),
   });
   return handleResponse<CreateConversationResponse>(response);
 }
@@ -53,11 +54,15 @@ export async function getConversation(id: string): Promise<Conversation> {
 export async function sendChatMessage(
   conversationId: string,
   message: string,
-  previousSearchResults?: Array<{ name: string; address: string; roadAddress: string; telephone: string; category: string; mapx: number; mapy: number }>
+  previousSearchResults?: Array<{ name: string; address: string; roadAddress: string; telephone: string; category: string; mapx: number; mapy: number }>,
+  communicationMode?: CommunicationMode
 ): Promise<ChatResponse> {
   const body: Record<string, unknown> = { conversationId, message };
   if (previousSearchResults && previousSearchResults.length > 0) {
     body.previousSearchResults = previousSearchResults;
+  }
+  if (communicationMode) {
+    body.communicationMode = communicationMode;
   }
   const response = await fetch('/api/chat', {
     method: 'POST',

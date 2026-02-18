@@ -25,6 +25,8 @@ import {
   ERROR_AUTO_DISMISS_MS,
 } from '@/lib/constants';
 
+const STORAGE_KEY_COMMUNICATION_MODE = 'currentCommunicationMode';
+
 interface UseChatReturn {
   conversationId: string | null;
   messages: Message[];
@@ -33,13 +35,14 @@ interface UseChatReturn {
   isLoading: boolean;
   isInitializing: boolean;
   conversationStatus: ConversationStatus;
-  // v4: 시나리오 선택 관련
+  // v5: 모드 + 시나리오 선택 관련
   scenarioSelected: boolean;
   selectedScenario: ScenarioType | null;
   selectedSubType: ScenarioSubType | null;
-  handleScenarioSelect: (scenarioType: ScenarioType, subType: ScenarioSubType) => Promise<void>;
+  communicationMode: CommunicationMode | null;
+  handleScenarioSelect: (scenarioType: ScenarioType, subType: ScenarioSubType, communicationMode: CommunicationMode) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
-  handleConfirm: (communicationMode?: CommunicationMode) => Promise<void>;
+  handleConfirm: () => Promise<void>;
   handleEdit: () => void;
   handleNewConversation: () => Promise<void>;
   error: string | null;
@@ -61,10 +64,11 @@ export function useChat(): UseChatReturn {
   const [conversationStatus, setConversationStatus] = useState<ConversationStatus>('COLLECTING');
   const [error, setError] = useState<string | null>(null);
   
-  // v4: 시나리오 선택 상태
+  // v5: 모드 + 시나리오 선택 상태
   const [scenarioSelected, setScenarioSelected] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
   const [selectedSubType, setSelectedSubType] = useState<ScenarioSubType | null>(null);
+  const [communicationMode, setCommunicationMode] = useState<CommunicationMode | null>(null);
 
   // ── Refs (StrictMode 이중 초기화 방지) ─────────────────────
   const initializedRef = useRef(false);
@@ -83,23 +87,28 @@ export function useChat(): UseChatReturn {
     router.push('/login');
   }, [router]);
 
-  // ── startConversation (v4: 시나리오 타입 지원) ─────────────
+  // ── startConversation (v5: 모드 + 시나리오 타입 지원) ───────
   const startConversation = useCallback(async (
     scenarioType?: ScenarioType,
-    subType?: ScenarioSubType
+    subType?: ScenarioSubType,
+    mode?: CommunicationMode
   ) => {
     try {
-      const data = await createConversation(scenarioType, subType);
+      const data = await createConversation(scenarioType, subType, mode);
       setConversationId(data.id);
       setConversationStatus(data.status);
       setCollectedData(data.collectedData ?? createEmptyCollectedData());
       setIsComplete(false);
 
-      // v4: 시나리오 선택 상태 업데이트
+      // v5: 모드 + 시나리오 선택 상태 업데이트
       if (scenarioType && subType) {
         setScenarioSelected(true);
         setSelectedScenario(scenarioType);
         setSelectedSubType(subType);
+      }
+      if (mode) {
+        setCommunicationMode(mode);
+        localStorage.setItem(STORAGE_KEY_COMMUNICATION_MODE, mode);
       }
 
       // greeting 메시지 추가
@@ -130,13 +139,15 @@ export function useChat(): UseChatReturn {
       try {
         const data = await getConversation(id);
 
-        // 이미 완료된 대화면 새로 시작 (시나리오 선택 화면으로)
+        // 이미 완료된 대화면 새로 시작 (모드 선택 화면으로)
         if (data.status === 'COMPLETED' || data.status === 'CALLING') {
           localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
-          // v4: 시나리오 선택 화면으로 돌아감
+          localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
+          // v5: 모드 선택 화면으로 돌아감
           setScenarioSelected(false);
           setSelectedScenario(null);
           setSelectedSubType(null);
+          setCommunicationMode(null);
           setIsInitializing(false);
           return;
         }
@@ -146,14 +157,18 @@ export function useChat(): UseChatReturn {
         setCollectedData(data.collectedData ?? createEmptyCollectedData());
         setIsComplete(data.status === 'READY');
         setMessages(data.messages ?? []);
-        
-        // v4: 시나리오 상태 복원
+
+        // v5: 모드 + 시나리오 상태 복원
+        const savedMode = localStorage.getItem(STORAGE_KEY_COMMUNICATION_MODE) as CommunicationMode | null;
+        if (savedMode) {
+          setCommunicationMode(savedMode);
+        }
+
         if (data.collectedData?.scenario_type && data.collectedData?.scenario_sub_type) {
           setScenarioSelected(true);
           setSelectedScenario(data.collectedData.scenario_type);
           setSelectedSubType(data.collectedData.scenario_sub_type);
         } else {
-          // 시나리오가 없으면 시나리오 선택 화면으로
           setScenarioSelected(false);
           setSelectedScenario(null);
           setSelectedSubType(null);
@@ -163,11 +178,13 @@ export function useChat(): UseChatReturn {
           handle401();
           return;
         }
-        // 404 또는 기타 에러: localStorage 삭제 후 시나리오 선택 화면으로
+        // 404 또는 기타 에러: localStorage 삭제 후 모드 선택 화면으로
         localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
+        localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
         setScenarioSelected(false);
         setSelectedScenario(null);
         setSelectedSubType(null);
+        setCommunicationMode(null);
       }
     },
     [handle401]
@@ -186,10 +203,11 @@ export function useChat(): UseChatReturn {
         // 기존 대화 복원 시도
         await resumeConversation(savedId);
       } else {
-        // v4: 새 대화는 시나리오 선택 화면부터 시작
+        // v5: 새 대화는 모드 선택 화면부터 시작
         setScenarioSelected(false);
         setSelectedScenario(null);
         setSelectedSubType(null);
+        setCommunicationMode(null);
       }
 
       setIsInitializing(false);
@@ -198,16 +216,17 @@ export function useChat(): UseChatReturn {
     init();
   }, [resumeConversation]);
   
-  // ── handleScenarioSelect (v4: 시나리오 선택 후 대화 시작) ───
+  // ── handleScenarioSelect (v5: 모드 + 시나리오 선택 후 대화 시작) ───
   const handleScenarioSelect = useCallback(async (
     scenarioType: ScenarioType,
-    subType: ScenarioSubType
+    subType: ScenarioSubType,
+    mode: CommunicationMode
   ) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      await startConversation(scenarioType, subType);
+      await startConversation(scenarioType, subType, mode);
     } catch (err) {
       if (err instanceof Error && err.message === 'Unauthorized') {
         handle401();
@@ -248,10 +267,15 @@ export function useChat(): UseChatReturn {
       setIsLoading(true);
 
       try {
-        // 2. API 호출 (이전 검색 결과도 함께 전달)
+        // 2. API 호출 (이전 검색 결과 + 통화 모드 함께 전달)
         setIsSearching(true);
         const currentSearchResults = useDashboard.getState().searchResults;
-        const data = await sendChatMessage(conversationId, content.trim(), currentSearchResults.length > 0 ? currentSearchResults : undefined);
+        const data = await sendChatMessage(
+          conversationId,
+          content.trim(),
+          currentSearchResults.length > 0 ? currentSearchResults : undefined,
+          communicationMode || undefined
+        );
         setIsSearching(false);
 
         // 3. 성공: assistant 메시지 추가 + collected 데이터 업데이트
@@ -353,12 +377,12 @@ export function useChat(): UseChatReturn {
         setIsLoading(false);
       }
     },
-    [conversationId, handle401, setErrorWithAutoDismiss]
+    [conversationId, communicationMode, handle401, setErrorWithAutoDismiss]
   );
 
   // ── handleConfirm: 전화 걸기 (더블클릭 방지 포함) ─────────
   const confirmingRef = useRef(false);
-  const handleConfirm = useCallback(async (communicationMode?: CommunicationMode) => {
+  const handleConfirm = useCallback(async () => {
     if (!conversationId || confirmingRef.current) return;
     confirmingRef.current = true;
 
@@ -366,8 +390,8 @@ export function useChat(): UseChatReturn {
     setError(null);
 
     try {
-      // 1. Call 생성 (communicationMode 전달)
-      const call = await createCall(conversationId, communicationMode);
+      // 1. Call 생성 (저장된 communicationMode 사용)
+      const call = await createCall(conversationId, communicationMode || undefined);
 
       // 2. Call 시작
       await startCall(call.id);
@@ -384,7 +408,7 @@ export function useChat(): UseChatReturn {
       setIsLoading(false);
       confirmingRef.current = false;
     }
-  }, [conversationId, handle401, setCallingCallId, setErrorWithAutoDismiss]);
+  }, [conversationId, communicationMode, handle401, setCallingCallId, setErrorWithAutoDismiss]);
 
   // ── handleEdit: 수정하기 ──────────────────────────────────
   const handleEdit = useCallback(() => {
@@ -401,19 +425,21 @@ export function useChat(): UseChatReturn {
     setMessages((prev) => [...prev, editMsg]);
   }, []);
 
-  // ── handleNewConversation: 새 대화 시작 (v4: 시나리오 선택 화면으로) ─
+  // ── handleNewConversation: 새 대화 시작 (v5: 모드 선택 화면으로) ─
   const handleNewConversation = useCallback(async () => {
     localStorage.removeItem(STORAGE_KEY_CONVERSATION_ID);
+    localStorage.removeItem(STORAGE_KEY_COMMUNICATION_MODE);
     setMessages([]);
     setCollectedData(null);
     setIsComplete(false);
     setConversationStatus('COLLECTING');
     setConversationId(null);
     setError(null);
-    // v4: 시나리오 선택 화면으로 돌아감
+    // v5: 모드 선택 화면으로 돌아감
     setScenarioSelected(false);
     setSelectedScenario(null);
     setSelectedSubType(null);
+    setCommunicationMode(null);
     // 대시보드 초기화 (지도, 검색결과, 통화)
     resetDashboard();
     resetCalling();
@@ -427,10 +453,11 @@ export function useChat(): UseChatReturn {
     isLoading,
     isInitializing,
     conversationStatus,
-    // v4: 시나리오 선택 관련
+    // v5: 모드 + 시나리오 선택 관련
     scenarioSelected,
     selectedScenario,
     selectedSubType,
+    communicationMode,
     handleScenarioSelect,
     sendMessage,
     handleConfirm,

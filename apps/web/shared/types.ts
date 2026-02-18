@@ -275,6 +275,7 @@ export interface CallRow {
 export interface ChatRequest {
   conversationId: string;
   message: string;
+  communicationMode?: 'voice_to_voice' | 'text_to_voice' | 'voice_to_text' | 'full_agent';
   location?: {
     lat: number;
     lng: number;

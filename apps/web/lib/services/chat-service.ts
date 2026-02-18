@@ -16,6 +16,7 @@ import {
   mergeCollectedData,
   NaverPlaceResultBasic,
 } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 import {
   LLM_CONTEXT_MESSAGE_LIMIT,
   MAX_TOOL_CALL_LOOPS,
@@ -38,6 +39,7 @@ interface ChatContext {
   userMessage: string;
   location?: { lat: number; lng: number };
   previousSearchResults?: NaverPlaceResultBasic[];
+  communicationMode?: CommunicationMode;
 }
 
 interface ChatResult {
@@ -135,38 +137,35 @@ function formatSearchResultsForTool(results: NaverPlaceResult[]): string {
 // -----------------------------------------------------------------------------
 
 export async function processChat(context: ChatContext): Promise<ChatResult> {
-  const { existingData, history, userMessage, location, previousSearchResults } =
+  const { existingData, history, userMessage, location, previousSearchResults, communicationMode } =
     context;
 
   // 이전 검색 결과 초기화
   let placeSearchResults: NaverPlaceResult[] = previousSearchResults || [];
 
-  // 1. 시스템 프롬프트 생성
+  // 1. 시스템 프롬프트 생성 (모드별 분기)
   let systemPrompt: string;
+  const placeResults = placeSearchResults.length > 0
+    ? placeSearchResults.map((p) => ({
+        name: p.name,
+        telephone: p.telephone,
+        address: p.address || p.roadAddress,
+      }))
+    : undefined;
+
   if (existingData.scenario_type && existingData.scenario_sub_type) {
     systemPrompt = buildScenarioPrompt(
       existingData.scenario_type,
       existingData.scenario_sub_type,
       existingData,
-      placeSearchResults.length > 0
-        ? placeSearchResults.map((p) => ({
-            name: p.name,
-            telephone: p.telephone,
-            address: p.address || p.roadAddress,
-          }))
-        : undefined
+      placeResults,
+      communicationMode
     );
   } else {
     systemPrompt = buildSystemPromptWithContext(
       existingData,
       existingData.scenario_type || undefined,
-      placeSearchResults.length > 0
-        ? placeSearchResults.map((p) => ({
-            name: p.name,
-            telephone: p.telephone,
-            address: p.address || p.roadAddress,
-          }))
-        : undefined
+      placeResults
     );
   }
 
@@ -329,12 +328,21 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
 
 export function isReadyForCall(
   mergedData: CollectedData,
-  isComplete: boolean
+  isComplete: boolean,
+  communicationMode?: CommunicationMode
 ): { ready: boolean; forceReady: boolean } {
-  const canPlaceCall =
-    !!mergedData.target_name &&
-    !!mergedData.target_phone &&
-    (mergedData.scenario_type !== 'RESERVATION' || !!mergedData.primary_datetime);
+  let canPlaceCall: boolean;
+
+  if (communicationMode && communicationMode !== 'full_agent') {
+    // relay 모드: target_name + target_phone만 있으면 전화 가능
+    canPlaceCall = !!mergedData.target_name && !!mergedData.target_phone;
+  } else {
+    // full_agent: 기존 로직 (예약이면 primary_datetime도 필요)
+    canPlaceCall =
+      !!mergedData.target_name &&
+      !!mergedData.target_phone &&
+      (mergedData.scenario_type !== 'RESERVATION' || !!mergedData.primary_datetime);
+  }
 
   const forceReady = !isComplete && canPlaceCall;
 

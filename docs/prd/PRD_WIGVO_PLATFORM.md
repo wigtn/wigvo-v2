@@ -194,27 +194,41 @@ Priority 3 (최저): AI 생성 — 언제든 중단 가능
 | `/result/[id]` | ResultCard | 통화 결과 요약 | IMPLEMENTED |
 | `/history` | HistoryList | 통화 이력 | IMPLEMENTED |
 
-#### 4.1.2 Chat Flow (AI Information Collection)
+#### 4.1.2 Chat Flow (AI Information Collection) — v5: Mode-First
 
 ```
-1. Scenario Selection
+1. Communication Mode Selection (v5 — 가장 먼저!)
+   ├── voice_to_voice: 양방향 음성 번역 (Relay)
+   ├── text_to_voice: 텍스트→음성 (Relay)
+   ├── voice_to_text: 음성→자막 (Relay)
+   └── full_agent: AI 자율 통화 (Agent)
+         ↓
+2. Scenario Selection
    ├── RESERVATION (식당, 미용실, 병원, 숙소, 기타)
    ├── INQUIRY (영업시간, 가격, 위치, 서비스, 기타)
    └── AS_REQUEST (수리, 교환, 환불, A/S접수, 기타)
          ↓
-2. AI Chat (gpt-4o-mini + Function Calling)
-   ├── 정보 수집 (날짜, 인원, 이름, 전화번호 등)
+3. AI Chat (gpt-4o-mini + Function Calling)
+   ├── 모드별 수집 깊이 분기:
+   │   ├── Relay 모드: target_name + target_phone만 수집
+   │   └── Agent 모드: 시나리오별 전체 필수 필드 수집
    ├── search_place() → 네이버 장소 검색 API
    ├── Smart Place Matching (번호/이름/AI 응답 매칭)
    └── 지도 실시간 업데이트
          ↓
-3. Collection Summary (is_complete 검증)
-   ├── target_name + target_phone 필수
-   ├── date (예약 시나리오만 필수)
+4. Collection Summary (모드별 is_complete 검증)
+   ├── 모드 배지 표시 (CallModeSelector 제거)
+   ├── Relay: target_name + target_phone 충족 시 READY
+   ├── Agent: 시나리오별 필수 필드 전체 충족 시 READY
    └── 편집/확인 UI
          ↓
-4. Call Initiation
+5. Call Initiation (저장된 communicationMode 자동 전달)
 ```
+
+**모드 선택을 먼저 하는 이유:**
+- Relay 모드 사용자(외국인, 장애인)는 전화번호만 알면 바로 통화 가능 — 불필요한 상세 정보 질문 제거
+- Agent 모드 사용자(콜포비아)는 AI가 대화하므로 모든 정보가 사전에 필요
+- 모드에 따라 AI 챗봇의 질문 깊이/인사말이 자동 조절
 
 #### 4.1.3 Call Flow (Realtime Communication)
 
@@ -534,8 +548,8 @@ Whisper Batch STT → 컨텍스트 재주입
 
 | Gap ID | Feature | Description | Impact | Priority |
 |--------|---------|-------------|--------|----------|
-| **GAP-1** | CallMode 선택 UI | `CallModeSelector.tsx` 존재하나 미사용. 항상 Agent 모드 기본값. `call_mode = NULL` 저장 | 사용자가 Relay 모드 사용 불가 | **P0** |
-| **GAP-2** | 접근성 모드 분기 | Voice→Text, Text→Voice 모드 선택 없음 | 청각/언어 장애인 지원 불가 | **P0** |
+| ~~**GAP-1**~~ | ~~CallMode 선택 UI~~ | **RESOLVED**: v5 Mode-First UX — ScenarioSelector 3-screen wizard (mode → scenario → subtype). communicationMode가 전체 체인에 전달됨 | ~~사용자가 Relay 모드 사용 불가~~ | ~~**P0**~~ |
+| ~~**GAP-2**~~ | ~~접근성 모드 분기~~ | **RESOLVED**: 4가지 모드 (V2V, T2V, V2T, Agent) 선택 UI + 모드별 수집 깊이 분기 + 모드별 프롬프트/인사말 | ~~청각/언어 장애인 지원 불가~~ | ~~**P0**~~ |
 | **GAP-3** | OAuth 로그인 | 버튼 존재, 미설정 | Social login 불가 | P1 |
 | **GAP-4** | CORS 제한 | Wildcard allow_origins | 프로덕션 보안 취약 | P1 |
 | **GAP-5** | Rate Limiting | 미구현 | API 남용 가능 | P1 |
@@ -550,8 +564,8 @@ Whisper Batch STT → 컨텍스트 재주입
 |----------------|----------------|---------|
 | 이중 세션 (A/B) | Session A + B 분리 운영 | MATCH |
 | Echo Gate | Output-only suppression + cooldown | MATCH |
-| Relay/Agent 모드 | 코드 분기 존재, UI 선택 없음 | PARTIAL (GAP-1) |
-| 접근성 4개 모드 | Agent(Text) 1개만 작동 | PARTIAL (GAP-2) |
+| Relay/Agent 모드 | v5: 모드 선택 UI + 체인 전달 완료 | **MATCH** |
+| 접근성 4개 모드 | v5: V2V, T2V, V2T, Agent 4모드 선택 가능 | **MATCH** |
 | 가드레일 3레벨 | L1/L2/L3 전체 구현 | MATCH |
 | 세션 복구 | Framework 완성, 실전 미검증 | PARTIAL (GAP-8) |
 | 링 버퍼 30초 | 1500 slots @ 20ms | MATCH |
@@ -576,8 +590,8 @@ Whisper Batch STT → 컨텍스트 재주입
 | FR-005 | Echo Gate v2 에코 루프 방지 | DONE | - |
 | FR-006 | 실시간 자막 (2-Stage) | DONE | - |
 | FR-007 | Agent 모드 자율 통화 + Function Calling | DONE | - |
-| FR-008 | **CallMode 선택 UI 노출** | **TODO** | **GAP-1** |
-| FR-009 | **접근성 모드 선택 (V2V, T2V, V2T, Agent)** | **TODO** | **GAP-2** |
+| FR-008 | CallMode 선택 UI 노출 | **DONE** (v5) | ~~GAP-1~~ |
+| FR-009 | 접근성 모드 선택 (V2V, T2V, V2T, Agent) | **DONE** (v5) | ~~GAP-2~~ |
 | FR-010 | 통화 결과 저장 + 이력 조회 | DONE | - |
 
 ### 6.2 Should Have (P1)

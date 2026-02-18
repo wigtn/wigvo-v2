@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { conversationId, message, location, previousSearchResults } =
+    const { conversationId, message, location, previousSearchResults, communicationMode } =
       validation.data;
 
     // 3. 대화 세션 확인
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         userMessage: message,
         location,
         previousSearchResults,
+        communicationMode,
       });
     } catch (llmError) {
       console.error('OpenAI API error:', llmError);
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 11. 상태 결정 및 업데이트
-    const { ready, forceReady } = isReadyForCall(mergedData, chatResult.is_complete);
+    const { ready, forceReady } = isReadyForCall(mergedData, chatResult.is_complete, communicationMode);
     const newStatus = ready ? 'READY' : 'COLLECTING';
     const effectiveComplete = chatResult.is_complete || forceReady;
 

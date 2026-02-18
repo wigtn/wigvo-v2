@@ -6,9 +6,10 @@
 // =============================================================================
 
 import { CollectedData, ScenarioType, ScenarioSubType } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 import { getScenarioSystemPrompt, getScenarioFewShotExamples } from '@/lib/scenarios/prompts';
 import { buildResponseHandlingSection } from '@/lib/scenarios/response-handling';
-import { getSubTypeConfig, getFieldLabel } from '@/lib/scenarios/config';
+import { getSubTypeConfig, getFieldLabel, getRequiredFieldsForMode } from '@/lib/scenarios/config';
 
 /**
  * Few-shot 예제 (시나리오별)
@@ -284,38 +285,45 @@ export const SCENARIO_OPTIONS = [
 
 /**
  * 시나리오별 System Prompt 생성
- * 
+ *
  * @param scenarioType - 메인 시나리오 타입
  * @param subType - 서브 시나리오 타입
  * @param existingData - 현재까지 수집된 정보
  * @param placeSearchResults - 네이버지도 검색 결과 (선택적)
+ * @param communicationMode - 통화 모드 (선택적, v5: 모드별 수집 깊이 조절)
  */
 export function buildScenarioPrompt(
   scenarioType: ScenarioType,
   subType: ScenarioSubType,
   existingData?: CollectedData,
-  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>
+  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>,
+  communicationMode?: CommunicationMode
 ): string {
   // 1. 시나리오별 기본 프롬프트 로드
   const basePrompt = getScenarioSystemPrompt(scenarioType, subType);
-  
+
   // 2. 상대방 응답 대응 섹션 추가
   const responseHandling = buildResponseHandlingSection(subType);
-  
+
   // 3. 기존 수집 정보 컨텍스트 추가
   const contextSection = buildContextSection(existingData, scenarioType, subType);
-  
+
   // 4. 장소 검색 결과 섹션 추가
   const placeSearchSection = buildPlaceSearchSection(placeSearchResults);
-  
+
   // 5. Few-shot 예시 추가
   const fewShotExamples = getScenarioFewShotExamples(scenarioType, subType);
   const fewShotSection = buildFewShotSection(fewShotExamples);
-  
+
   // 6. 출력 형식 규칙 추가
   const outputRules = buildOutputRulesSection(scenarioType, subType);
-  
+
+  // 7. v5: 모드별 수집 지침 추가
+  const modeSection = buildModeSection(communicationMode, scenarioType, subType);
+
   return `${basePrompt}
+
+${modeSection}
 
 ${outputRules}
 
@@ -461,6 +469,41 @@ function buildOutputRulesSection(
 
 **잘못된 예시 (절대 하지 마세요):**
 - 이전: target_name="강남면옥" → 사용자가 시간만 말함 → JSON에 target_name: null ❌`;
+}
+
+/**
+ * v5: 모드별 수집 지침 섹션
+ * relay 모드에서는 최소 정보만 수집하도록 안내
+ */
+function buildModeSection(
+  communicationMode?: CommunicationMode,
+  scenarioType?: ScenarioType,
+  subType?: ScenarioSubType
+): string {
+  if (!communicationMode || communicationMode === 'full_agent') return '';
+
+  const modeLabels: Record<string, string> = {
+    voice_to_voice: '양방향 음성 번역',
+    text_to_voice: '텍스트→음성',
+    voice_to_text: '음성→자막',
+  };
+  const modeLabel = modeLabels[communicationMode] || communicationMode;
+
+  const requiredFields = scenarioType && subType
+    ? getRequiredFieldsForMode(scenarioType, subType, communicationMode)
+    : ['target_name', 'target_phone'];
+
+  return `## 📋 통화 모드: ${modeLabel} (중계 모드)
+
+**이 모드에서는 사용자가 직접 통화에 참여합니다. AI는 실시간 번역만 담당합니다.**
+
+따라서 수집해야 할 정보는 **최소한**입니다:
+${requiredFields.map(f => `- ${f}`).join('\n')}
+
+**중요 규칙:**
+- 전화할 곳 이름(target_name)과 전화번호(target_phone)만 확인되면 바로 is_complete: true로 설정하세요.
+- 예약 시간, 인원수, 예약자 이름 등 상세 정보는 물어보지 마세요 — 사용자가 직접 통화에서 말합니다.
+- 빠르고 간결하게 대화를 진행하세요.`;
 }
 
 /** 시나리오 프롬프트에 항상 넣을 "전화 걸기" 안내 (직접 전화하라고 하지 않기) */

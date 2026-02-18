@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createConversation } from '@/lib/supabase/chat';
 import type { CollectedData, ScenarioType, ScenarioSubType } from '@/shared/types';
+import type { CommunicationMode } from '@/shared/call-types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,23 +26,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. v4: 시나리오 타입 파라미터 파싱
+    // 2. v5: 모드 + 시나리오 타입 파라미터 파싱
     let scenarioType: ScenarioType | undefined;
     let subType: ScenarioSubType | undefined;
-    
+    let communicationMode: CommunicationMode | undefined;
+
     try {
       const body = await request.json();
       scenarioType = body.scenarioType;
       subType = body.subType;
+      communicationMode = body.communicationMode;
     } catch {
       // body가 없거나 파싱 실패해도 OK (기존 호환성)
     }
 
-    // 3. 대화 세션 생성 (시나리오 타입 전달)
+    // 3. 대화 세션 생성 (모드 + 시나리오 타입 전달)
     const { conversation, greeting } = await createConversation(
       user.id,
       scenarioType,
-      subType
+      subType,
+      communicationMode
     );
 
     // 4. 응답 (snake_case → camelCase 변환)
