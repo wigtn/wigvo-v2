@@ -36,7 +36,7 @@ export default function Sidebar({
     setActiveMenu,
   } = useDashboard();
 
-  const handleMenuClick = (menu: "chat" | "conversations" | "reservations") => {
+  const handleMenuClick = (menu: "chat" | "conversations" | "reservations" | "pricing") => {
     if (menu === "chat") {
       onNewConversation();
     }
@@ -119,8 +119,8 @@ export default function Sidebar({
             icon={<CreditCard className="size-[18px]" />}
             label={t("pricing")}
             isCollapsed={isSidebarCollapsed}
-            isActive={false}
-            onClick={() => {/* TODO: pricing page */}}
+            isActive={activeMenu === "pricing"}
+            onClick={() => handleMenuClick("pricing")}
           />
         </div>
       </nav>

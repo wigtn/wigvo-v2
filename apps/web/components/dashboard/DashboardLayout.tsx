@@ -12,6 +12,7 @@ import PlaceInfoPanel from "@/components/place/PlaceInfoPanel";
 import CallingPanel from "@/components/call/CallingPanel";
 import CallHistoryPanel from "@/components/call/CallHistoryPanel";
 import ConversationHistoryPanel from "@/components/chat/ConversationHistoryPanel";
+import PricingPanel from "./PricingPanel";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useChat } from "@/hooks/useChat";
 import { cn } from "@/lib/utils";
@@ -76,7 +77,27 @@ export default function DashboardLayout() {
       />
 
       {/* 메인 콘텐츠 */}
-      {activeMenu === "reservations" ? (
+      {activeMenu === "pricing" ? (
+        /* 요금제 전체 영역 */
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 모바일 헤더 (메뉴 버튼만) */}
+          <div className="lg:hidden flex items-center px-4 py-2 bg-white border-b border-[#E2E8F0]">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 hover:bg-[#F1F5F9] rounded-lg transition-colors"
+            >
+              <Menu className="size-5 text-[#64748B]" />
+            </button>
+          </div>
+
+          {/* 요금제 패널 */}
+          <div className="flex-1 overflow-hidden lg:p-4">
+            <div className="h-full lg:bg-white lg:rounded-2xl lg:border lg:border-[#E2E8F0] lg:shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+              <PricingPanel />
+            </div>
+          </div>
+        </div>
+      ) : activeMenu === "reservations" ? (
         /* 통화 기록 전체 영역 */
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 모바일 헤더 (메뉴 버튼만) */}

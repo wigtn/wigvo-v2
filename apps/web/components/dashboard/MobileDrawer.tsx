@@ -59,7 +59,7 @@ export default function MobileDrawer({
     };
   }, [isSidebarOpen, setSidebarOpen]);
 
-  const handleMenuClick = (menu: "chat" | "conversations" | "reservations") => {
+  const handleMenuClick = (menu: "chat" | "conversations" | "reservations" | "pricing") => {
     if (menu === "chat") {
       onNewConversation();
     }
@@ -134,8 +134,8 @@ export default function MobileDrawer({
               icon={<CreditCard className="size-[18px]" />}
               label={t("pricing")}
               isCollapsed={false}
-              isActive={false}
-              onClick={() => {/* TODO: pricing page */}}
+              isActive={activeMenu === "pricing"}
+              onClick={() => handleMenuClick("pricing")}
             />
           </div>
         </nav>
