@@ -112,6 +112,13 @@ class SessionBHandler:
         if pending:
             logger.debug("[SessionB] Flushed %d pending output items", len(pending))
 
+    def clear_pending_output(self) -> None:
+        """억제 중 쌓인 출력을 폐기한다 (에코 환각 제거)."""
+        count = len(self._pending_output)
+        self._pending_output.clear()
+        if count:
+            logger.info("[SessionB] Discarded %d pending output items (echo artifacts)", count)
+
     async def _handle_audio_delta(self, event: dict[str, Any]) -> None:
         """Session B 번역 음성 → App으로 전달 (pcm16). 억제 중이면 큐에 저장."""
         delta_b64 = event.get("delta", "")

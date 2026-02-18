@@ -37,6 +37,29 @@ from src.types import ActiveCall, CallMode, CommunicationMode, WsMessage, WsMess
 
 logger = logging.getLogger(__name__)
 
+# --- G.711 mu-law → linear PCM 디코딩 테이블 ---
+# Twilio 오디오 에너지 측정용 (소음/무음 필터링)
+_ULAW_TO_LINEAR: list[int] = []
+for _byte in range(256):
+    _b = ~_byte & 0xFF
+    _sign = (_b >> 7) & 1
+    _exp = (_b >> 4) & 0x07
+    _man = _b & 0x0F
+    _mag = ((2 * _man + 33) << _exp) - 33
+    _ULAW_TO_LINEAR.append(-_mag if _sign else _mag)
+
+
+def _ulaw_rms(audio: bytes) -> float:
+    """g711 mu-law 오디오의 RMS 에너지를 계산한다.
+
+    Returns:
+        RMS 값 (0=무음, ~500=조용한 발화, ~2000=보통 발화, ~8000=매우 큰 소리)
+    """
+    if not audio:
+        return 0.0
+    total = sum(_ULAW_TO_LINEAR[b] ** 2 for b in audio)
+    return (total / len(audio)) ** 0.5
+
 
 class AudioRouter:
     """모든 오디오 흐름을 관리하는 중앙 라우터."""
@@ -243,8 +266,10 @@ class AudioRouter:
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """Twilio에서 받은 수신자 오디오를 Session B로 전달.
 
-        Echo Gate v2: INPUT은 항상 활성 — 수신자 발화 감지를 위해 오디오를 차단하지 않는다.
-        OUTPUT만 SessionB.output_suppressed로 게이팅한다.
+        3단계 필터링:
+        1. Recovery 상태 체크 (복구/degraded 중 차단)
+        2. Echo Gate: 에코 억제 중 INPUT 차단
+        3. 오디오 에너지 게이트: 무음/소음 청크 차단 (Whisper 환각 방지)
         """
         # Phase 3: Ring Buffer B에 기록 (handle_user_audio와 대칭)
         seq = self.ring_buffer_b.write(audio_bytes)
@@ -254,6 +279,16 @@ class AudioRouter:
 
         if self.recovery_b.is_degraded:
             return  # Degraded 모드에서는 버퍼에만 기록
+
+        # Echo Gate v3: 에코 억제 중 — Session B에 오디오 전송 차단
+        if self._echo_suppressed:
+            return
+
+        # 오디오 에너지 게이트: 무음/소음 필터링 (Whisper 환각 방지)
+        if settings.audio_energy_gate_enabled:
+            rms = _ulaw_rms(audio_bytes)
+            if rms < settings.audio_energy_min_rms:
+                return  # 에너지 부족 — 무음 또는 소음으로 판단
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
@@ -354,29 +389,26 @@ class AudioRouter:
         self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
 
     async def _echo_cooldown_timer(self) -> None:
-        """쿨다운 대기 후 에코 억제를 해제하고 큐에 저장된 출력을 배출한다."""
+        """쿨다운 대기 후 에코 억제를 해제한다. 억제 중 쌓인 출력은 폐기."""
         try:
             await asyncio.sleep(settings.echo_gate_cooldown_s)
             self._echo_suppressed = False
             self.session_b.output_suppressed = False
-            await self.session_b.flush_pending_output()
-            logger.debug("Echo gate released after %.1fs cooldown", settings.echo_gate_cooldown_s)
+            # v3: 억제 중 쌓인 출력은 에코 환각이므로 폐기 (flush하지 않음)
+            self.session_b.clear_pending_output()
+            logger.info("Echo gate released after %.1fs cooldown (pending output discarded)", settings.echo_gate_cooldown_s)
         except asyncio.CancelledError:
             pass
 
     # --- 수신자 발화 감지 (First Message + Interrupt) ---
 
     async def _on_recipient_started(self) -> None:
-        """수신자 발화 시작 -> Echo Gate 즉시 해제 + First Message 또는 Interrupt 처리."""
-        # Echo Gate v2: 억제 중 수신자 발화 감지 시 즉시 게이트 해제
+        """수신자 발화 시작 -> Echo Gate 쿨다운 중이면 무시 + First Message 또는 Interrupt 처리."""
+        # Echo Gate v3: 쿨다운 중 감지된 발화는 에코로 간주하여 무시
+        # Whisper 환각("MBC 뉴스", "I love you" 등) 방지
         if self._echo_suppressed:
-            logger.info("Recipient speech during echo suppression — releasing gate immediately")
-            self._echo_suppressed = False
-            self.session_b.output_suppressed = False
-            if self._echo_cooldown_task and not self._echo_cooldown_task.done():
-                self._echo_cooldown_task.cancel()
-                self._echo_cooldown_task = None
-            await self.session_b.flush_pending_output()
+            logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
+            return
 
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()

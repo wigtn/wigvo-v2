@@ -74,7 +74,12 @@ class RealtimeSession:
             "input_audio_format": self.config.input_audio_format,
             "output_audio_format": self.config.output_audio_format,
             "turn_detection": (
-                {"type": "server_vad"}
+                {
+                    "type": "server_vad",
+                    "threshold": settings.session_b_vad_threshold,
+                    "silence_duration_ms": settings.session_b_vad_silence_ms,
+                    "prefix_padding_ms": settings.session_b_vad_prefix_padding_ms,
+                }
                 if self.config.vad_mode.value == "server"
                 else None
             ),

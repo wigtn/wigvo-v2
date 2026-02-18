@@ -24,7 +24,11 @@ class Settings(BaseSettings):
 
     # CORS
     allowed_origins: list[str] = Field(
-        default=["http://localhost:3000", "https://wigvo.run"],
+        default=[
+            "http://localhost:3000",
+            "https://wigvo.run",
+            "https://wigvo-web-283075594688.asia-northeast3.run.app",
+        ],
         description="CORS allowed origins",
     )
 
@@ -59,7 +63,16 @@ class Settings(BaseSettings):
     whisper_model: str = "whisper-1"
 
     # Echo Gate (에코 피드백 루프 차단)
-    echo_gate_cooldown_s: float = 0.3  # Twilio RTT 150-250ms + 디바이스 에코 50-100ms
+    echo_gate_cooldown_s: float = 3.0  # TTS 완료 후 에코 소멸 대기: TTS 잔향 + Twilio RTT + 디바이스 에코
+
+    # Session B VAD 설정 (수신자 음성 감지 민감도)
+    session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.8로 상향)
+    session_b_vad_silence_ms: int = 600  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 600ms)
+    session_b_vad_prefix_padding_ms: int = 300  # 발화 시작 전 포함할 오디오 (기본 300ms)
+
+    # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
+    audio_energy_gate_enabled: bool = True
+    audio_energy_min_rms: float = 150.0  # mu-law RMS 최소 임계값 (0=무음, ~500=조용한 발화, ~2000=보통 발화)
 
     # Phase 4: Guardrail (PRD M-2)
     guardrail_enabled: bool = True
