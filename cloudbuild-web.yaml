@@ -34,7 +34,7 @@ steps:
     args:
       - run
       - deploy
-      - wigvo-web
+      - wigvu-web
       - --image=asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA
       - --region=asia-northeast3
       - --platform=managed
