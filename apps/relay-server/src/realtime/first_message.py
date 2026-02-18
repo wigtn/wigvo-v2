@@ -28,10 +28,12 @@ class FirstMessageHandler:
         call: ActiveCall,
         session_a: SessionAHandler,
         on_notify_app: Callable[[WsMessage], Coroutine],
+        use_exact_utterance: bool = False,
     ):
         self.call = call
         self.session_a = session_a
         self._on_notify_app = on_notify_app
+        self._use_exact_utterance = use_exact_utterance
 
     async def on_recipient_speech_detected(self) -> None:
         """수신자의 첫 발화가 감지되면 AI 고지를 전송한다."""
@@ -48,13 +50,18 @@ class FirstMessageHandler:
             logger.debug("Waiting for Session A to finish before sending greeting...")
             await self.session_a.wait_for_done(timeout=3.0)
 
-        # AI 고지 메시지 전송 (Session A → Twilio → 수신자)
-        # 영어 원문을 Session A에 전달 → Session A가 target_language로 번역
         greeting = FIRST_MESSAGE_TEMPLATES.get(
             self.call.target_language,
             FIRST_MESSAGE_TEMPLATES["en"],
         )
-        wrapped = f"[User says in {self.call.source_language}]: {greeting}"
+
+        if self._use_exact_utterance:
+            # TextToVoice: AI 확장 방지 — 정확히 이 문장만 발화 (hskim 이식)
+            wrapped = f'Say exactly this sentence and nothing else: "{greeting}"'
+        else:
+            # VoiceToVoice: 번역 지시 형식
+            wrapped = f"[User says in {self.call.source_language}]: {greeting}"
+
         await self.session_a.send_user_text(wrapped)
 
         # App에 통화 연결 알림

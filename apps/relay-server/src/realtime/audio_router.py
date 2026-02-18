@@ -17,6 +17,7 @@ import logging
 from typing import Any, Callable, Coroutine
 
 from src.realtime.pipeline.base import BasePipeline
+from src.realtime.pipeline.text_to_voice import TextToVoicePipeline
 from src.realtime.pipeline.voice_to_voice import VoiceToVoicePipeline
 from src.realtime.session_manager import DualSessionManager
 from src.twilio.media_stream import TwilioMediaStreamHandler
@@ -95,8 +96,7 @@ class AudioRouter:
                     suppress_b_audio=True,
                 )
             case CommunicationMode.TEXT_TO_VOICE:
-                # Phase 3에서 TextToVoicePipeline으로 교체
-                return VoiceToVoicePipeline(
+                return TextToVoicePipeline(
                     call=call,
                     dual_session=dual_session,
                     twilio_handler=twilio_handler,

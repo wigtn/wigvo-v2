@@ -62,14 +62,14 @@
 - [x] 2.8 **기존 124개 테스트 전수 통과 확인** (regression gate)
 
 ### Phase 3: TextToVoicePipeline 구현
-- [ ] 3.1 `src/realtime/pipeline/text_to_voice.py` 생성
-- [ ] 3.2 `handle_user_text()` — per-response instruction override 구현 (hskim 이식)
-- [ ] 3.3 Session B `modalities=['text']` 적용 확인 (DualSessionManager 분기 활용)
-- [ ] 3.4 `src/realtime/first_message.py` — `send_exact_utterance()` 패턴 추가 (hskim 이식)
-- [ ] 3.5 `handle_user_audio()` — text 모드에서 audio 입력 무시 (graceful no-op + 로깅)
-- [ ] 3.6 EchoDetector/Echo Gate 모두 비초기화 (텍스트 입력 = TTS echo loop 불가)
-- [ ] 3.7 Audio Energy Gate는 유지 (Twilio 수신자 오디오 무음 필터링 필요)
-- [ ] 3.8 TextToVoicePipeline 단위 테스트 작성 (5개 이상)
+- [x] 3.1 `src/realtime/pipeline/text_to_voice.py` 생성
+- [x] 3.2 `handle_user_text()` — per-response instruction override 구현 (hskim 이식)
+- [x] 3.3 Session B `modalities=['text']` 적용 확인 (DualSessionManager 분기 활용)
+- [x] 3.4 `src/realtime/first_message.py` — `send_exact_utterance()` 패턴 추가 (hskim 이식)
+- [x] 3.5 `handle_user_audio()` — text 모드에서 audio 입력 무시 (graceful no-op + 로깅)
+- [x] 3.6 EchoDetector/Echo Gate 모두 비초기화 (텍스트 입력 = TTS echo loop 불가)
+- [x] 3.7 Audio Energy Gate는 유지 (Twilio 수신자 오디오 무음 필터링 필요)
+- [x] 3.8 TextToVoicePipeline 단위 테스트 작성 (14개)
 
 ### Phase 4: FullAgentPipeline + 마무리
 - [ ] 4.1 `src/realtime/pipeline/full_agent.py` 생성 (TextToVoice 기반 + Function Calling)
@@ -104,8 +104,8 @@
 
 | hskim File | 이식 대상 | Phase | 상태 |
 |------------|----------|-------|------|
-| `realtime/audio-router.ts::sendTextToSessionA` | TextToVoicePipeline.handle_user_text | 3 | 미구현 |
-| `realtime/audio-router.ts::sendExactUtteranceToSessionA` | first_message.send_exact_utterance | 3 | 미구현 |
+| `realtime/audio-router.ts::sendTextToSessionA` | TextToVoicePipeline.handle_user_text | 3 | **완료** ✅ |
+| `realtime/audio-router.ts::sendExactUtteranceToSessionA` | FirstMessageHandler(use_exact_utterance=True) | 3 | **완료** ✅ |
 | `realtime/session-manager.ts::createSessions` | DualSessionManager config 분기 | 1 | **완료** ✅ |
 | `prompt/templates.ts` (1인칭 직역) | prompt/templates.py | - | **완료** ✅ |
 
@@ -113,8 +113,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 17/29 |
-| Current Phase | 2 (VoiceToVoice 추출) — 완료 |
+| Total Tasks | 25/29 |
+| Current Phase | 3 (TextToVoice) — 완료 |
 | Status | in_progress |
 
 ## Execution Log
@@ -134,3 +134,8 @@
 | 2026-02-18 | 2 | 2.6 AudioRouter → 얇은 위임자 (155줄, __getattr__/__setattr__ 프록시) | done |
 | 2026-02-18 | 2 | 2.7 stream.py 변경 불필요 확인 | done |
 | 2026-02-18 | 2 | 2.8 124개 테스트 전수 통과 | done |
+| 2026-02-18 | 3 | 3.1 text_to_voice.py 생성 (per-response override) | done |
+| 2026-02-18 | 3 | 3.2-3.3 handle_user_text + Session B modalities=['text'] 확인 | done |
+| 2026-02-18 | 3 | 3.4 first_message.py exact utterance 패턴 | done |
+| 2026-02-18 | 3 | 3.5-3.7 audio no-op + 에코 비초기화 + 에너지 게이트 유지 | done |
+| 2026-02-18 | 3 | 3.8 단위 테스트 14개 작성 (전체 138/138 통과) | done |
