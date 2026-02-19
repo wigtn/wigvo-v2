@@ -218,8 +218,7 @@
   "callStatus": {
     "connecting": "Connecting call",
     "delivering": "Delivering message",
-    "completed": "Call completed",
-    "failed": "Call failed",
+    "ended": "Call ended",
     "preparing": "Preparing",
     "elapsed": "Elapsed time",
     "stepConnect": "Connect",
@@ -227,24 +226,14 @@
     "stepComplete": "Complete"
   },
   "result": {
-    "reservationCompleted": "Reservation completed",
-    "callFailed": "Call failed",
-    "reservationInfo": "Reservation Info",
+    "callEnded": "Call ended",
+    "callInfo": "Call Info",
     "aiSummary": "AI Call Summary",
-    "retryCall": "Try Again",
     "viewHistory": "View History",
     "place": "Place",
     "date": "Date",
     "time": "Time",
-    "service": "Service",
-    "failureNoAnswer": "The other party didn't answer.",
-    "failureRejected": "Your request was rejected.",
-    "failureError": "An error occurred during the call.",
-    "failureUnknown": "An unknown error occurred.",
-    "hintNoAnswer": "Please try again later.",
-    "hintRejected": "Try again with a different schedule or conditions.",
-    "hintError": "Check your network and try again.",
-    "hintDefault": "Please try again."
+    "service": "Service"
   },
   "history": {
     "title": "Call History",
@@ -272,24 +261,14 @@
       "asRequest": "Service Request"
     },
     "status": {
-      "success": "Success",
-      "failed": "Failed",
       "inProgress": "In Call",
       "pending": "Pending",
       "calling": "Calling...",
       "callInProgress": "In Call...",
-      "callCompleted": "Call Completed",
-      "callFailed": "Call Failed"
-    },
-    "callResult": {
-      "success": "Success",
-      "noAnswer": "No Answer",
-      "rejected": "Rejected",
-      "error": "Error"
+      "callEnded": "Call Ended"
     },
     "banner": {
-      "success": "Call Successful",
-      "failed": "Call Failed",
+      "ended": "Call Ended",
       "inProgress": "Call in Progress",
       "pending": "Call Pending"
     }

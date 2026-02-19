@@ -16,14 +16,9 @@ interface StatusBadge {
   text: string;
 }
 
-function getStatusBadge(status: CallStatus, result: string | null): StatusBadge {
-  if (status === 'COMPLETED') {
-    return result === 'SUCCESS'
-      ? { label: '성공', dotColor: 'bg-teal-500', bg: 'bg-teal-50', text: 'text-teal-700' }
-      : { label: '실패', dotColor: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700' };
-  }
-  if (status === 'FAILED') {
-    return { label: '실패', dotColor: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700' };
+function getStatusBadge(status: CallStatus): StatusBadge {
+  if (status === 'COMPLETED' || status === 'FAILED') {
+    return { label: '종료', dotColor: 'bg-[#94A3B8]', bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
   }
   if (status === 'CALLING' || status === 'IN_PROGRESS') {
     return { label: '통화중', dotColor: 'bg-[#0F172A] animate-pulse', bg: 'bg-[#F1F5F9]', text: 'text-[#0F172A]' };
@@ -88,7 +83,7 @@ export default function HistoryList({ calls }: HistoryListProps) {
   return (
     <div className="space-y-2">
       {calls.map((call) => {
-        const badge = getStatusBadge(call.status, call.result);
+        const badge = getStatusBadge(call.status);
         const icon = getRequestTypeIcon(call.requestType);
         return (
           <button

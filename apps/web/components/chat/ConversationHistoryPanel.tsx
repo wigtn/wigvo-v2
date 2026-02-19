@@ -8,10 +8,9 @@ import {
   RefreshCw,
   MessageSquare,
   Clock,
-  CheckCircle,
   Phone,
   PhoneCall,
-  XCircle,
+  PhoneOff,
   ArrowLeft,
   User,
   Bot,
@@ -62,12 +61,12 @@ function formatFullDate(dateStr: string) {
 function getStatusIcon(status: string) {
   switch (status) {
     case 'COMPLETED':
-      return <CheckCircle className="size-3.5 text-teal-500" />;
+      return <PhoneOff className="size-3.5 text-[#64748B]" />;
     case 'CALLING':
     case 'IN_PROGRESS':
       return <Phone className="size-3.5 text-[#0F172A] animate-pulse" />;
     case 'READY':
-      return <CheckCircle className="size-3.5 text-blue-500" />;
+      return <Phone className="size-3.5 text-blue-500" />;
     default:
       return <Clock className="size-3.5 text-[#CBD5E1]" />;
   }
@@ -599,21 +598,6 @@ function hasCollectedData(data: CollectedData): boolean {
 // ===========================================================================
 // Call Result 헬퍼 함수들
 // ===========================================================================
-function getResultLabel(result: string | null): string {
-  switch (result) {
-    case 'SUCCESS':
-      return '예약 성공';
-    case 'NO_ANSWER':
-      return '전화를 받지 않음';
-    case 'REJECTED':
-      return '요청 거절됨';
-    case 'ERROR':
-      return '오류 발생';
-    default:
-      return '알 수 없음';
-  }
-}
-
 function getCallStatusLabel(status: string): string {
   switch (status) {
     case 'PENDING':
@@ -623,9 +607,8 @@ function getCallStatusLabel(status: string): string {
     case 'IN_PROGRESS':
       return '통화 중...';
     case 'COMPLETED':
-      return '통화 완료';
     case 'FAILED':
-      return '통화 실패';
+      return '통화 종료';
     default:
       return status;
   }
@@ -635,8 +618,7 @@ function getCallStatusLabel(status: string): string {
 // CallResultCard (통화 결과 카드)
 // ===========================================================================
 function CallResultCard({ call }: { call: Call }) {
-  const isSuccess = call.status === 'COMPLETED' && call.result === 'SUCCESS';
-  const isFailed = call.status === 'FAILED' || (call.status === 'COMPLETED' && call.result !== 'SUCCESS');
+  const isEnded = call.status === 'COMPLETED' || call.status === 'FAILED';
   const isInProgress = call.status === 'CALLING' || call.status === 'IN_PROGRESS';
   const isPending = call.status === 'PENDING';
 
@@ -651,25 +633,15 @@ function CallResultCard({ call }: { call: Call }) {
     badgeLabel: string;
   };
 
-  if (isSuccess) {
+  if (isEnded) {
     theme = {
-      headerBg: 'bg-teal-50',
-      headerBorder: 'border-teal-100',
-      headerText: 'text-teal-600',
-      badgeBg: 'bg-teal-100',
-      badgeText: 'text-teal-700',
-      icon: <CheckCircle className="size-4 text-teal-600" />,
-      badgeLabel: '성공',
-    };
-  } else if (isFailed) {
-    theme = {
-      headerBg: 'bg-red-50',
-      headerBorder: 'border-red-100',
-      headerText: 'text-red-600',
-      badgeBg: 'bg-red-100',
-      badgeText: 'text-red-700',
-      icon: <XCircle className="size-4 text-red-600" />,
-      badgeLabel: '실패',
+      headerBg: 'bg-[#F8FAFC]',
+      headerBorder: 'border-[#E2E8F0]',
+      headerText: 'text-[#64748B]',
+      badgeBg: 'bg-[#F1F5F9]',
+      badgeText: 'text-[#64748B]',
+      icon: <PhoneOff className="size-4 text-[#64748B]" />,
+      badgeLabel: '통화 종료',
     };
   } else if (isInProgress) {
     theme = {
@@ -705,7 +677,7 @@ function CallResultCard({ call }: { call: Call }) {
         )}
       >
         {theme.icon}
-        <span className={cn('text-xs font-semibold', theme.headerText)}>통화 결과</span>
+        <span className={cn('text-xs font-semibold', theme.headerText)}>통화 정보</span>
         <span
           className={cn(
             'ml-auto px-2 py-0.5 rounded-full text-[10px] font-semibold',
@@ -729,23 +701,6 @@ function CallResultCard({ call }: { call: Call }) {
             <p className="text-sm text-[#334155] mt-0.5">{getCallStatusLabel(call.status)}</p>
           </div>
         </div>
-
-        {/* 결과 (완료/실패 시에만) */}
-        {(call.status === 'COMPLETED' || call.status === 'FAILED') && (
-          <div className="flex items-start gap-2.5">
-            {isSuccess ? (
-              <CheckCircle className="size-3.5 text-[#94A3B8] mt-0.5 shrink-0" />
-            ) : (
-              <XCircle className="size-3.5 text-[#94A3B8] mt-0.5 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <span className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">
-                결과
-              </span>
-              <p className="text-sm text-[#334155] mt-0.5">{getResultLabel(call.result)}</p>
-            </div>
-          </div>
-        )}
 
         {/* 시간 */}
         <div className="flex items-start gap-2.5">

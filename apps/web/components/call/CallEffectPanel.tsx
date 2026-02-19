@@ -16,8 +16,6 @@ import {
   MessageSquare,
   Captions,
   Bot,
-  Check,
-  X,
   Loader2,
 } from 'lucide-react';
 import type { CommunicationMode } from '@/shared/call-types';
@@ -117,7 +115,6 @@ export default function CallEffectPanel() {
 
   const isTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
   const isActive = callStatus !== 'ended' && !isTerminal;
-  const isFailed = call?.status === 'FAILED';
   const isEnded = callStatus === 'ended' || isTerminal;
 
   const handleEndCall = () => {

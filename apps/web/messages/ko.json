@@ -218,8 +218,7 @@
   "callStatus": {
     "connecting": "전화 연결 중",
     "delivering": "용건 전달 중",
-    "completed": "통화 완료",
-    "failed": "통화 실패",
+    "ended": "통화 종료",
     "preparing": "준비 중",
     "elapsed": "경과 시간",
     "stepConnect": "연결",
@@ -227,24 +226,14 @@
     "stepComplete": "완료"
   },
   "result": {
-    "reservationCompleted": "예약이 완료되었습니다",
-    "callFailed": "통화에 실패했습니다",
-    "reservationInfo": "예약 정보",
+    "callEnded": "통화가 종료되었습니다",
+    "callInfo": "통화 정보",
     "aiSummary": "AI 통화 요약",
-    "retryCall": "다시 시도하기",
     "viewHistory": "기록 보기",
     "place": "장소",
     "date": "날짜",
     "time": "시간",
-    "service": "서비스",
-    "failureNoAnswer": "상대방이 전화를 받지 않았습니다.",
-    "failureRejected": "요청이 거절되었습니다.",
-    "failureError": "통화 중 오류가 발생했습니다.",
-    "failureUnknown": "알 수 없는 오류가 발생했습니다.",
-    "hintNoAnswer": "잠시 후 다시 시도해보세요.",
-    "hintRejected": "다른 일정이나 조건으로 다시 시도해보세요.",
-    "hintError": "네트워크 상태를 확인하고 다시 시도해보세요.",
-    "hintDefault": "다시 시도해보세요."
+    "service": "서비스"
   },
   "history": {
     "title": "통화 기록",
@@ -272,24 +261,14 @@
       "asRequest": "AS 요청"
     },
     "status": {
-      "success": "성공",
-      "failed": "실패",
       "inProgress": "통화중",
       "pending": "대기",
       "calling": "전화 거는 중...",
       "callInProgress": "통화 중...",
-      "callCompleted": "통화 완료",
-      "callFailed": "통화 실패"
-    },
-    "callResult": {
-      "success": "성공",
-      "noAnswer": "전화를 받지 않음",
-      "rejected": "요청 거절됨",
-      "error": "오류 발생"
+      "callEnded": "통화 종료"
     },
     "banner": {
-      "success": "통화 성공",
-      "failed": "통화 실패",
+      "ended": "통화 종료",
       "inProgress": "통화 진행 중",
       "pending": "통화 대기 중"
     }

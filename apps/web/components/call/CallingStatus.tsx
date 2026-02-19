@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
-import { Check, X } from 'lucide-react';
+import { PhoneOff } from 'lucide-react';
 
 const Orb = dynamic(() => import('@/components/ui/Orb'), { ssr: false });
 
@@ -21,14 +21,12 @@ function formatElapsed(seconds: number): string {
 export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
   const t = useTranslations('callStatus');
   const isTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
-  const isFailed = call?.status === 'FAILED';
 
   const statusLabel = (() => {
     switch (call?.status) {
       case 'PENDING': case 'CALLING': return t('connecting');
       case 'IN_PROGRESS': return t('delivering');
-      case 'COMPLETED': return t('completed');
-      case 'FAILED': return t('failed');
+      case 'COMPLETED': case 'FAILED': return t('ended');
       default: return t('preparing');
     }
   })();
@@ -47,26 +45,14 @@ export default function CallingStatus({ call, elapsed }: CallingStatusProps) {
           />
         </div>
       ) : (
-        <div
-          className={`flex h-20 w-20 items-center justify-center rounded-full border-2 ${
-            isFailed
-              ? 'border-red-200 bg-red-50'
-              : 'border-teal-200 bg-teal-50'
-          }`}
-        >
-          {isFailed ? (
-            <X className="size-7 text-red-500" />
-          ) : (
-            <Check className="size-7 text-teal-600" />
-          )}
+        <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-[#E2E8F0] bg-[#F8FAFC]">
+          <PhoneOff className="size-7 text-[#64748B]" />
         </div>
       )}
 
       {/* 상태 텍스트 */}
       <div className="text-center">
-        <p className={`text-sm font-medium mb-1 ${
-          isFailed ? 'text-red-500' : 'text-[#64748B]'
-        }`}>
+        <p className="text-sm font-medium mb-1 text-[#64748B]">
           {statusLabel}
           {!isTerminal && (
             <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500 align-middle" />
