@@ -4,8 +4,7 @@ VOICE_TO_VOICE: User 음성 → 번역 → Twilio TTS + 수신자 음성 → 번
 VOICE_TO_TEXT:  suppress_b_audio=True — Session B 오디오 출력 생략 (자막만)
 
 핵심 컴포넌트:
-  - EchoDetector (dual-path: new + legacy fallback)
-  - Echo Gate (legacy blanket block)
+  - Echo Gate + Silence Injection (TTS 에코 차단)
   - Audio Energy Gate
   - Interrupt Handler (3-level priority)
   - First Message Handler
@@ -24,9 +23,9 @@ from src.config import settings
 from src.guardrail.checker import GuardrailChecker
 from src.realtime.audio_utils import pcm16_rms as _pcm16_rms, ulaw_rms as _ulaw_rms
 from src.realtime.context_manager import ConversationContextManager
-from src.realtime.echo_detector import EchoDetector
 from src.realtime.first_message import FirstMessageHandler
 from src.realtime.interrupt_handler import InterruptHandler
+from src.realtime.local_vad import LocalVAD
 from src.realtime.pipeline.base import BasePipeline
 from src.realtime.recovery import SessionRecoveryManager
 from src.realtime.ring_buffer import AudioRingBuffer
@@ -107,7 +106,21 @@ class VoiceToVoicePipeline(BasePipeline):
             on_recipient_speech_started=self._on_recipient_started,
             on_recipient_speech_stopped=self._on_recipient_stopped,
             on_transcript_complete=self._on_turn_complete,
+            use_local_vad=settings.local_vad_enabled,
         )
+
+        # Local VAD (Silero + RMS Energy Gate)
+        self.local_vad: LocalVAD | None = None
+        if settings.local_vad_enabled:
+            self.local_vad = LocalVAD(
+                rms_threshold=settings.local_vad_rms_threshold,
+                speech_threshold=settings.local_vad_speech_threshold,
+                silence_threshold=settings.local_vad_silence_threshold,
+                min_speech_frames=settings.local_vad_min_speech_frames,
+                min_silence_frames=settings.local_vad_min_silence_frames,
+                on_speech_start=self._on_local_vad_speech_start,
+                on_speech_end=self._on_local_vad_speech_end,
+            )
 
         # First Message 핸들러
         self.first_message = FirstMessageHandler(
@@ -134,20 +147,16 @@ class VoiceToVoicePipeline(BasePipeline):
         # User audio RMS logging (주기적 샘플링)
         self._user_audio_chunk_count = 0
 
-        # Echo Gate / Dynamic Energy Threshold
+        # Echo Gate + Silence Injection
+        # TTS 전송 중 + 동적 cooldown 구간에서 Twilio 오디오를 무음으로 대체
         self._in_echo_window = False
         self._echo_cooldown_task: asyncio.Task | None = None
 
-        # Echo Detector: 에너지 핑거프린트 기반 에코 감지
-        self._echo_detector: EchoDetector | None = None
-        if settings.echo_detector_enabled:
-            self._echo_detector = EchoDetector(
-                correlation_window_chunks=settings.echo_detector_correlation_window,
-                min_delay_chunks=settings.echo_detector_min_delay_chunks,
-                max_delay_chunks=settings.echo_detector_max_delay_chunks,
-                echo_threshold=settings.echo_detector_threshold,
-                safety_cooldown_s=settings.echo_detector_safety_cooldown_s,
-            )
+        # 동적 cooldown: TTS 길이에 비례하는 cooldown 계산용
+        self._tts_first_chunk_at: float = 0.0
+        self._tts_total_bytes: int = 0
+        _ECHO_ROUND_TRIP_S = 0.5  # 에코 왕복 마진 (Relay → Twilio → 전화 → Twilio → Relay)
+        self._echo_margin_s = _ECHO_ROUND_TRIP_S
 
         # Recovery Managers
         tools_a = get_tools_for_mode(call.mode) if call.mode == CallMode.AGENT else None
@@ -190,8 +199,8 @@ class VoiceToVoicePipeline(BasePipeline):
             except asyncio.CancelledError:
                 pass
 
-        if self._echo_detector is not None:
-            self._echo_detector.reset()
+        if self.local_vad:
+            self.local_vad.reset()
 
         self.session_b.stop()
         await self.recovery_a.stop()
@@ -261,33 +270,32 @@ class VoiceToVoicePipeline(BasePipeline):
         if self.recovery_b.is_degraded:
             return
 
-        # Echo Detector: per-chunk 에코 감지
-        if self._echo_detector is not None:
-            if self._echo_detector.is_active and self._echo_detector.is_echo(audio_bytes):
-                return
-            if settings.audio_energy_gate_enabled:
-                rms = _ulaw_rms(audio_bytes)
-                if rms < settings.audio_energy_min_rms:
-                    # 소음을 silence로 교체 → VAD가 speech_stopped 자연 감지
-                    silence = self._MULAW_SILENCE * len(audio_bytes)
-                    silence_b64 = base64.b64encode(silence).decode("ascii")
-                    await self.session_b.send_recipient_audio(silence_b64)
-                    return
+        # Echo Gate: echo window 중에는 무음으로 대체
+        if self._in_echo_window:
+            effective_audio = bytes([0xFF] * len(audio_bytes))  # mu-law 무음
         else:
-            # Legacy: Dynamic Energy Threshold (기존 blanket block 교체)
-            if settings.audio_energy_gate_enabled:
-                rms = _ulaw_rms(audio_bytes)
-                threshold = (
-                    settings.echo_energy_threshold_rms
-                    if self._in_echo_window
-                    else settings.audio_energy_min_rms
-                )
-                if rms < threshold:
-                    # 소음/에코를 silence로 교체 → VAD가 speech_stopped 자연 감지
-                    silence = self._MULAW_SILENCE * len(audio_bytes)
-                    silence_b64 = base64.b64encode(silence).decode("ascii")
-                    await self.session_b.send_recipient_audio(silence_b64)
-                    return
+            effective_audio = audio_bytes
+
+        # Local VAD 경로: 모든 오디오를 Session B에 전송 (RMS 드롭 없음)
+        # OpenAI가 commit 시 전체 오디오 버퍼로 Whisper STT를 수행하므로 누락 없어야 정확
+        if self.local_vad is not None:
+            await self.local_vad.process(effective_audio)
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+            await self.session_b.send_recipient_audio(audio_b64)
+            self.ring_buffer_b.mark_sent(seq)
+            return
+
+        # Legacy path: Server VAD (local_vad_enabled=False)
+        if self._in_echo_window:
+            silence_b64 = base64.b64encode(effective_audio).decode("ascii")
+            await self.session_b.send_recipient_audio(silence_b64)
+            return
+
+        # 오디오 에너지 게이트 (무음 필터링)
+        if settings.audio_energy_gate_enabled:
+            rms = _ulaw_rms(audio_bytes)
+            if rms < settings.audio_energy_min_rms:
+                return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
@@ -298,10 +306,11 @@ class VoiceToVoicePipeline(BasePipeline):
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
         if self.interrupt.is_recipient_speaking:
             return
-        if self._echo_detector is not None:
-            self._echo_detector.record_sent_chunk(audio_bytes)
-        else:
-            self._activate_echo_window()
+        if self._tts_first_chunk_at == 0.0:
+            self._tts_first_chunk_at = time.time()
+            self._tts_total_bytes = 0
+        self._tts_total_bytes += len(audio_bytes)
+        self._activate_echo_window()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -313,10 +322,7 @@ class VoiceToVoicePipeline(BasePipeline):
         )
 
     async def _on_session_a_done(self) -> None:
-        if self._echo_detector is not None:
-            self._echo_detector.mark_tts_done()
-        else:
-            self._start_echo_cooldown()
+        self._start_echo_cooldown()
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.TRANSLATION_STATE,
@@ -365,11 +371,21 @@ class VoiceToVoicePipeline(BasePipeline):
             )
         )
 
-    # --- Echo Window (Dynamic Energy Threshold, legacy path) ---
+    # --- Local VAD 콜백 ---
+
+    async def _on_local_vad_speech_start(self) -> None:
+        """Local VAD가 수신자 발화 시작을 감지."""
+        await self.session_b.notify_speech_started()
+
+    async def _on_local_vad_speech_end(self) -> None:
+        """Local VAD가 수신자 발화 종료를 감지."""
+        await self.session_b.notify_speech_stopped()
+
+    # --- Echo Gate (Silence Injection) ---
 
     def _activate_echo_window(self) -> None:
         if not self._in_echo_window:
-            logger.info("Echo window activated — raising energy threshold for Session B input")
+            logger.info("Echo window activated — silence injection for Session B input")
         self._in_echo_window = True
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
@@ -378,15 +394,33 @@ class VoiceToVoicePipeline(BasePipeline):
     def _start_echo_cooldown(self) -> None:
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
-        self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
+        # TTS 추적값 캡처 후 리셋 (다음 TTS를 위해)
+        first_chunk_at = self._tts_first_chunk_at
+        total_bytes = self._tts_total_bytes
+        self._tts_first_chunk_at = 0.0
+        self._tts_total_bytes = 0
+        self._echo_cooldown_task = asyncio.create_task(
+            self._echo_cooldown_timer(first_chunk_at, total_bytes)
+        )
 
-    async def _echo_cooldown_timer(self) -> None:
+    async def _echo_cooldown_timer(self, first_chunk_at: float, total_bytes: int) -> None:
+        """동적 cooldown: TTS 길이에 비례하는 대기 시간.
+
+        cooldown = 남은 재생 시간 + 에코 왕복 마진(0.5s)
+        - "네" (0.5s TTS, 0.2s 생성) → cooldown ≈ 0.8s
+        - "안녕하세요, 예약 문의 드립니다" (3s TTS, 0.5s 생성) → cooldown ≈ 3.0s
+        """
         try:
-            await asyncio.sleep(settings.echo_gate_cooldown_s)
+            audio_duration_s = total_bytes / 8000  # g711_ulaw @ 8kHz
+            elapsed = time.time() - first_chunk_at if first_chunk_at > 0 else 0
+            remaining_playback = max(audio_duration_s - elapsed, 0)
+            cooldown = remaining_playback + self._echo_margin_s
+
+            await asyncio.sleep(cooldown)
             self._in_echo_window = False
             logger.info(
-                "Echo window closed after %.1fs cooldown",
-                settings.echo_gate_cooldown_s,
+                "Echo window closed after %.1fs cooldown (audio=%.1fs, remaining=%.1fs, margin=%.1fs)",
+                cooldown, audio_duration_s, remaining_playback, self._echo_margin_s,
             )
         except asyncio.CancelledError:
             pass
@@ -394,14 +428,19 @@ class VoiceToVoicePipeline(BasePipeline):
     # --- 수신자 발화 감지 ---
 
     async def _on_recipient_started(self) -> None:
-        # EchoDetector: per-chunk 감지가 에코를 걸러줌
-        # Legacy: Dynamic threshold가 에코를 필터하므로 speech_started는 항상 genuine speech
+        if self._in_echo_window:
+            logger.debug("Ignoring speech during echo window (likely TTS echo)")
+            return
+
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
         else:
             await self.interrupt.on_recipient_speech_started()
 
     async def _on_recipient_stopped(self) -> None:
+        if self._in_echo_window:
+            logger.debug("Ignoring speech_stopped during echo window")
+            return
         await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
 

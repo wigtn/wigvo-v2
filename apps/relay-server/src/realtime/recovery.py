@@ -43,6 +43,7 @@ DEGRADED_BATCH_DURATION_S = 3.0  # 3초마다 배치 처리
 _IGNORABLE_ERROR_CODES = {
     "response_cancel_not_active",        # 이미 끝난 응답을 cancel 시도 (interrupt 타이밍)
     "conversation_already_has_active_response",  # 응답 생성 중 중복 요청
+    "input_audio_buffer_commit_empty",   # VAD auto-commit 후 debounce 재commit (무해)
 }
 
 
@@ -460,11 +461,14 @@ class SessionRecoveryManager:
     async def _whisper_transcribe(self, audio_bytes: bytes) -> str | None:
         """Whisper API로 오디오를 텍스트로 변환한다.
 
+        verbose_json 응답에서 품질 메트릭(no_speech_prob, compression_ratio,
+        avg_logprob)을 확인하여 hallucination을 필터링한다.
+
         Args:
             audio_bytes: g711_ulaw 오디오 바이트 (8kHz)
 
         Returns:
-            STT 결과 텍스트
+            STT 결과 텍스트 (hallucination 판정 시 None)
         """
         if not audio_bytes:
             return None
@@ -482,8 +486,42 @@ class SessionRecoveryManager:
                 model=settings.whisper_model,
                 file=audio_file,
                 language=self.session.config.source_language,
+                response_format="verbose_json",
+                timestamp_granularities=["segment"],
             )
-            return result.text if result.text else None
+
+            text = result.text if result.text else None
+            if not text:
+                return None
+
+            # 품질 메트릭 기반 hallucination 필터링
+            segments = getattr(result, "segments", None) or []
+            if segments:
+                avg_no_speech = sum(s.get("no_speech_prob", 0) for s in segments) / len(segments)
+                avg_logprob = sum(s.get("avg_logprob", 0) for s in segments) / len(segments)
+                max_compression = max((s.get("compression_ratio", 1.0) for s in segments), default=1.0)
+
+                logger.info(
+                    "[%s] Whisper metrics: no_speech=%.2f, logprob=%.2f, compression=%.1f, text='%s'",
+                    self.session.label, avg_no_speech, avg_logprob, max_compression, text[:60],
+                )
+
+                if avg_no_speech > 0.7:
+                    logger.warning("[%s] Whisper hallucination filtered (no_speech=%.2f): '%s'",
+                                   self.session.label, avg_no_speech, text[:60])
+                    return None
+
+                if max_compression > 2.4:
+                    logger.warning("[%s] Whisper hallucination filtered (compression=%.1f): '%s'",
+                                   self.session.label, max_compression, text[:60])
+                    return None
+
+                if avg_logprob < -1.0:
+                    logger.warning("[%s] Whisper hallucination filtered (logprob=%.2f): '%s'",
+                                   self.session.label, avg_logprob, text[:60])
+                    return None
+
+            return text
         except Exception as e:
             logger.error("[%s] Whisper transcription error: %s", self.session.label, e)
             return None
