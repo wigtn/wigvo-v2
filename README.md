@@ -15,7 +15,7 @@ No apps needed on the recipient's end. Just call.
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#tech-stack)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#tech-stack)
-[![Tests](https://img.shields.io/badge/Tests-147_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-150+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br />
 
@@ -138,39 +138,35 @@ This is the core architectural decision that makes real-time bidirectional phone
 
 ## Key Technical Innovations
 
-### Echo Prevention — Dual-Layer Detection
+### Echo Prevention — Multi-Layer System
 
 When Session A sends translated audio to the recipient via Twilio, that same audio echoes back into Session B's microphone. Without mitigation, this creates an infinite translation loop.
 
-**Layer 1: Audio Fingerprint Echo Detector (default)**
+**Layer 1: Silence Injection + Dynamic Energy Threshold (primary)**
 
-Per-chunk energy fingerprint analysis using Pearson correlation:
+During TTS playback ("echo window"), incoming Twilio audio is replaced with silence frames so that the server VAD naturally detects speech-end. A dynamic energy threshold distinguishes echo from real speech:
 
 ```
-Session A TTS chunks          Twilio incoming audio
-       │                              │
-       ▼                              ▼
-  Record RMS energy           Compare energy pattern
-  to reference buffer         against reference at
-  (timestamp, RMS)            80–600ms delay offsets
-                                      │
-                                      ▼
-                              Pearson correlation r
-                              r > 0.6 → ECHO (drop)
-                              r ≤ 0.6 → GENUINE (pass through immediately)
+Echo window active (TTS playing)
+       │
+       ▼
+  Incoming audio RMS
+       │
+       ├── < 400 RMS  → Echo (~100-400 RMS) → Replace with silence
+       └── > 400 RMS  → Real speech (~500-2000+ RMS) → Pass through
 ```
 
-- Only **echo chunks are dropped** — genuine recipient speech passes through immediately
-- Scale-invariant: works even with 10–30dB signal attenuation
-- **Zero false-positive speech loss** vs. the blanket blocking approach
+- PSTN echo typically ranges 100-400 RMS; genuine speech is 500-2000+ RMS
+- Silence frames let server VAD end naturally without forced truncation
+- Outside echo window, a lower energy gate (150 RMS) filters PSTN background noise
 
 **Layer 2: Echo Gate v2 (output-side gating)**
 
 ```
                       ┌─────── TTS Playing ───────┐
                       │                           │
-Input (recipient):    │  ● Always active          │  ← Never miss real speech
-Output (to user):     │  ○ Suppressed → Queue     │  ← Prevent echo forwarding
+Input (recipient):    │  Always active            │  <- Never miss real speech
+Output (to user):     │  Suppressed -> Queue      │  <- Prevent echo forwarding
                       │                           │
                       └───── Cooldown (300ms) ────┘
                                     │
@@ -181,7 +177,9 @@ Output (to user):     │  ○ Suppressed → Queue     │  ← Prevent echo fo
 - Output is **queued** during TTS playback, then flushed after cooldown
 - Recipient speech **immediately releases** the gate (priority interrupt)
 
-> **Note**: EchoDetector is only active in **VoiceToVoicePipeline**. TextToVoice/FullAgent don't need echo detection since user input is text (no TTS echo loop possible).
+**Legacy: Audio Fingerprint Echo Detector (experimental)**
+
+A Pearson-correlation-based per-chunk echo detector exists in the codebase (`echo_detector.py`) but is currently disabled (`ECHO_DETECTOR_ENABLED=False`). The Silence Injection approach proved more reliable for PSTN audio.
 
 ### Guardrail System — Translation Quality Verification
 
@@ -213,24 +211,44 @@ Normal ──► Heartbeat miss ──► Reconnect (exponential backoff)
 - **Catch-up**: On reconnect, unsent audio is batch-transcribed via Whisper and re-injected
 - **Degraded mode**: After 10s failure, switches to Whisper STT + GPT-4o-mini translation
 
-### Client-side VAD — 40% API Cost Reduction
+### Voice Activity Detection — Multi-Level
 
-The mobile app performs **Voice Activity Detection locally**, sending only speech frames to the server:
+**Client-side VAD (Mobile App)**
+
+The mobile app performs Voice Activity Detection locally, sending only speech frames to the server:
 
 - RMS energy-based detection with configurable thresholds
-- State machine: `SILENT → SPEAKING → COMMITTED`
+- State machine: `SILENT -> SPEAKING -> COMMITTED`
 - 300ms pre-speech ring buffer prevents onset clipping
 - Reduces audio data sent to OpenAI by ~40%, directly cutting costs
+
+**Server-side Local VAD (Silero + RMS)**
+
+Session B runs a local VAD on incoming Twilio audio for more accurate and lower-latency speech detection than server VAD alone:
+
+- Silero neural VAD model for speech probability scoring
+- RMS energy gate filters PSTN background noise before VAD processing
+- Faster endpoint detection than relying solely on OpenAI server VAD
+
+**Audio Energy Gate (PSTN Noise Filter)**
+
+PSTN phone lines carry constant background noise (50-200 RMS) that can confuse VAD. The energy gate replaces sub-threshold audio with silence:
+
+- Configurable threshold (`AUDIO_ENERGY_MIN_RMS=150`) filters line noise
+- Higher threshold during echo windows (`ECHO_ENERGY_THRESHOLD_RMS=400`)
+- Real speech (500-2000+ RMS) always passes through
 
 ### Interrupt Priority — Natural Conversation Flow
 
 Phone calls have natural turn-taking. Our priority system ensures the recipient is never kept waiting:
 
 ```
-Priority 1 (highest):  Recipient speech  → Immediately cancel AI output
-Priority 2:            User speech        → Cancel AI, queue for translation
-Priority 3 (lowest):   AI generation      → Can be interrupted by anyone
+Priority 1 (highest):  Recipient speech  -> Immediately cancel AI output
+Priority 2:            User speech        -> Cancel AI, queue for translation
+Priority 3 (lowest):   AI generation      -> Can be interrupted by anyone
 ```
+
+A max speech duration safety net (8 seconds) force-commits the audio buffer if VAD fails to detect speech-end, preventing indefinite recording.
 
 ---
 
@@ -261,6 +279,9 @@ apps/
 │   │   ├── call_manager.py          # Call lifecycle singleton (register/cleanup/shutdown)
 │   │   ├── config.py                # pydantic-settings env config
 │   │   ├── types.py                 # ActiveCall, CostTokens, WsMessage, etc.
+│   │   ├── logging_config.py        # Structured logging setup
+│   │   ├── middleware/              # HTTP middleware
+│   │   │   └── rate_limit.py        # Rate limiting
 │   │   ├── routes/                  # HTTP + WebSocket endpoints
 │   │   │   ├── calls.py             # POST /calls/start, /calls/{id}/end
 │   │   │   ├── stream.py            # WS /calls/{id}/stream (app ↔ relay)
@@ -284,7 +305,7 @@ apps/
 │   │   ├── tools/                   # Agent Mode function calling
 │   │   ├── prompt/                  # System prompt templates + generator
 │   │   └── db/                      # Supabase client
-│   ├── tests/                       # 147 pytest unit tests
+│   ├── tests/                       # 150+ pytest unit tests
 │   │   ├── component/              # Module benchmarks (cost tracking, ring buffer perf)
 │   │   ├── integration/            # Server-required tests (API, WebSocket)
 │   │   ├── e2e/                    # End-to-end call tests (Twilio + OpenAI required)
@@ -388,7 +409,7 @@ ngrok http 8000               # Copy URL to .env RELAY_SERVER_URL
 ### Testing
 
 ```bash
-# Unit tests (147 tests, no server needed)
+# Unit tests (150+ tests, no server needed)
 cd apps/relay-server
 uv run pytest -v
 

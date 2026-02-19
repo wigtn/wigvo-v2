@@ -21,6 +21,11 @@ src/
 ├── config.py                # Environment variables (pydantic-settings)
 ├── types.py                 # Shared types/Enum/Pydantic models
 ├── call_manager.py          # Call lifecycle singleton (central resource management)
+├── logging_config.py        # Structured logging infrastructure
+│
+├── middleware/
+│   ├── __init__.py
+│   └── rate_limit.py        # Rate limiting middleware
 │
 ├── routes/
 │   ├── calls.py             # POST /relay/calls/start, /end — call start/end API
@@ -37,7 +42,8 @@ src/
 │   │   └── full_agent.py     # FullAgentPipeline (Function Calling + autonomous AI)
 │   │
 │   ├── audio_router.py      # AudioRouter — thin delegator (Pipeline selection + common lifecycle)
-│   ├── echo_detector.py     # EchoDetector — Pearson correlation-based echo detection
+│   ├── echo_detector.py     # EchoDetector — Pearson correlation-based echo detection (legacy)
+│   ├── local_vad.py         # Local VAD — Silero + RMS server-side voice detection
 │   ├── audio_utils.py       # Shared mu-law -> linear PCM conversion + RMS calculation
 │   ├── session_manager.py   # RealtimeSession (OpenAI WS wrapper) + DualSessionManager
 │   ├── session_a.py         # SessionAHandler — User->recipient translation event handling
@@ -73,7 +79,7 @@ tests/
 ├── conftest.py              # pytest fixtures
 ├── helpers.py               # ANSI color utilities (run.py dependency)
 ├── run.py                   # Custom runner (uv run python -m tests.run)
-├── test_*.py                # pytest unit tests (147 tests)
+├── test_*.py                # pytest unit tests (incl. test_local_vad, test_echo_gate)
 ├── component/               # Module benchmarks (no server required)
 │   ├── test_cost_tracking.py
 │   └── test_ring_buffer_perf.py
@@ -121,9 +127,10 @@ class BasePipeline(ABC):
 | **Session A turn_detection** | client/server VAD | client/server VAD | `null` (manual) | `null` (manual) |
 | **Session B modalities** | `['text', 'audio']` | `['text', 'audio']` | **`['text']`** | **`['text']`** |
 | **Session B -> App audio** | Sent | **Suppressed** | N/A (text only) | N/A (text only) |
-| **EchoDetector** | **Active** | **Active** | Not needed | Not needed |
+| **Silence Injection** | **Active** | **Active** | Not needed | Not needed |
 | **Echo Gate** | Active | Active | Not needed | Not needed |
-| **Audio Energy Gate** | Active | Active | Active | Active |
+| **Energy Gate** | Active | Active | Active | Active |
+| **Local VAD** | Active | Active | Active | Active |
 | **Interrupt Handler** | Active | Active | Active | Active |
 | **Function Calling** | None | None | None | **Active** |
 | **Per-response instruction** | None | None | **Active** | **Active** |
@@ -232,9 +239,17 @@ Twilio                    Relay Server                      App
  │                      │      │                              │
  │              Pipeline.handle_twilio_audio()                 │
  │                      │                                     │
- │              EchoDetector.is_echo() (Voice mode only)       │
- │              ├─ Echo -> drop                                │
- │              └─ Genuine speech -> continue                  │
+ │              Energy Gate check (RMS threshold)              │
+ │              ├─ Below threshold -> silence replacement      │
+ │              └─ Above threshold -> continue                 │
+ │                      │                                     │
+ │              Silence Injection (during echo window)         │
+ │              ├─ Echo window active -> replace with silence  │
+ │              └─ No echo window -> pass through              │
+ │                      │                                     │
+ │              Local VAD (Silero + RMS)                       │
+ │              ├─ Speech detected -> send to Session B        │
+ │              └─ Silence -> skip                             │
  │                      │                                     │
  │              Record to RingBuffer B                         │
  │              SessionBHandler.send_recipient_audio()         │
@@ -257,33 +272,55 @@ Twilio                    Relay Server                      App
 
 ### Core Mechanisms
 
-#### EchoDetector (Fingerprint-Based Echo Detection)
+#### Silence Injection + Dynamic Energy Threshold (Primary Echo Prevention)
 
-**VoiceToVoicePipeline only.** When Session A sends TTS to Twilio, the echo returns to Session B. EchoDetector remembers the energy pattern (fingerprint) of the sent TTS and compares it against incoming audio.
+**VoiceToVoice/VoiceToText pipelines.** When Session A sends TTS to Twilio, the echo returns to Session B. The primary defense is replacing incoming Twilio audio with silence frames during the echo window, combined with energy-based filtering.
 
 ```
-Session A TTS chunk              Twilio received audio
-       │                              │
-       v                              v
-  record_sent_chunk()          is_echo(chunk) -> bool
-       │                              │
-       v                              v
-  Reference Buffer             Extract 200ms window energy pattern
-  [timestamp, RMS]             Compare across 80~600ms delay offsets
-                                      │
-                                      v
-                               Pearson normalized correlation
-                               r > 0.6 -> ECHO (drop)
-                               r <= 0.6 -> GENUINE (pass immediately)
+Session A TTS chunk sent to Twilio
+       │
+       v
+  Start echo window (dynamic cooldown proportional to TTS length)
+       │
+       v
+  Twilio audio arrives during echo window
+       │
+       ├─ RMS < ECHO_ENERGY_THRESHOLD_RMS (400) -> replace with silence (\xff)
+       └─ RMS >= ECHO_ENERGY_THRESHOLD_RMS      -> genuine speech (pass through)
+       │
+       v
+  Echo window expires -> normal processing resumes
 ```
 
-**Principle**: Echo = delayed + attenuated copy of sent audio -> high energy pattern correlation. Genuine speech = completely different voice pattern -> low correlation. Pearson normalization ignores attenuation differences (10~30dB) and compares patterns only.
+**Principle**: PSTN echo has low energy (~100-400 RMS) while genuine recipient speech is much louder (~500-2000+ RMS). During echo windows, the energy threshold filters echo while allowing real speech through. Outside echo windows, `AUDIO_ENERGY_MIN_RMS` (150) filters PSTN background noise.
 
-**Legacy Echo Gate fallback**: When `echo_detector_enabled=False`, falls back to the legacy 2.5-second full-block approach. EchoDetector is enabled by default.
+#### Local VAD (Server-Side Voice Activity Detection)
+
+Silero VAD + RMS energy gate running on the relay server for Twilio-side audio (Session B input). Replaces reliance on OpenAI server VAD for recipient speech detection.
+
+```
+Twilio audio (g711_ulaw) -> mu-law decode -> PCM16
+       │
+       ├─ RMS < LOCAL_VAD_RMS_THRESHOLD (150) -> silence (skip)
+       │
+       └─ Silero VAD inference
+          ├─ confidence >= SPEECH_THRESHOLD (0.5)
+          │   └─ speech_frame_count >= MIN_SPEECH_FRAMES (2 = 64ms) -> SPEECH
+          └─ confidence < SILENCE_THRESHOLD (0.35)
+              └─ silence_frame_count >= MIN_SILENCE_FRAMES (15 = 480ms) -> SILENCE
+```
+
+**Benefits**: Consistent latency independent of OpenAI server VAD variability. Allows fine-grained control of speech detection thresholds for PSTN audio quality.
+
+#### EchoDetector (Legacy -- Disabled by Default)
+
+Pearson correlation-based echo fingerprinting. Exists in code but disabled (`ECHO_DETECTOR_ENABLED=False`). Can be re-enabled for experimentation. When active, compares energy patterns of sent TTS against incoming audio using normalized correlation.
+
+Set `ECHO_DETECTOR_ENABLED=True` to activate. When disabled, Silence Injection + Dynamic Energy Threshold handles all echo prevention.
 
 #### Echo Gate v2 (Output Gating)
 
-Output-side protection that works alongside EchoDetector:
+Output-side protection that works alongside Silence Injection:
 
 | Phase | Action |
 |---|---|
@@ -294,7 +331,7 @@ Output-side protection that works alongside EchoDetector:
 
 Key point: **INPUT is never blocked** -> recipient speech can always be detected. Only OUTPUT is suppressed and stored in a pending queue for later flush.
 
-> In TextToVoice/FullAgent pipelines, both Echo Gate and EchoDetector are disabled. Since user input is text, a TTS echo loop is impossible.
+> In TextToVoice/FullAgent pipelines, Echo Gate and Silence Injection are disabled. Since user input is text, a TTS echo loop is impossible.
 
 #### Per-Response Instruction (TextToVoice Only)
 
@@ -372,7 +409,7 @@ Text delta arrives (ahead of audio)
 | Session B output | Voice + text | Text only (App) | Text only | Text only |
 | Session B -> A feedback | None | None | None | Recipient translation auto-forwarded |
 | Function Calling | Disabled | Disabled | Disabled | Active |
-| Echo detection | EchoDetector + Gate | EchoDetector + Gate | Not needed | Not needed |
+| Echo detection | Silence Injection + Gate | Silence Injection + Gate | Not needed | Not needed |
 | B audio tokens | Consumed | Consumed | **0** | **0** |
 
 ### CallManager (Central Resource Management)
@@ -436,13 +473,27 @@ Call sites: App WS disconnect, Twilio disconnect, status-callback, manual end, s
 | `SUPABASE_SERVICE_KEY` | | Supabase service key |
 | `RELAY_SERVER_URL` | `http://localhost:8000` | Server URL (for Twilio webhooks) |
 | `GUARDRAIL_ENABLED` | `true` | Enable Guardrail |
+| `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat timeout (seconds) |
+| **Echo Prevention** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate cooldown (seconds, for fallback) |
-| `ECHO_DETECTOR_ENABLED` | `true` | Enable Fingerprint EchoDetector |
+| `AUDIO_ENERGY_GATE_ENABLED` | `true` | Enable PSTN noise energy gate |
+| `AUDIO_ENERGY_MIN_RMS` | `150.0` | PSTN noise filter threshold (RMS) |
+| `ECHO_ENERGY_THRESHOLD_RMS` | `400.0` | Echo window energy threshold (RMS) |
+| `ECHO_DETECTOR_ENABLED` | `false` | Enable legacy EchoDetector (Pearson correlation) |
 | `ECHO_DETECTOR_THRESHOLD` | `0.6` | Pearson correlation threshold |
-| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.3` | Safety margin after TTS ends (seconds) |
+| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.15` | Safety margin after TTS ends (seconds) |
 | `ECHO_DETECTOR_MIN_DELAY_CHUNKS` | `4` | Minimum echo delay (80ms) |
-| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `30` | Maximum echo delay (600ms) |
-| `ECHO_DETECTOR_CORRELATION_WINDOW` | `10` | Comparison window size (200ms) |
+| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `20` | Maximum echo delay (400ms) |
+| `ECHO_DETECTOR_CORRELATION_WINDOW` | `8` | Comparison window size (160ms) |
+| **Local VAD** | | |
+| `LOCAL_VAD_ENABLED` | `true` | Enable Local VAD (Silero + RMS) |
+| `LOCAL_VAD_RMS_THRESHOLD` | `150.0` | RMS energy threshold for speech |
+| `LOCAL_VAD_SPEECH_THRESHOLD` | `0.5` | Silero speech confidence threshold |
+| `LOCAL_VAD_SILENCE_THRESHOLD` | `0.35` | Silero silence confidence threshold |
+| `LOCAL_VAD_MIN_SPEECH_FRAMES` | `2` | Minimum speech frames (64ms) |
+| `LOCAL_VAD_MIN_SILENCE_FRAMES` | `15` | Minimum silence frames (480ms) |
+| **Audio** | | |
+| `MAX_SPEECH_DURATION_S` | `8.0` | Force commit after max speech time (seconds) |
 
 ---
 
@@ -467,6 +518,11 @@ src/
 ├── config.py                # 환경변수 (pydantic-settings)
 ├── types.py                 # 공유 타입/Enum/Pydantic 모델
 ├── call_manager.py          # 통화 라이프사이클 싱글톤 (중앙 리소스 관리)
+├── logging_config.py        # 구조화 로깅 인프라
+│
+├── middleware/
+│   ├── __init__.py
+│   └── rate_limit.py        # Rate limiting 미들웨어
 │
 ├── routes/
 │   ├── calls.py             # POST /relay/calls/start, /end — 통화 시작/종료 API
@@ -483,7 +539,8 @@ src/
 │   │   └── full_agent.py     # FullAgentPipeline (Function Calling + 자율 AI)
 │   │
 │   ├── audio_router.py      # AudioRouter — 얇은 위임자 (Pipeline 선택 + 공통 생명주기)
-│   ├── echo_detector.py     # EchoDetector — Pearson 상관계수 기반 에코 감지
+│   ├── echo_detector.py     # EchoDetector — Pearson 상관계수 기반 에코 감지 (레거시)
+│   ├── local_vad.py         # Local VAD — Silero + RMS 서버 측 음성 감지
 │   ├── audio_utils.py       # 공유 mu-law → linear PCM 변환 + RMS 계산
 │   ├── session_manager.py   # RealtimeSession (OpenAI WS 래퍼) + DualSessionManager
 │   ├── session_a.py         # SessionAHandler — User→수신자 번역 이벤트 처리
@@ -519,7 +576,7 @@ tests/
 ├── conftest.py              # pytest fixtures
 ├── helpers.py               # ANSI 색상 유틸 (run.py 의존)
 ├── run.py                   # 커스텀 러너 (uv run python -m tests.run)
-├── test_*.py                # pytest 단위 테스트 (147개)
+├── test_*.py                # pytest 단위 테스트 (test_local_vad, test_echo_gate 포함)
 ├── component/               # 모듈 벤치마크 (서버 불필요)
 │   ├── test_cost_tracking.py
 │   └── test_ring_buffer_perf.py
@@ -567,9 +624,10 @@ class BasePipeline(ABC):
 | **Session A turn_detection** | client/server VAD | client/server VAD | `null` (manual) | `null` (manual) |
 | **Session B modalities** | `['text', 'audio']` | `['text', 'audio']` | **`['text']`** | **`['text']`** |
 | **Session B → App 오디오** | 전송 | **생략** | N/A (텍스트만) | N/A (텍스트만) |
-| **EchoDetector** | **활성** | **활성** | 불필요 | 불필요 |
+| **Silence Injection** | **활성** | **활성** | 불필요 | 불필요 |
 | **Echo Gate** | 활성 | 활성 | 불필요 | 불필요 |
-| **Audio Energy Gate** | 활성 | 활성 | 활성 | 활성 |
+| **Energy Gate** | 활성 | 활성 | 활성 | 활성 |
+| **Local VAD** | 활성 | 활성 | 활성 | 활성 |
 | **Interrupt Handler** | 활성 | 활성 | 활성 | 활성 |
 | **Function Calling** | 없음 | 없음 | 없음 | **활성** |
 | **Per-response instruction** | 없음 | 없음 | **활성** | **활성** |
@@ -678,9 +736,17 @@ Twilio                    Relay Server                      App
  │                      │      │                              │
  │              Pipeline.handle_twilio_audio()                 │
  │                      │                                     │
- │              EchoDetector.is_echo() (Voice 모드만)           │
- │              ├─ 에코 → 드롭                                 │
- │              └─ 실제 발화 → 계속                             │
+ │              Energy Gate 검사 (RMS 임계값)                   │
+ │              ├─ 임계값 미만 → silence 교체                   │
+ │              └─ 임계값 이상 → 계속                           │
+ │                      │                                     │
+ │              Silence Injection (echo window 중)             │
+ │              ├─ Echo window 활성 → silence 교체              │
+ │              └─ Echo window 없음 → 통과                     │
+ │                      │                                     │
+ │              Local VAD (Silero + RMS)                       │
+ │              ├─ 발화 감지 → Session B로 전달                 │
+ │              └─ 무음 → 건너뜀                               │
  │                      │                                     │
  │              RingBuffer B에 기록                             │
  │              SessionBHandler.send_recipient_audio()         │
@@ -703,33 +769,55 @@ Twilio                    Relay Server                      App
 
 ### 핵심 메커니즘
 
-#### EchoDetector (핑거프린트 에코 감지)
+#### Silence Injection + Dynamic Energy Threshold (주요 에코 방지)
 
-**VoiceToVoicePipeline 전용.** Session A가 TTS를 Twilio로 보내면 에코가 Session B로 돌아온다. EchoDetector는 보낸 TTS의 에너지 패턴(fingerprint)을 기억하고, 돌아오는 오디오와 비교한다.
+**VoiceToVoice/VoiceToText 파이프라인.** Session A가 TTS를 Twilio로 보내면 에코가 Session B로 돌아온다. 주요 방어 기법은 echo window 동안 Twilio 수신 오디오를 silence 프레임으로 교체하는 것이며, 에너지 기반 필터링과 함께 동작한다.
 
 ```
-Session A TTS 청크              Twilio 수신 오디오
-       │                              │
-       ▼                              ▼
-  record_sent_chunk()          is_echo(chunk) → bool
-       │                              │
-       ▼                              ▼
-  Reference Buffer             200ms 윈도우 에너지 패턴 추출
-  [timestamp, RMS]             80~600ms 딜레이 오프셋별 비교
-                                      │
-                                      ▼
-                               Pearson 정규화 상관계수
-                               r > 0.6 → ECHO (드롭)
-                               r ≤ 0.6 → GENUINE (즉시 통과)
+Session A TTS 청크를 Twilio로 전송
+       │
+       ▼
+  Echo window 시작 (TTS 길이에 비례하는 동적 cooldown)
+       │
+       ▼
+  Echo window 동안 Twilio 오디오 도착
+       │
+       ├─ RMS < ECHO_ENERGY_THRESHOLD_RMS (400) → silence로 교체 (\xff)
+       └─ RMS >= ECHO_ENERGY_THRESHOLD_RMS      → 실제 발화 (통과)
+       │
+       ▼
+  Echo window 만료 → 정상 처리 재개
 ```
 
-**원리**: 에코 = 보낸 오디오의 지연+감쇠 복사본 → 에너지 패턴 상관관계 높음. 실제 발화 = 완전 다른 음성 패턴 → 상관관계 낮음. Pearson 정규화로 감쇠(10~30dB) 차이를 무시하고 패턴만 비교.
+**원리**: PSTN 에코는 낮은 에너지(~100-400 RMS)인 반면, 실제 수신자 발화는 훨씬 높다(~500-2000+ RMS). Echo window 동안 에너지 임계값으로 에코를 필터링하면서 실제 발화는 통과시킨다. Echo window 밖에서는 `AUDIO_ENERGY_MIN_RMS` (150)로 PSTN 배경 소음을 필터링한다.
 
-**Legacy Echo Gate 폴백**: `echo_detector_enabled=False` 시 기존 2.5초 전면 차단 방식으로 전환. 기본값은 EchoDetector 활성.
+#### Local VAD (서버 측 음성 감지)
+
+Silero VAD + RMS 에너지 게이트를 relay 서버에서 실행하여 Twilio 측 오디오(Session B 입력)의 음성을 감지한다. 수신자 발화 감지를 OpenAI 서버 VAD에만 의존하지 않는다.
+
+```
+Twilio 오디오 (g711_ulaw) → mu-law 디코드 → PCM16
+       │
+       ├─ RMS < LOCAL_VAD_RMS_THRESHOLD (150) → 무음 (건너뜀)
+       │
+       └─ Silero VAD 추론
+          ├─ 신뢰도 >= SPEECH_THRESHOLD (0.5)
+          │   └─ speech_frame_count >= MIN_SPEECH_FRAMES (2 = 64ms) → 발화
+          └─ 신뢰도 < SILENCE_THRESHOLD (0.35)
+              └─ silence_frame_count >= MIN_SILENCE_FRAMES (15 = 480ms) → 무음
+```
+
+**장점**: OpenAI 서버 VAD 변동과 무관한 일관된 지연 시간. PSTN 오디오 품질에 맞춘 세밀한 발화 감지 임계값 제어 가능.
+
+#### EchoDetector (레거시 -- 기본 비활성)
+
+Pearson 상관계수 기반 에코 핑거프린팅. 코드에 존재하나 비활성 상태(`ECHO_DETECTOR_ENABLED=False`). 실험 목적으로 재활성화 가능. 활성화 시 보낸 TTS의 에너지 패턴과 수신 오디오를 정규화 상관계수로 비교한다.
+
+`ECHO_DETECTOR_ENABLED=True`로 설정하면 활성화. 비활성 시 Silence Injection + Dynamic Energy Threshold가 모든 에코 방지를 담당한다.
 
 #### Echo Gate v2 (출력 게이팅)
 
-EchoDetector와 함께 동작하는 출력측 보호:
+Silence Injection과 함께 동작하는 출력측 보호:
 
 | 단계 | 동작 |
 |---|---|
@@ -740,7 +828,7 @@ EchoDetector와 함께 동작하는 출력측 보호:
 
 핵심: **INPUT은 차단하지 않음** → 수신자 발화를 항상 감지할 수 있다. OUTPUT만 억제하고 pending 큐에 저장 후 나중에 배출.
 
-> TextToVoice/FullAgent 파이프라인에서는 Echo Gate/EchoDetector 모두 비활성. 사용자 입력이 텍스트이므로 TTS echo loop 자체가 불가능.
+> TextToVoice/FullAgent 파이프라인에서는 Echo Gate/Silence Injection 모두 비활성. 사용자 입력이 텍스트이므로 TTS echo loop 자체가 불가능.
 
 #### Per-Response Instruction (TextToVoice 전용)
 
@@ -818,7 +906,7 @@ TextToVoice/FullAgent에서 Session B는 `modalities=['text']`로 설정되어:
 | Session B 출력 | 음성 + 텍스트 | 텍스트만 (App) | 텍스트만 | 텍스트만 |
 | Session B → A 피드백 | 없음 | 없음 | 없음 | 수신자 번역 자동 전달 |
 | Function Calling | 비활성 | 비활성 | 비활성 | 활성 |
-| Echo 감지 | EchoDetector + Gate | EchoDetector + Gate | 불필요 | 불필요 |
+| Echo 감지 | Silence Injection + Gate | Silence Injection + Gate | 불필요 | 불필요 |
 | B audio 토큰 | 소비 | 소비 | **0** | **0** |
 
 ### CallManager (중앙 리소스 관리)
@@ -882,10 +970,24 @@ _listen_tasks: dict[str, asyncio.Task]         # 세션 리스닝 태스크
 | `SUPABASE_SERVICE_KEY` | | Supabase 서비스 키 |
 | `RELAY_SERVER_URL` | `http://localhost:8000` | 서버 URL (Twilio webhook용) |
 | `GUARDRAIL_ENABLED` | `true` | Guardrail 활성화 |
+| `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat 타임아웃 (초) |
+| **에코 방지** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate 쿨다운 (초, 폴백용) |
-| `ECHO_DETECTOR_ENABLED` | `true` | Fingerprint EchoDetector 활성화 |
+| `AUDIO_ENERGY_GATE_ENABLED` | `true` | PSTN 소음 에너지 게이트 활성화 |
+| `AUDIO_ENERGY_MIN_RMS` | `150.0` | PSTN 소음 필터 임계값 (RMS) |
+| `ECHO_ENERGY_THRESHOLD_RMS` | `400.0` | Echo window 에너지 임계값 (RMS) |
+| `ECHO_DETECTOR_ENABLED` | `false` | 레거시 EchoDetector 활성화 (Pearson 상관계수) |
 | `ECHO_DETECTOR_THRESHOLD` | `0.6` | Pearson 상관계수 임계값 |
-| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.3` | TTS 종료 후 안전 마진 (초) |
+| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.15` | TTS 종료 후 안전 마진 (초) |
 | `ECHO_DETECTOR_MIN_DELAY_CHUNKS` | `4` | 최소 에코 딜레이 (80ms) |
-| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `30` | 최대 에코 딜레이 (600ms) |
-| `ECHO_DETECTOR_CORRELATION_WINDOW` | `10` | 비교 윈도우 크기 (200ms) |
+| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `20` | 최대 에코 딜레이 (400ms) |
+| `ECHO_DETECTOR_CORRELATION_WINDOW` | `8` | 비교 윈도우 크기 (160ms) |
+| **Local VAD** | | |
+| `LOCAL_VAD_ENABLED` | `true` | Local VAD 활성화 (Silero + RMS) |
+| `LOCAL_VAD_RMS_THRESHOLD` | `150.0` | 발화 판정 RMS 에너지 임계값 |
+| `LOCAL_VAD_SPEECH_THRESHOLD` | `0.5` | Silero 발화 신뢰도 임계값 |
+| `LOCAL_VAD_SILENCE_THRESHOLD` | `0.35` | Silero 무음 신뢰도 임계값 |
+| `LOCAL_VAD_MIN_SPEECH_FRAMES` | `2` | 최소 발화 프레임 (64ms) |
+| `LOCAL_VAD_MIN_SILENCE_FRAMES` | `15` | 최소 무음 프레임 (480ms) |
+| **오디오** | | |
+| `MAX_SPEECH_DURATION_S` | `8.0` | 최대 발화 시간 후 강제 commit (초) |

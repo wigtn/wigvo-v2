@@ -15,7 +15,7 @@
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#기술-스택)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#기술-스택)
-[![Tests](https://img.shields.io/badge/Tests-147_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#테스트)
+[![Tests](https://img.shields.io/badge/Tests-150+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#테스트)
 
 <br />
 
@@ -138,49 +138,52 @@ AudioRouter (얇은 위임자)
 
 ## 핵심 기술
 
-### 에코 방지 — 이중 레이어 감지
+### 에코 방지 — 다중 레이어 시스템
 
 Session A가 번역된 음성을 Twilio로 보내면, 그 음성이 Session B 마이크로 에코됩니다. 대응 없이는 무한 번역 루프가 발생합니다.
 
-**Layer 1: 오디오 핑거프린트 에코 감지기 (기본)**
+**Layer 1: 무음 주입 + 동적 에너지 임계값 (기본)**
 
-Pearson 상관계수를 이용한 청크별 에너지 핑거프린트 분석:
+TTS 재생 중 ("에코 윈도우")에는 수신되는 Twilio 오디오를 무음 프레임으로 대체하여, 서버 VAD가 자연스럽게 발화 종료를 감지합니다. 동적 에너지 임계값으로 에코와 실제 발화를 구분합니다:
 
 ```
-Session A TTS 청크            Twilio 수신 오디오
-       │                              │
-       ▼                              ▼
-  RMS 에너지 기록              80–600ms 지연 오프셋별
-  참조 버퍼에 저장              에너지 패턴 비교
-  (타임스탬프, RMS)                    │
-                                      ▼
-                              Pearson 상관계수 r
-                              r > 0.6 → 에코 (드롭)
-                              r ≤ 0.6 → 실제 발화 (즉시 통과)
+에코 윈도우 활성 (TTS 재생 중)
+       │
+       ▼
+  수신 오디오 RMS
+       │
+       ├── < 400 RMS  → 에코 (~100-400 RMS) → 무음으로 대체
+       └── > 400 RMS  → 실제 발화 (~500-2000+ RMS) → 통과
 ```
 
-- **에코 청크만 드롭** — 실제 수신자 발화는 즉시 통과
-- 스케일 불변: 10–30dB 감쇠에도 정상 동작
-- 전면 차단 방식 대비 **음성 유실 제로**
+- PSTN 에코는 일반적으로 100-400 RMS, 실제 발화는 500-2000+ RMS
+- 무음 프레임으로 서버 VAD가 강제 절단 없이 자연스럽게 종료
+- 에코 윈도우 밖에서는 낮은 에너지 게이트 (150 RMS)로 PSTN 배경 잡음 필터링
 
 **Layer 2: Echo Gate v2 (출력측 게이팅)**
 
 ```
                       ┌─────── TTS 재생 중 ────────┐
                       │                            │
-입력 (수신자 음성):    │  ● 항상 활성               │  ← 실제 발화를 놓치지 않음
-출력 (사용자에게):     │  ○ 억제 → 큐에 저장        │  ← 에코 전달 차단
+입력 (수신자 음성):    │  항상 활성                  │  ← 실제 발화를 놓치지 않음
+출력 (사용자에게):     │  억제 → 큐에 저장           │  ← 에코 전달 차단
                       │                            │
                       └───── 쿨다운 (300ms) ────────┘
                                     │
                               큐에 쌓인 출력 배출
 ```
 
-> **참고**: EchoDetector는 **VoiceToVoicePipeline**에서만 활성화됩니다. TextToVoice/FullAgent는 사용자 입력이 텍스트이므로 TTS 에코 루프 자체가 불가능하여 에코 감지가 불필요합니다.
+- 입력은 **차단하지 않음** — 에코 억제 중에도 수신자 발화 감지는 항상 활성
+- 출력은 TTS 재생 중 **큐에 저장**, 쿨다운 후 배출
+- 수신자 발화 시 게이트를 **즉시 해제** (우선순위 인터럽트)
 
-### 가드레일 시스템 — 번역 품질 보장
+**레거시: 오디오 핑거프린트 에코 감지기 (실험적)**
 
-95%+ 케이스에서 **지연 시간 제로**:
+Pearson 상관계수 기반 청크별 에코 감지기가 코드베이스에 존재하지만 (`echo_detector.py`), 현재 비활성 상태입니다 (`ECHO_DETECTOR_ENABLED=False`). PSTN 오디오에서는 무음 주입 방식이 더 안정적임이 확인되었습니다.
+
+### 가드레일 시스템 — 번역 품질 검증
+
+실시간 번역은 속도와 품질의 균형이 필요합니다. 3단계 시스템으로 95%+ 케이스에서 **지연 시간 제로**:
 
 | 레벨 | 트리거 | 동작 | 추가 지연 |
 |------|--------|------|----------|
@@ -190,19 +193,62 @@ Session A TTS 청크            Twilio 수신 오디오
 
 ### 세션 복구 — 무중단 통화
 
-OpenAI 세션이 끊어져도 통화는 계속됩니다:
+OpenAI Realtime 세션이 끊어질 수 있습니다. 통화 중 복구가 핵심입니다.
+
+```
+Normal ──> Heartbeat miss ──> Reconnect (지수 백오프)
+                                    │
+                              ┌─────┴─────┐
+                              │           │
+                         성공        실패 (10s)
+                              │           │
+                    링 버퍼        Degraded 모드
+                    catch-up      (Whisper 일괄
+                    (미전송 오디오)  번역 전환)
+```
 
 - **링 버퍼**: 30초 순환 버퍼가 미전송 오디오 보존
 - **Catch-up**: 재연결 시 미전송 오디오를 Whisper로 일괄 전사 후 재주입
 - **Degraded 모드**: 10초 복구 실패 시 Whisper STT + GPT-4o-mini 번역으로 전환
 
-### 클라이언트 VAD — API 비용 40% 절감
+### 음성 활동 감지 — 다단계 VAD
+
+**클라이언트 VAD (모바일 앱)**
 
 모바일 앱에서 **음성 활동 감지를 로컬로 수행**하여 음성 프레임만 서버로 전송:
 
-- RMS 에너지 기반 감지 + 상태 머신 (`SILENT → SPEAKING → COMMITTED`)
+- RMS 에너지 기반 감지 + 구성 가능한 임계값
+- 상태 머신: `SILENT -> SPEAKING -> COMMITTED`
 - 발화 시작 손실 방지용 300ms 프리스피치 링 버퍼
 - OpenAI로 전송되는 오디오 데이터를 ~40% 감소 → 비용 직감
+
+**서버 로컬 VAD (Silero + RMS)**
+
+Session B는 수신 Twilio 오디오에 대해 로컬 VAD를 실행하여, 서버 VAD 단독 사용보다 정확하고 저지연의 발화 감지를 수행합니다:
+
+- Silero 신경망 VAD 모델로 음성 확률 점수 산출
+- RMS 에너지 게이트로 VAD 처리 전 PSTN 배경 잡음 필터링
+- OpenAI 서버 VAD에만 의존할 때보다 빠른 발화 종료 감지
+
+**오디오 에너지 게이트 (PSTN 잡음 필터)**
+
+PSTN 전화선은 VAD를 혼란시키는 지속적 배경 잡음 (50-200 RMS)을 수반합니다. 에너지 게이트가 임계값 미만의 오디오를 무음으로 대체합니다:
+
+- 구성 가능한 임계값 (`AUDIO_ENERGY_MIN_RMS=150`)으로 회선 잡음 필터링
+- 에코 윈도우 중에는 더 높은 임계값 (`ECHO_ENERGY_THRESHOLD_RMS=400`)
+- 실제 발화 (500-2000+ RMS)는 항상 통과
+
+### 인터럽트 우선순위 — 자연스러운 대화 흐름
+
+전화 통화에는 자연스러운 순서 교대가 있습니다. 우선순위 시스템으로 수신자를 기다리게 하지 않습니다:
+
+```
+Priority 1 (최고):  수신자 발화  -> AI 출력 즉시 취소
+Priority 2:        사용자 발화  -> AI 취소, 번역 대기열에 추가
+Priority 3 (최저):  AI 생성     -> 누구든 인터럽트 가능
+```
+
+최대 발화 시간 안전장치 (8초)로 VAD가 발화 종료를 감지하지 못할 경우 오디오 버퍼를 강제 커밋하여 무한 녹음을 방지합니다.
 
 ---
 
@@ -218,8 +264,113 @@ OpenAI 세션이 끊어져도 통화는 계속됩니다:
 | **전화** | Twilio (REST + Media Streams) | 안정적 전화 인프라 |
 | **데이터베이스** | Supabase (PostgreSQL + Auth + RLS) | 실시간 구독, 행 수준 보안 |
 | **장소 검색** | 네이버 장소 검색 API | 한국 업종 디렉토리 |
-| **배포** | Docker, Google Cloud Run | 자동 스케일링 |
+| **배포** | Docker, Google Cloud Run | 자동 스케일링, 제로 콜드 스타트 |
 | **패키지 관리** | uv (Python), npm (Web/Mobile) | 빠르고 안정적 의존성 관리 |
+
+---
+
+## 프로젝트 구조
+
+```
+apps/
+├── relay-server/                    # Python FastAPI — 실시간 번역 엔진
+│   ├── src/
+│   │   ├── main.py                  # FastAPI 진입점 + lifespan
+│   │   ├── call_manager.py          # 통화 라이프사이클 싱글톤 (등록/정리/종료)
+│   │   ├── config.py                # pydantic-settings 환경변수 설정
+│   │   ├── types.py                 # ActiveCall, CostTokens, WsMessage 등
+│   │   ├── logging_config.py        # 구조화된 로깅 설정
+│   │   ├── middleware/              # HTTP 미들웨어
+│   │   │   └── rate_limit.py        # 속도 제한
+│   │   ├── routes/                  # HTTP + WebSocket 엔드포인트
+│   │   │   ├── calls.py             # POST /calls/start, /calls/{id}/end
+│   │   │   ├── stream.py            # WS /calls/{id}/stream (앱 ↔ 릴레이)
+│   │   │   └── twilio_webhook.py    # Twilio 상태 콜백
+│   │   ├── realtime/                # OpenAI Realtime 세션 관리
+│   │   │   ├── pipeline/            # Strategy 패턴 — 모드별 파이프라인
+│   │   │   │   ├── base.py          # BasePipeline ABC
+│   │   │   │   ├── voice_to_voice.py # V2V + V2T (EchoDetector, 전체 오디오)
+│   │   │   │   ├── text_to_voice.py  # T2V (per-response instruction, 텍스트 전용 B)
+│   │   │   │   └── full_agent.py     # Agent (function calling, 자율)
+│   │   │   ├── audio_router.py      # 얇은 위임자 → 파이프라인 선택
+│   │   │   ├── echo_detector.py     # Pearson 상관계수 에코 감지
+│   │   │   ├── audio_utils.py       # 공유 mu-law 오디오 유틸리티
+│   │   │   ├── session_manager.py   # 이중 세션 오케스트레이터
+│   │   │   ├── session_a.py         # User → 수신자 번역
+│   │   │   ├── session_b.py         # 수신자 → User 번역
+│   │   │   ├── context_manager.py   # 6턴 슬라이딩 컨텍스트 윈도우
+│   │   │   ├── recovery.py          # 세션 장애 복구 + degraded 모드
+│   │   │   └── ring_buffer.py       # 30초 순환 오디오 버퍼
+│   │   ├── guardrail/               # 3단계 번역 품질 시스템
+│   │   ├── tools/                   # Agent Mode function calling
+│   │   ├── prompt/                  # 시스템 프롬프트 템플릿 + 생성기
+│   │   └── db/                      # Supabase 클라이언트
+│   ├── tests/                       # 150+ pytest 단위 테스트
+│   │   ├── component/              # 모듈 벤치마크 (비용 추적, 링 버퍼 성능)
+│   │   ├── integration/            # 서버 필요 테스트 (API, WebSocket)
+│   │   ├── e2e/                    # 양방향 통화 E2E 테스트 (Twilio + OpenAI 필요)
+│   │   └── run.py                  # 테스트 러너 (--suite, --test 옵션)
+│
+├── web/                             # Next.js 16 — Chat Agent + 통화 모니터
+│   ├── app/
+│   │   ├── page.tsx                 # 대시보드 (채팅 + 통화 인터페이스)
+│   │   ├── api/                     # 7개 API 라우트 (chat, calls, conversations)
+│   │   ├── calling/[id]/            # 실시간 통화 모니터링
+│   │   └── result/[id]/             # 통화 결과 표시
+│   ├── lib/
+│   │   ├── services/                # 채팅 파이프라인 (chat-service, place-matcher, data-extractor)
+│   │   ├── supabase/                # SSR 클라이언트 + 헬퍼
+│   │   └── scenarios/               # 시나리오 프롬프트 (식당, 병원, 미용실 등)
+│   ├── hooks/                       # useChat, useCallPolling, useRelayWebSocket, useDashboard
+│   ├── components/                  # chat/, call/, dashboard/, ui/ (shadcn)
+│   └── shared/types.ts              # 정규 타입 정의 (Call, Conversation, CallRow)
+│
+└── mobile/                          # React Native (Expo) — VAD + 오디오 클라이언트
+    ├── app/                         # Expo Router (인증 + 메인 화면)
+    ├── hooks/                       # useRealtimeCall, useClientVad, useAudioRecorder
+    ├── components/call/             # RealtimeCallView, LiveCaptionPanel, VadIndicator
+    └── lib/vad/                     # VAD 코어 (프로세서, 링 버퍼, 설정)
+```
+
+---
+
+## API 레퍼런스
+
+### Relay Server
+
+| 엔드포인트 | 타입 | 설명 |
+|----------|------|------|
+| `POST /relay/calls/start` | HTTP | Twilio로 발신 통화 시작 |
+| `POST /relay/calls/{id}/end` | HTTP | 활성 통화 종료 |
+| `WS /relay/calls/{id}/stream` | WebSocket | 양방향 오디오/텍스트 스트림 |
+| `POST /twilio/incoming` | HTTP | Twilio 통화 상태 웹훅 |
+| `WS /twilio/media-stream` | WebSocket | Twilio Media Stream 오디오 브릿지 |
+| `GET /health` | HTTP | 상태 확인 |
+
+### Web App
+
+| 엔드포인트 | 메서드 | 설명 |
+|----------|--------|------|
+| `/api/chat` | POST | AI 대화 (GPT-4o-mini, 시나리오 기반) |
+| `/api/conversations` | GET/POST | 대화 세션 목록 또는 생성 |
+| `/api/conversations/[id]` | GET | 대화 상세 (메시지 포함) |
+| `/api/calls` | GET/POST | 통화 기록 목록 또는 생성 |
+| `/api/calls/[id]` | GET | 통화 상세 (상태, 결과, 요약) |
+| `/api/calls/[id]/start` | POST | Relay Server를 통한 통화 시작 |
+
+---
+
+## 데이터베이스 스키마
+
+| 테이블 | 주요 컬럼 | 용도 |
+|-------|----------|------|
+| `conversations` | scenario, status, collected_data (JSONB) | 수집된 정보가 포함된 채팅 세션 |
+| `messages` | role, content, metadata (JSONB) | 사용자 + AI 메시지 |
+| `calls` | status, result, call_sid, duration_s, total_tokens | 통화 라이프사이클 추적 |
+| `conversation_entities` | entity_type, value, confidence | 구조화된 데이터 추출 |
+| `place_search_cache` | query, results (JSONB), expires_at | 네이버 API 응답 캐시 |
+
+모든 테이블에 **Row Level Security** 적용 — 사용자는 자신의 데이터만 접근 가능합니다.
 
 ---
 
@@ -258,7 +409,7 @@ ngrok http 8000               # URL을 .env의 RELAY_SERVER_URL에 입력
 ### 테스트
 
 ```bash
-# 단위 테스트 (147개, 서버 불필요)
+# 단위 테스트 (150+개, 서버 불필요)
 cd apps/relay-server
 uv run pytest -v
 
@@ -267,6 +418,9 @@ uv run python -m tests.run --suite component
 
 # 통합 테스트 (서버 실행 필요)
 uv run python -m tests.run --suite integration
+
+# 개별 테스트
+uv run python -m tests.run --test cost
 
 # E2E 통화 테스트 (Twilio + OpenAI 키 필요)
 uv run python -m tests.run --test call --phone +82... --scenario restaurant --auto
@@ -277,8 +431,14 @@ uv run python -m tests.run --test call --phone +82... --scenario restaurant --au
 두 서비스 모두 컨테이너화되어 **Google Cloud Run**에 배포됩니다:
 
 ```bash
+# Cloud Build로 빌드 & 배포
 gcloud builds submit --config=cloudbuild.yaml
 ```
+
+| 서비스 | Dockerfile | Cloud Run |
+|-------|-----------|-----------|
+| Relay Server | `apps/relay-server/Dockerfile` | 자동 스케일링, WebSocket 지원 |
+| Web App | `apps/web/Dockerfile` | Next.js standalone 출력 |
 
 ---
 
