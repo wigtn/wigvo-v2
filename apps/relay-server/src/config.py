@@ -1,5 +1,11 @@
+from pathlib import Path
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
+
+# Monorepo 루트의 .env 파일 경로 (config.py → src → relay-server → apps → wigvo)
+_ROOT_DIR = Path(__file__).resolve().parents[3]
+_ENV_FILE = _ROOT_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -83,13 +89,19 @@ class Settings(BaseSettings):
     # 에너지 게이트는 순수 무음만 차단하도록 낮은 임계값 사용
     audio_energy_gate_enabled: bool = True
     audio_energy_min_rms: float = 20.0  # mu-law RMS 최소 임계값 (0=무음, 전화 소음 ~50-200, 발화 ~300+)
+    echo_energy_threshold_rms: float = 400.0  # Echo window 중 에너지 임계값
+                                               # 에코(감쇠): ~100-400, 발화(직접): ~500-2000+
 
     # Phase 4: Guardrail (PRD M-2)
     guardrail_enabled: bool = True
     guardrail_fallback_model: str = "gpt-4o-mini"
     guardrail_fallback_timeout_ms: int = 2000
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": str(_ENV_FILE),
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",  # 공유 .env의 Web 전용 변수(NEXT_PUBLIC_* 등) 무시
+    }
 
 
 settings = Settings()

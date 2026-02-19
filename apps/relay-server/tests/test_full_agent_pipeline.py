@@ -1,7 +1,7 @@
 """FullAgentPipeline 단위 테스트.
 
 핵심 검증 사항:
-  - TextToVoicePipeline 기반 동작 (text 입력, Echo Gate 포함)
+  - TextToVoicePipeline 기반 동작 (text 입력, Dynamic Energy Threshold 포함)
   - Agent 피드백 루프: 수신자 번역 → Session A 전달
   - FULL_AGENT 모드에서 올바른 Pipeline 생성
 """
@@ -60,6 +60,7 @@ def _make_router(**call_overrides) -> AudioRouter:
         mock_settings.max_call_duration_ms = 600_000
         mock_settings.audio_energy_gate_enabled = False
         mock_settings.audio_energy_min_rms = 150.0
+        mock_settings.echo_energy_threshold_rms = 400.0
         router = AudioRouter(
             call=call,
             dual_session=dual,
@@ -87,11 +88,11 @@ class TestFullAgentPipelineCreation:
         router = _make_router()
         assert isinstance(router._pipeline, TextToVoicePipeline)
 
-    def test_uses_echo_gate_not_detector(self):
-        """FullAgent도 Echo Gate를 사용한다 (EchoDetector 대신)."""
+    def test_uses_dynamic_energy_threshold_not_detector(self):
+        """FullAgent도 Dynamic Energy Threshold를 사용한다 (EchoDetector 대신)."""
         router = _make_router()
         assert router._pipeline._echo_detector is None
-        assert router._pipeline._echo_suppressed is False
+        assert router._pipeline._in_echo_window is False
 
 
 class TestFullAgentFeedbackLoop:

@@ -128,8 +128,8 @@ class VoiceToVoicePipeline(BasePipeline):
             capacity=settings.ring_buffer_capacity_slots,
         )
 
-        # Echo Gate: 에코 피드백 루프 차단
-        self._echo_suppressed = False
+        # Echo Gate / Dynamic Energy Threshold
+        self._in_echo_window = False
         self._echo_cooldown_task: asyncio.Task | None = None
 
         # Echo Detector: 에너지 핑거프린트 기반 에코 감지
@@ -252,16 +252,21 @@ class VoiceToVoicePipeline(BasePipeline):
         if self._echo_detector is not None:
             if self._echo_detector.is_active and self._echo_detector.is_echo(audio_bytes):
                 return
+            if settings.audio_energy_gate_enabled:
+                rms = _ulaw_rms(audio_bytes)
+                if rms < settings.audio_energy_min_rms:
+                    return
         else:
-            # 레거시: 2.5s blanket block
-            if self._echo_suppressed:
-                return
-
-        # 오디오 에너지 게이트
-        if settings.audio_energy_gate_enabled:
-            rms = _ulaw_rms(audio_bytes)
-            if rms < settings.audio_energy_min_rms:
-                return
+            # Legacy: Dynamic Energy Threshold (기존 blanket block 교체)
+            if settings.audio_energy_gate_enabled:
+                rms = _ulaw_rms(audio_bytes)
+                threshold = (
+                    settings.echo_energy_threshold_rms
+                    if self._in_echo_window
+                    else settings.audio_energy_min_rms
+                )
+                if rms < threshold:
+                    return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
@@ -275,7 +280,7 @@ class VoiceToVoicePipeline(BasePipeline):
         if self._echo_detector is not None:
             self._echo_detector.record_sent_chunk(audio_bytes)
         else:
-            self._activate_echo_suppression()
+            self._activate_echo_window()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -339,11 +344,12 @@ class VoiceToVoicePipeline(BasePipeline):
             )
         )
 
-    # --- Echo Gate ---
+    # --- Echo Window (Dynamic Energy Threshold, legacy path) ---
 
-    def _activate_echo_suppression(self) -> None:
-        self._echo_suppressed = True
-        self.session_b.output_suppressed = True
+    def _activate_echo_window(self) -> None:
+        if not self._in_echo_window:
+            logger.info("Echo window activated — raising energy threshold for Session B input")
+        self._in_echo_window = True
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
             self._echo_cooldown_task = None
@@ -356,12 +362,9 @@ class VoiceToVoicePipeline(BasePipeline):
     async def _echo_cooldown_timer(self) -> None:
         try:
             await asyncio.sleep(settings.echo_gate_cooldown_s)
-            self._echo_suppressed = False
-            self.session_b.output_suppressed = False
-            await self.session_b.flush_pending_output()
-            await self.session_b.clear_input_buffer()
+            self._in_echo_window = False
             logger.info(
-                "Echo gate released after %.1fs cooldown (pending output flushed, input buffer cleared)",
+                "Echo window closed after %.1fs cooldown",
                 settings.echo_gate_cooldown_s,
             )
         except asyncio.CancelledError:
@@ -370,13 +373,8 @@ class VoiceToVoicePipeline(BasePipeline):
     # --- 수신자 발화 감지 ---
 
     async def _on_recipient_started(self) -> None:
-        if self._echo_detector is not None:
-            pass  # per-chunk 감지가 에코를 걸러줌
-        else:
-            if self._echo_suppressed:
-                logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
-                return
-
+        # EchoDetector: per-chunk 감지가 에코를 걸러줌
+        # Legacy: Dynamic threshold가 에코를 필터하므로 speech_started는 항상 genuine speech
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
         else:

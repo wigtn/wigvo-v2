@@ -6,8 +6,9 @@ VoiceToVoicePipeline과의 핵심 차이:
   - User 입력: 텍스트 (audio 입력 무시)
   - Session A: per-response instruction override로 번역만 강제
   - Session B: modalities=['text'] (TTS 생략, 토큰 절약)
-  - Echo Gate: Session A TTS → Twilio echo → Session B 오염 방지 (시간 기반 blanket block)
-    EchoDetector(Pearson 상관계수)는 전화 회선 왜곡으로 실패 → Echo Gate 사용
+  - Dynamic Energy Threshold: echo window 중 높은 에너지 임계값으로 에코 필터링
+    에코(스피커→마이크 감쇠 20-30dB): RMS ~100-400
+    수신자 직접 발화(감쇠 없음): RMS ~500-2000+
   - First Message: exact utterance 패턴 (AI 확장 방지)
 
 hskim-wigvo-test 이식 포인트:
@@ -130,18 +131,13 @@ class TextToVoicePipeline(BasePipeline):
             on_notify_app=self._notify_app,
         )
 
-        # Echo Gate: Session A TTS → Twilio echo → Session B 오염 방지
-        # User 입력은 텍스트지만, Session A TTS가 전화 스피커→마이크로 에코되어
-        # Session B가 에코를 수신자 발화로 오인하는 문제 차단
-        #
-        # EchoDetector(Pearson 상관계수)를 사용하지 않는 이유:
-        #   1. 전화 회선 왜곡 (코덱·AGC·노이즈) → 상관계수 매칭 실패
-        #   2. TTS 버스트 생성 vs 일정 속도 에코 수신 → 인덱스 기반 딜레이 불일치
-        #   3. safety_cooldown 0.3s 이후 에코 체크 해제 → 늦은 에코 전량 통과
-        # 대신 Echo Gate(시간 기반 blanket block)로 TTS 에코를 확실히 차단한다.
-        self._echo_suppressed = False
+        # Dynamic Energy Threshold: echo window 중 높은 임계값으로 에코 필터링
+        # 에코(스피커→마이크 감쇠 20-30dB)는 RMS ~100-400으로 필터되고,
+        # 수신자 직접 발화(감쇠 없음)는 RMS ~500-2000+로 통과한다.
+        # Session B output은 항상 활성 — blanket block 하지 않음.
+        self._in_echo_window = False
         self._echo_cooldown_task: asyncio.Task | None = None
-        self._echo_detector = None  # Echo Gate 전용 — EchoDetector 미사용
+        self._echo_detector = None  # Dynamic Energy Threshold 전용 — EchoDetector 미사용
 
         # 동적 cooldown 추적: TTS 길이에 비례하는 cooldown 계산용
         self._tts_first_chunk_at: float = 0.0
@@ -250,23 +246,24 @@ class TextToVoicePipeline(BasePipeline):
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
-        Echo Gate로 Session A TTS 에코를 차단:
-        - TTS 전송 중 + cooldown(2.5s) 동안 Twilio 오디오 전체 차단
-        - Audio Energy Gate: 무음 필터링
+        Dynamic Energy Threshold: echo window에 따라 임계값 결정
+        - echo window 중: echo_energy_threshold_rms (에코 필터, 발화 통과)
+        - echo window 외: audio_energy_min_rms (무음만 필터)
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
         if self.recovery_b.is_recovering or self.recovery_b.is_degraded:
             return
 
-        # Echo Gate: TTS 에코 차단 (blanket block)
-        if self._echo_suppressed:
-            return
-
-        # 오디오 에너지 게이트 (무음 필터링)
+        # Dynamic Energy Threshold: echo window에 따라 임계값 결정
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
-            if rms < settings.audio_energy_min_rms:
+            threshold = (
+                settings.echo_energy_threshold_rms
+                if self._in_echo_window
+                else settings.audio_energy_min_rms
+            )
+            if rms < threshold:
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -276,12 +273,12 @@ class TextToVoicePipeline(BasePipeline):
     # --- Session A 콜백 ---
 
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
-        """Session A TTS 출력을 Twilio에 전달 + Echo Gate 활성화 + 오디오 길이 추적."""
+        """Session A TTS 출력을 Twilio에 전달 + echo window 활성화 + 오디오 길이 추적."""
         if self._tts_first_chunk_at == 0.0:
             self._tts_first_chunk_at = time.time()
             self._tts_total_bytes = 0
         self._tts_total_bytes += len(audio_bytes)
-        self._activate_echo_suppression()
+        self._activate_echo_window()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -338,11 +335,7 @@ class TextToVoicePipeline(BasePipeline):
     # --- 수신자 발화 감지 ---
 
     async def _on_recipient_started(self) -> None:
-        """수신자 발화 시작 — Echo Gate 활성 중이면 무시 (TTS 에코)."""
-        if self._echo_suppressed:
-            logger.info("Ignoring speech_started during Echo Gate (likely TTS echo)")
-            return
-
+        """수신자 발화 시작 — Dynamic threshold가 에코를 필터하므로 항상 genuine speech."""
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
         else:
@@ -352,13 +345,12 @@ class TextToVoicePipeline(BasePipeline):
         await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
 
-    # --- Echo Gate (Legacy fallback) ---
+    # --- Echo Window (Dynamic Energy Threshold) ---
 
-    def _activate_echo_suppression(self) -> None:
-        if not self._echo_suppressed:
-            logger.info("Echo Gate activated — blocking Twilio audio to Session B")
-        self._echo_suppressed = True
-        self.session_b.output_suppressed = True
+    def _activate_echo_window(self) -> None:
+        if not self._in_echo_window:
+            logger.info("Echo window activated — raising energy threshold for Session B input")
+        self._in_echo_window = True
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
             self._echo_cooldown_task = None
@@ -389,12 +381,9 @@ class TextToVoicePipeline(BasePipeline):
             cooldown = remaining_playback + self._echo_margin_s
 
             await asyncio.sleep(cooldown)
-            self._echo_suppressed = False
-            self.session_b.output_suppressed = False
-            await self.session_b.flush_pending_output()
-            await self.session_b.clear_input_buffer()
+            self._in_echo_window = False
             logger.info(
-                "Echo gate released after %.1fs cooldown (audio=%.1fs, remaining=%.1fs, margin=%.1fs)",
+                "Echo window closed after %.1fs cooldown (audio=%.1fs, remaining=%.1fs, margin=%.1fs)",
                 cooldown, audio_duration_s, remaining_playback, self._echo_margin_s,
             )
         except asyncio.CancelledError:

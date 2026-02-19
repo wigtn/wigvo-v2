@@ -4,8 +4,8 @@
   - audio 입력 무시 (graceful no-op)
   - text 입력 → per-response instruction override (Relay)
   - text 입력 → 기본 send_user_text (Agent)
-  - Echo Gate: Session A TTS → Twilio echo → Session B 오염 방지 (blanket block)
-  - Session A TTS → Twilio 전달 + Echo Gate 활성화
+  - Dynamic Energy Threshold: echo window 중 높은 에너지 임계값으로 에코 필터링
+  - Session A TTS → Twilio 전달 + echo window 활성화
   - First Message: exact utterance 패턴
   - Audio Energy Gate 유지 (Twilio 수신자 무음 필터링)
 """
@@ -65,6 +65,7 @@ def _make_router(**call_overrides) -> AudioRouter:
         mock_settings.max_call_duration_ms = 600_000
         mock_settings.audio_energy_gate_enabled = False
         mock_settings.audio_energy_min_rms = 150.0
+        mock_settings.echo_energy_threshold_rms = 400.0
         router = AudioRouter(
             call=call,
             dual_session=dual,
@@ -85,11 +86,11 @@ class TestTextToVoicePipelineCreation:
         router = _make_router()
         assert isinstance(router._pipeline, TextToVoicePipeline)
 
-    def test_uses_echo_gate_not_detector(self):
-        """TextToVoice는 EchoDetector 대신 Echo Gate(blanket block)를 사용한다."""
+    def test_uses_dynamic_energy_threshold_not_detector(self):
+        """TextToVoice는 EchoDetector 대신 Dynamic Energy Threshold를 사용한다."""
         router = _make_router()
         assert router._pipeline._echo_detector is None
-        assert router._pipeline._echo_suppressed is False
+        assert router._pipeline._in_echo_window is False
 
     def test_first_message_exact_utterance(self):
         """First Message 핸들러가 exact utterance 모드로 생성된다."""
@@ -122,8 +123,8 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b = MagicMock()
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
-        # Echo Gate 비활성 상태로 설정 (에코 아닌 정상 오디오)
-        router._pipeline._echo_suppressed = False
+        # Echo window 비활성 상태 (정상 오디오)
+        router._pipeline._in_echo_window = False
 
         audio = b"\x80" * 100  # g711_ulaw 오디오
         await router.handle_twilio_audio(audio)
@@ -139,8 +140,8 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b = MagicMock()
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
-        # Echo Gate 비활성 상태로 설정 (에코 아닌 정상 오디오)
-        router._pipeline._echo_suppressed = False
+        # Echo window 비활성 상태 (정상 오디오)
+        router._pipeline._in_echo_window = False
 
         with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
             mock_s.audio_energy_gate_enabled = True
@@ -217,15 +218,15 @@ class TestTextToVoiceSessionACallbacks:
     """Session A 콜백 검증."""
 
     @pytest.mark.asyncio
-    async def test_tts_activates_echo_gate(self):
-        """TTS 오디오가 Echo Gate를 활성화하고 Twilio에 전달된다."""
+    async def test_tts_activates_echo_window(self):
+        """TTS 오디오가 echo window를 활성화하고 Twilio에 전달된다."""
         router = _make_router()
 
         await router._on_session_a_tts(b"\x00\x01\x02" * 50)
 
         router.twilio_handler.send_audio.assert_called_once()
-        # Echo Gate가 활성화되었는지 확인
-        assert router._pipeline._echo_suppressed is True
+        # Echo window가 활성화되었는지 확인
+        assert router._pipeline._in_echo_window is True
 
     @pytest.mark.asyncio
     async def test_tts_delivered_during_recipient_speech(self):

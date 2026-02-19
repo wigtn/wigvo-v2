@@ -9,7 +9,7 @@ TextToVoicePipeline과의 차이:
 
 나머지는 TextToVoicePipeline과 동일:
   - Session B modalities=['text']
-  - Echo Gate/EchoDetector 불필요
+  - Dynamic Energy Threshold로 에코 필터링
   - Audio Energy Gate 유지
 """
 
