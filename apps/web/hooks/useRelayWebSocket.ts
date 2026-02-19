@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WsMessageType, type RelayWsMessage } from '@/shared/call-types';
+import { MOCK_WS_URL_PREFIX } from '@/lib/demo';
+import { MockWebSocket } from '@/lib/demo/mock-ws';
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -63,7 +65,10 @@ export function useRelayWebSocket({
     intentionalCloseRef.current = false;
     setStatus('connecting');
 
-    const ws = new WebSocket(url);
+    // Demo mode: use MockWebSocket for mock:// URLs
+    const ws = url.startsWith(MOCK_WS_URL_PREFIX)
+      ? new MockWebSocket(url) as unknown as WebSocket
+      : new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {

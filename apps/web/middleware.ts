@@ -4,10 +4,14 @@
 // BE1 소유 - Supabase 세션 갱신 + 인증 보호
 // =============================================================================
 
-import { type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
 export async function middleware(request: NextRequest) {
+  // Demo mode: skip Supabase auth
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    return NextResponse.next();
+  }
   return await updateSession(request);
 }
 

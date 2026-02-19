@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Call, CallStatus } from '@/shared/types';
+import { isDemoMode } from '@/lib/demo';
+import { DEMO_CALL, DEMO_CALL_RESULT, DEMO_CALL_START_RESPONSE } from '@/lib/demo/mock-data';
 
 // Terminal states that stop further fetches
 const TERMINAL_STATUSES: CallStatus[] = ['COMPLETED', 'FAILED'];
@@ -30,9 +32,30 @@ export function useCallPolling(callId: string): UseCallPollingReturn {
   const router = useRouter();
   const retryCountRef = useRef(0);
   const fetchedRef = useRef(false);
+  // Demo mode: track whether refetch has been called (= call ended)
+  const demoRefetchedRef = useRef(false);
 
   const fetchCall = useCallback(async () => {
     if (!callId) return;
+
+    // --- Demo Mode: return mock data without network call ---
+    if (isDemoMode()) {
+      if (demoRefetchedRef.current) {
+        // After refetch (call ended) → return completed result
+        setCall({ ...DEMO_CALL_RESULT, id: callId });
+      } else {
+        // Initial fetch → return IN_PROGRESS with relayWsUrl
+        setCall({
+          ...DEMO_CALL,
+          id: callId,
+          status: 'IN_PROGRESS',
+          relayWsUrl: DEMO_CALL_START_RESPONSE.relayWsUrl,
+        });
+      }
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
     try {
       const res = await fetch(`/api/calls/${callId}`);
@@ -76,6 +99,7 @@ export function useCallPolling(callId: string): UseCallPollingReturn {
 
     fetchedRef.current = false;
     retryCountRef.current = 0;
+    demoRefetchedRef.current = false;
     setLoading(true);
     setError(null);
     setCall(null);
@@ -87,6 +111,9 @@ export function useCallPolling(callId: string): UseCallPollingReturn {
 
   // Manual refetch (통화 종료 시 ResultCard용 최신 데이터)
   const refetch = useCallback(() => {
+    if (isDemoMode()) {
+      demoRefetchedRef.current = true;
+    }
     fetchCall();
   }, [fetchCall]);
 
