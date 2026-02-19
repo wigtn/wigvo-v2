@@ -60,7 +60,6 @@ def _make_router(**call_overrides) -> AudioRouter:
         mock_settings.max_call_duration_ms = 600_000
         mock_settings.audio_energy_gate_enabled = False
         mock_settings.audio_energy_min_rms = 150.0
-        mock_settings.echo_gate_cooldown_s = 2.5
         router = AudioRouter(
             call=call,
             dual_session=dual,

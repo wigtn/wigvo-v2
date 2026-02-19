@@ -143,6 +143,12 @@ class TextToVoicePipeline(BasePipeline):
         self._echo_cooldown_task: asyncio.Task | None = None
         self._echo_detector = None  # Echo Gate 전용 — EchoDetector 미사용
 
+        # 동적 cooldown 추적: TTS 길이에 비례하는 cooldown 계산용
+        self._tts_first_chunk_at: float = 0.0
+        self._tts_total_bytes: int = 0
+        _ECHO_ROUND_TRIP_S = 0.5  # 에코 왕복 마진 (Relay → Twilio → 전화 → Twilio → Relay)
+        self._echo_margin_s = _ECHO_ROUND_TRIP_S
+
         # Ring Buffer: Session B만 (User audio 없으므로 A 불필요)
         self.ring_buffer_b = AudioRingBuffer(
             capacity=settings.ring_buffer_capacity_slots,
@@ -270,7 +276,11 @@ class TextToVoicePipeline(BasePipeline):
     # --- Session A 콜백 ---
 
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
-        """Session A TTS 출력을 Twilio에 전달 + Echo Gate 활성화."""
+        """Session A TTS 출력을 Twilio에 전달 + Echo Gate 활성화 + 오디오 길이 추적."""
+        if self._tts_first_chunk_at == 0.0:
+            self._tts_first_chunk_at = time.time()
+            self._tts_total_bytes = 0
+        self._tts_total_bytes += len(audio_bytes)
         self._activate_echo_suppression()
         await self.twilio_handler.send_audio(audio_bytes)
 
@@ -356,18 +366,36 @@ class TextToVoicePipeline(BasePipeline):
     def _start_echo_cooldown(self) -> None:
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
-        self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
+        # TTS 추적값 캡처 후 리셋 (다음 TTS를 위해)
+        first_chunk_at = self._tts_first_chunk_at
+        total_bytes = self._tts_total_bytes
+        self._tts_first_chunk_at = 0.0
+        self._tts_total_bytes = 0
+        self._echo_cooldown_task = asyncio.create_task(
+            self._echo_cooldown_timer(first_chunk_at, total_bytes)
+        )
 
-    async def _echo_cooldown_timer(self) -> None:
+    async def _echo_cooldown_timer(self, first_chunk_at: float, total_bytes: int) -> None:
+        """동적 cooldown: TTS 길이에 비례하는 대기 시간.
+
+        cooldown = 남은 재생 시간 + 에코 왕복 마진(0.5s)
+        - "네" (0.5s TTS, 0.2s 생성) → cooldown ≈ 0.8s
+        - "안녕하세요, 예약 문의 드립니다" (3s TTS, 0.5s 생성) → cooldown ≈ 3.0s
+        """
         try:
-            await asyncio.sleep(settings.echo_gate_cooldown_s)
+            audio_duration_s = total_bytes / 8000  # g711_ulaw @ 8kHz
+            elapsed = time.time() - first_chunk_at if first_chunk_at > 0 else 0
+            remaining_playback = max(audio_duration_s - elapsed, 0)
+            cooldown = remaining_playback + self._echo_margin_s
+
+            await asyncio.sleep(cooldown)
             self._echo_suppressed = False
             self.session_b.output_suppressed = False
             await self.session_b.flush_pending_output()
             await self.session_b.clear_input_buffer()
             logger.info(
-                "Echo gate released after %.1fs cooldown (pending output flushed, input buffer cleared)",
-                settings.echo_gate_cooldown_s,
+                "Echo gate released after %.1fs cooldown (audio=%.1fs, remaining=%.1fs, margin=%.1fs)",
+                cooldown, audio_duration_s, remaining_playback, self._echo_margin_s,
             )
         except asyncio.CancelledError:
             pass
