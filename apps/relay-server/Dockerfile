@@ -14,11 +14,19 @@ COPY pyproject.toml uv.lock ./
 # 의존성 설치 (venv 없이 시스템에 직접)
 RUN uv sync --frozen --no-dev --no-editable
 
-# silero-vad-lite .so의 executable stack 플래그 제거
-# gVisor(Cloud Run gen1)가 executable stack을 차단하므로 ELF 헤더 플래그만 제거
-RUN apt-get update && apt-get install -y --no-install-recommends execstack \
-    && execstack -c /app/.venv/lib/python3.12/site-packages/silero_vad_lite/data/silero_vad_lite.so \
-    && apt-get purge -y execstack && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+# silero-vad-lite .so의 executable stack 플래그 제거 (gVisor 호환)
+# ELF PT_GNU_STACK 헤더에서 PF_X(실행) 비트만 제거 — 추가 패키지 불필요
+RUN python3 -c "\
+import struct, pathlib; \
+so = pathlib.Path('/app/.venv/lib/python3.12/site-packages/silero_vad_lite/data/silero_vad_lite.so'); \
+data = bytearray(so.read_bytes()); \
+assert data[:4] == b'\x7fELF'; \
+phoff = struct.unpack_from('<Q', data, 32)[0]; \
+phsz = struct.unpack_from('<H', data, 54)[0]; \
+phnum = struct.unpack_from('<H', data, 56)[0]; \
+[struct.pack_into('<I', data, phoff+i*phsz+4, struct.unpack_from('<I', data, phoff+i*phsz+4)[0] & ~1) for i in range(phnum) if struct.unpack_from('<I', data, phoff+i*phsz)[0] == 0x6474e551]; \
+so.write_bytes(data); \
+print('Cleared execstack flag from silero_vad_lite.so')"
 
 # 소스 복사
 COPY src/ src/
