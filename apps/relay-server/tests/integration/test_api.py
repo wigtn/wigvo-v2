@@ -2,7 +2,7 @@
 
 import httpx
 
-from scripts.tests.helpers import ok, fail, info, header
+from tests.helpers import ok, fail, info, header
 
 BASE_URL = "http://localhost:8000"
 

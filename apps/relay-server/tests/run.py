@@ -3,47 +3,44 @@
 
 사용법:
     # 전체 (E2E 제외)
-    uv run python scripts/tests/run.py
+    uv run python -m tests.run
 
     # 스위트별
-    uv run python scripts/tests/run.py --suite integration    # 서버 필요
-    uv run python scripts/tests/run.py --suite component      # 서버 불필요
+    uv run python -m tests.run --suite integration    # 서버 필요
+    uv run python -m tests.run --suite component      # 서버 불필요
 
     # 개별 테스트
-    uv run python scripts/tests/run.py --test health
-    uv run python scripts/tests/run.py --test guardrail
+    uv run python -m tests.run --test cost
+    uv run python -m tests.run --test ringbuffer
 
     # E2E 통화
-    uv run python scripts/tests/run.py --test call --phone +821012345678 --scenario restaurant
-    uv run python scripts/tests/run.py --test call --phone +821012345678 --scenario restaurant --auto
+    uv run python -m tests.run --test call --phone +821012345678 --scenario restaurant
+    uv run python -m tests.run --test call --phone +821012345678 --scenario restaurant --auto
 """
 
 import os
 import sys
 
-# relay-server 루트를 sys.path에 추가 (src.*, scripts.* import용)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+# relay-server 루트를 sys.path에 추가 (src.*, tests.* import용)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import argparse
 import asyncio
 import time
 
-from scripts.tests.helpers import BOLD, RESET, header, print_summary
+from tests.helpers import BOLD, RESET, header, print_summary
 
 
 # ─── 테스트 레지스트리 ───
 
 INTEGRATION_TESTS = {
-    "health": "scripts.tests.integration.test_health",
-    "api": "scripts.tests.integration.test_api",
-    "websocket": "scripts.tests.integration.test_websocket",
+    "api": "tests.integration.test_api",
+    "websocket": "tests.integration.test_websocket",
 }
 
 COMPONENT_TESTS = {
-    "guardrail": "scripts.tests.component.test_guardrail",
-    "ringbuffer": "scripts.tests.component.test_ring_buffer",
-    "function": "scripts.tests.component.test_function_calling",
-    "cost": "scripts.tests.component.test_cost_tracking",
+    "ringbuffer": "tests.component.test_ring_buffer_perf",
+    "cost": "tests.component.test_cost_tracking",
 }
 
 ALL_TESTS = {**INTEGRATION_TESTS, **COMPONENT_TESTS}
@@ -64,7 +61,7 @@ async def run_suite(tests: dict[str, str]) -> list[tuple[str, bool]]:
             passed = await run_test(module_path)
             results.append((name, passed))
         except Exception as e:
-            from scripts.tests.helpers import fail
+            from tests.helpers import fail
             fail(f"{name}: 예외 발생 — {e}")
             results.append((name, False))
     return results
@@ -72,7 +69,7 @@ async def run_suite(tests: dict[str, str]) -> list[tuple[str, bool]]:
 
 async def run_call_test(args: argparse.Namespace) -> bool:
     """E2E 통화 테스트 실행."""
-    from scripts.tests.e2e.call_client import run_client
+    from tests.e2e.call_client import run_client
     return await run_client(
         server_url=args.server,
         phone=args.phone,

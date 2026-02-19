@@ -3,7 +3,7 @@
 import time
 
 from src.realtime.ring_buffer import AudioRingBuffer
-from scripts.tests.helpers import ok, header
+from tests.helpers import ok, header
 
 
 async def run() -> bool:

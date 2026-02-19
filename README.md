@@ -284,12 +284,11 @@ apps/
 │   │   ├── tools/                   # Agent Mode function calling
 │   │   ├── prompt/                  # System prompt templates + generator
 │   │   └── db/                      # Supabase client
-│   ├── tests/                       # 136+ pytest unit tests
-│   └── scripts/tests/               # Integration + Component + E2E tests
-│       ├── run.py                   # Test runner (--suite, --test options)
-│       ├── integration/             # Server-required tests (health, API, WebSocket)
-│       ├── component/               # Module tests (guardrail, ring buffer, function calling)
-│       └── e2e/                     # End-to-end call tests (Twilio + OpenAI required)
+│   ├── tests/                       # 147 pytest unit tests
+│   │   ├── component/              # Module benchmarks (cost tracking, ring buffer perf)
+│   │   ├── integration/            # Server-required tests (API, WebSocket)
+│   │   ├── e2e/                    # End-to-end call tests (Twilio + OpenAI required)
+│   │   └── run.py                  # Test runner (--suite, --test options)
 │
 ├── web/                             # Next.js 16 — Chat Agent + Call Monitor
 │   ├── app/
@@ -389,21 +388,21 @@ ngrok http 8000               # Copy URL to .env RELAY_SERVER_URL
 ### Testing
 
 ```bash
-# Unit tests (136+ tests, no server needed)
+# Unit tests (147 tests, no server needed)
 cd apps/relay-server
 uv run pytest -v
 
-# Component tests (guardrail, ring buffer, function calling, cost tracking)
-uv run python scripts/tests/run.py --suite component
+# Component tests (ring buffer perf, cost tracking)
+uv run python -m tests.run --suite component
 
 # Integration tests (requires running server)
-uv run python scripts/tests/run.py --suite integration
+uv run python -m tests.run --suite integration
 
 # Individual test
-uv run python scripts/tests/run.py --test guardrail
+uv run python -m tests.run --test cost
 
 # E2E call test (requires Twilio + OpenAI keys)
-uv run python scripts/tests/run.py --test call --phone +82... --scenario restaurant --auto
+uv run python -m tests.run --test call --phone +82... --scenario restaurant --auto
 ```
 
 ### Deployment

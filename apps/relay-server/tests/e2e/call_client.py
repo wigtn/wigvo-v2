@@ -8,8 +8,8 @@ User(앱) 역할을 시뮬레이션한다:
 4. 수신자 발화 → Session B 번역 → 터미널에 자막 표시
 
 사용법:
-  uv run python scripts/tests/run.py --test call --phone +821012345678 --scenario restaurant
-  uv run python scripts/tests/run.py --test call --phone +821012345678 --scenario restaurant --auto
+  uv run python -m tests.run --test call --phone +821012345678 --scenario restaurant
+  uv run python -m tests.run --test call --phone +821012345678 --scenario restaurant --auto
 """
 
 import asyncio
@@ -22,10 +22,10 @@ import websockets
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-from scripts.tests.e2e.scenarios import SCENARIOS, LLM_SYSTEM_PROMPT
+from tests.e2e.scenarios import SCENARIOS, LLM_SYSTEM_PROMPT
 
 # .env 로드 (relay-server 루트 기준)
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 
 def print_colored(text: str, color: str) -> None:

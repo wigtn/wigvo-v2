@@ -258,18 +258,18 @@ ngrok http 8000               # URL을 .env의 RELAY_SERVER_URL에 입력
 ### 테스트
 
 ```bash
-# 단위 테스트 (136개+, 서버 불필요)
+# 단위 테스트 (147개, 서버 불필요)
 cd apps/relay-server
 uv run pytest -v
 
-# 컴포넌트 테스트 (가드레일, 링 버퍼, 함수 호출, 비용 추적)
-uv run python scripts/tests/run.py --suite component
+# 컴포넌트 테스트 (링 버퍼 성능, 비용 추적)
+uv run python -m tests.run --suite component
 
 # 통합 테스트 (서버 실행 필요)
-uv run python scripts/tests/run.py --suite integration
+uv run python -m tests.run --suite integration
 
 # E2E 통화 테스트 (Twilio + OpenAI 키 필요)
-uv run python scripts/tests/run.py --test call --phone +82... --scenario restaurant --auto
+uv run python -m tests.run --test call --phone +82... --scenario restaurant --auto
 ```
 
 ### 배포

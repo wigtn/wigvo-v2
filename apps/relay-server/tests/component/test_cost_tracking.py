@@ -1,7 +1,7 @@
 """토큰 비용 추정 시뮬레이션. 서버 불필요 — 모듈 직접 import."""
 
 from src.types import CostTokens
-from scripts.tests.helpers import ok, info, header
+from tests.helpers import ok, info, header
 
 
 async def run() -> bool:

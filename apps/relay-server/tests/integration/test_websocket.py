@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from scripts.tests.helpers import ok, fail, info, header
+from tests.helpers import ok, fail, info, header
 
 WS_URL = "ws://localhost:8000"
 
