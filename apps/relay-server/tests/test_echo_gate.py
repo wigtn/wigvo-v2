@@ -202,9 +202,9 @@ class TestLegacyEchoGate:
 
     @pytest.mark.asyncio
     async def test_echo_suppression_deactivates_after_cooldown(self):
-        """쿨다운 후 output_suppressed = False, 쌓인 출력은 폐기."""
+        """쿨다운 후 output_suppressed = False, 쌓인 출력은 배출."""
         router = _make_router(echo_detector_enabled=False)
-        router.session_b.clear_pending_output = MagicMock()
+        router.session_b.flush_pending_output = AsyncMock()
 
         router._activate_echo_suppression()
         assert router._echo_suppressed is True
@@ -216,7 +216,7 @@ class TestLegacyEchoGate:
 
         assert router._echo_suppressed is False
         assert router.session_b.output_suppressed is False
-        router.session_b.clear_pending_output.assert_called_once()
+        router.session_b.flush_pending_output.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_twilio_audio_blocked_during_echo(self):
@@ -248,10 +248,10 @@ class TestLegacyEchoGate:
         router.first_message.on_recipient_speech_detected.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_pending_output_discarded_after_cooldown(self):
-        """레거시: 쿨다운 완료 시 큐에 저장된 출력이 폐기."""
+    async def test_pending_output_flushed_after_cooldown(self):
+        """레거시: 쿨다운 완료 시 큐에 저장된 출력이 배출."""
         router = _make_router(echo_detector_enabled=False)
-        router.session_b.clear_pending_output = MagicMock()
+        router.session_b.flush_pending_output = AsyncMock()
 
         router._activate_echo_suppression()
 
@@ -260,7 +260,7 @@ class TestLegacyEchoGate:
             router._start_echo_cooldown()
             await asyncio.sleep(0.1)
 
-        router.session_b.clear_pending_output.assert_called_once()
+        router.session_b.flush_pending_output.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_speech_during_suppression_ignored_with_interrupt(self):

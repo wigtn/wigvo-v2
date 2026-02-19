@@ -1,7 +1,7 @@
 """FullAgentPipeline 단위 테스트.
 
 핵심 검증 사항:
-  - TextToVoicePipeline 기반 동작 (text 입력, echo 없음)
+  - TextToVoicePipeline 기반 동작 (text 입력, EchoDetector 포함)
   - Agent 피드백 루프: 수신자 번역 → Session A 전달
   - FULL_AGENT 모드에서 올바른 Pipeline 생성
 """
@@ -60,6 +60,13 @@ def _make_router(**call_overrides) -> AudioRouter:
         mock_settings.max_call_duration_ms = 600_000
         mock_settings.audio_energy_gate_enabled = False
         mock_settings.audio_energy_min_rms = 150.0
+        mock_settings.echo_detector_enabled = True
+        mock_settings.echo_detector_threshold = 0.6
+        mock_settings.echo_detector_safety_cooldown_s = 0.3
+        mock_settings.echo_detector_min_delay_chunks = 4
+        mock_settings.echo_detector_max_delay_chunks = 30
+        mock_settings.echo_detector_correlation_window = 10
+        mock_settings.echo_gate_cooldown_s = 2.5
         router = AudioRouter(
             call=call,
             dual_session=dual,
@@ -87,10 +94,11 @@ class TestFullAgentPipelineCreation:
         router = _make_router()
         assert isinstance(router._pipeline, TextToVoicePipeline)
 
-    def test_no_echo_detector(self):
-        """FullAgent도 EchoDetector를 초기화하지 않는다."""
+    def test_has_echo_detector(self):
+        """FullAgent도 EchoDetector를 초기화한다 (Session A TTS echo 방지)."""
         router = _make_router()
-        assert not hasattr(router._pipeline, "_echo_detector")
+        assert hasattr(router._pipeline, "_echo_detector")
+        assert router._pipeline._echo_detector is not None
 
 
 class TestFullAgentFeedbackLoop:

@@ -6,7 +6,8 @@ VoiceToVoicePipeline과의 핵심 차이:
   - User 입력: 텍스트 (audio 입력 무시)
   - Session A: per-response instruction override로 번역만 강제
   - Session B: modalities=['text'] (TTS 생략, 토큰 절약)
-  - Echo Gate/EchoDetector: 불필요 (텍스트 입력 = TTS echo loop 불가)
+  - EchoDetector: Session A TTS → Twilio echo → Session B 오염 방지
+    (User 입력은 텍스트지만, Session A TTS가 Twilio 전화 스피커→마이크로 에코됨)
   - First Message: exact utterance 패턴 (AI 확장 방지)
 
 hskim-wigvo-test 이식 포인트:
@@ -24,6 +25,7 @@ from src.config import settings
 from src.guardrail.checker import GuardrailChecker
 from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
 from src.realtime.context_manager import ConversationContextManager
+from src.realtime.echo_detector import EchoDetector
 from src.realtime.first_message import FirstMessageHandler
 from src.realtime.interrupt_handler import InterruptHandler
 from src.realtime.pipeline.base import BasePipeline
@@ -129,6 +131,23 @@ class TextToVoicePipeline(BasePipeline):
             on_notify_app=self._notify_app,
         )
 
+        # Echo Gate: Session A TTS → Twilio echo → Session B 오염 방지
+        # User 입력은 텍스트지만, Session A TTS가 전화 스피커→마이크로 에코되어
+        # Session B가 에코를 수신자 발화로 오인하는 문제 차단
+        self._echo_suppressed = False
+        self._echo_cooldown_task: asyncio.Task | None = None
+
+        # EchoDetector: 에너지 핑거프린트 기반 에코 감지
+        self._echo_detector: EchoDetector | None = None
+        if settings.echo_detector_enabled:
+            self._echo_detector = EchoDetector(
+                correlation_window_chunks=settings.echo_detector_correlation_window,
+                min_delay_chunks=settings.echo_detector_min_delay_chunks,
+                max_delay_chunks=settings.echo_detector_max_delay_chunks,
+                echo_threshold=settings.echo_detector_threshold,
+                safety_cooldown_s=settings.echo_detector_safety_cooldown_s,
+            )
+
         # Ring Buffer: Session B만 (User audio 없으므로 A 불필요)
         self.ring_buffer_b = AudioRingBuffer(
             capacity=settings.ring_buffer_capacity_slots,
@@ -167,6 +186,16 @@ class TextToVoicePipeline(BasePipeline):
                 await self._call_timer_task
             except asyncio.CancelledError:
                 pass
+
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            try:
+                await self._echo_cooldown_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._echo_detector is not None:
+            self._echo_detector.reset()
 
         await self.recovery_a.stop()
         await self.recovery_b.stop()
@@ -223,14 +252,24 @@ class TextToVoicePipeline(BasePipeline):
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
-        TextToVoice는 에코 감지 불필요:
-        - User 입력이 텍스트이므로 TTS echo loop이 발생하지 않음
-        - Audio Energy Gate만 유지 (무음 필터링)
+        Session A TTS가 Twilio를 통해 에코로 돌아오므로 에코 감지 필수:
+        - EchoDetector: per-chunk 에너지 핑거프린트 상관관계 비교
+        - Legacy fallback: 2.5s blanket block (EchoDetector 비활성화 시)
+        - Audio Energy Gate: 무음 필터링
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
         if self.recovery_b.is_recovering or self.recovery_b.is_degraded:
             return
+
+        # Echo Detector: per-chunk 에코 감지
+        if self._echo_detector is not None:
+            if self._echo_detector.is_active and self._echo_detector.is_echo(audio_bytes):
+                return
+        else:
+            # 레거시: blanket block
+            if self._echo_suppressed:
+                return
 
         # 오디오 에너지 게이트 (무음 필터링)
         if settings.audio_energy_gate_enabled:
@@ -245,12 +284,15 @@ class TextToVoicePipeline(BasePipeline):
     # --- Session A 콜백 ---
 
     async def _on_session_a_tts(self, audio_bytes: bytes) -> None:
-        """Session A TTS 출력을 Twilio에 전달한다.
+        """Session A TTS 출력을 Twilio에 전달 + 에코 핑거프린트 기록.
 
-        TextToVoice는 Echo Gate 불필요 — TTS audio를 직접 전달.
-        텍스트 모드에서는 에코 위험이 없으므로 수신자 발화 중에도 TTS를 전달한다.
-        (전이중 통화 — 양쪽이 동시에 들을 수 있음)
+        Session A TTS는 Twilio 전화의 스피커→마이크를 거쳐 에코로 돌아온다.
+        EchoDetector에 보낸 청크를 기록하여 나중에 에코를 걸러낸다.
         """
+        if self._echo_detector is not None:
+            self._echo_detector.record_sent_chunk(audio_bytes)
+        else:
+            self._activate_echo_suppression()
         await self.twilio_handler.send_audio(audio_bytes)
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
@@ -262,6 +304,10 @@ class TextToVoicePipeline(BasePipeline):
         )
 
     async def _on_session_a_done(self) -> None:
+        if self._echo_detector is not None:
+            self._echo_detector.mark_tts_done()
+        else:
+            self._start_echo_cooldown()
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.TRANSLATION_STATE,
@@ -306,7 +352,14 @@ class TextToVoicePipeline(BasePipeline):
     # --- 수신자 발화 감지 ---
 
     async def _on_recipient_started(self) -> None:
-        """수신자 발화 시작 — Echo Gate 없이 바로 처리."""
+        """수신자 발화 시작 — 에코 감지 중이면 무시."""
+        if self._echo_detector is not None:
+            pass  # per-chunk 감지가 에코를 걸러줌
+        else:
+            if self._echo_suppressed:
+                logger.debug("Ignoring speech during echo suppression (likely TTS echo)")
+                return
+
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
         else:
@@ -315,6 +368,34 @@ class TextToVoicePipeline(BasePipeline):
     async def _on_recipient_stopped(self) -> None:
         await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
+
+    # --- Echo Gate (Legacy fallback) ---
+
+    def _activate_echo_suppression(self) -> None:
+        self._echo_suppressed = True
+        self.session_b.output_suppressed = True
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            self._echo_cooldown_task = None
+
+    def _start_echo_cooldown(self) -> None:
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+        self._echo_cooldown_task = asyncio.create_task(self._echo_cooldown_timer())
+
+    async def _echo_cooldown_timer(self) -> None:
+        try:
+            await asyncio.sleep(settings.echo_gate_cooldown_s)
+            self._echo_suppressed = False
+            self.session_b.output_suppressed = False
+            await self.session_b.flush_pending_output()
+            await self.session_b.clear_input_buffer()
+            logger.info(
+                "Echo gate released after %.1fs cooldown (pending output flushed, input buffer cleared)",
+                settings.echo_gate_cooldown_s,
+            )
+        except asyncio.CancelledError:
+            pass
 
     # --- 대화 컨텍스트 ---
 

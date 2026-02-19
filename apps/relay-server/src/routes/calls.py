@@ -78,12 +78,13 @@ async def start_call(req: CallStartRequest):
     call.prompt_a = prompt_a
     call.prompt_b = prompt_b
 
-    # 3. OpenAI Dual Session 생성 (vad_mode 전달 — PRD 4.2)
+    # 3. OpenAI Dual Session 생성 (vad_mode + communication_mode 전달 — PRD 4.2)
     dual_session = DualSessionManager(
         mode=req.mode,
         source_language=req.source_language,
         target_language=req.target_language,
         vad_mode=req.vad_mode,
+        communication_mode=req.communication_mode,
     )
 
     # Agent Mode: Function Calling 도구 설정

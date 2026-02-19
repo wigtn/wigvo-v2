@@ -288,11 +288,11 @@ class DualSessionManager:
         self.vad_mode = vad_mode
         self.communication_mode = communication_mode
 
-        # Session B modalities 분기:
-        # TEXT_TO_VOICE / FULL_AGENT → ['text'] (TTS 불필요, 토큰 절약)
-        # VOICE_TO_VOICE / VOICE_TO_TEXT → ['text', 'audio'] (기존 동작 유지)
-        text_only_modes = {CommunicationMode.TEXT_TO_VOICE, CommunicationMode.FULL_AGENT}
-        session_b_modalities = ["text"] if communication_mode in text_only_modes else ["text", "audio"]
+        # Session B modalities: 항상 ['text', 'audio'] 유지
+        # modalities=['text']로 설정하면 server VAD가 비활성화될 수 있어
+        # 수신자 발화 감지(speech_started/stopped)가 불가능해진다.
+        # audio output 토큰 비용보다 양방향 통신 안정성이 우선.
+        session_b_modalities = ["text", "audio"]
 
         # Session A: User → 수신자 (PRD 3.2 / M-4)
         # Client VAD 시 turn_detection=null (서버가 아닌 클라이언트가 발화 종료 판단)

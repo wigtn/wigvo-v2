@@ -358,10 +358,10 @@ class VoiceToVoicePipeline(BasePipeline):
             await asyncio.sleep(settings.echo_gate_cooldown_s)
             self._echo_suppressed = False
             self.session_b.output_suppressed = False
-            self.session_b.clear_pending_output()
+            await self.session_b.flush_pending_output()
             await self.session_b.clear_input_buffer()
             logger.info(
-                "Echo gate released after %.1fs cooldown (pending output discarded, input buffer cleared)",
+                "Echo gate released after %.1fs cooldown (pending output flushed, input buffer cleared)",
                 settings.echo_gate_cooldown_s,
             )
         except asyncio.CancelledError:
