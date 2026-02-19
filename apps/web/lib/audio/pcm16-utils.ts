@@ -5,6 +5,7 @@
 // =============================================================================
 
 export const SAMPLE_RATE = 16000;
+export const PLAYBACK_SAMPLE_RATE = 24000; // OpenAI Realtime API pcm16 output is 24kHz
 export const CHANNELS = 1;
 
 /**
