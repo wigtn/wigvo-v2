@@ -45,13 +45,14 @@ export async function createConversation(
   subType?: ScenarioSubType,
   communicationMode?: CommunicationMode,
   sourceLang?: string,
-  targetLang?: string
+  targetLang?: string,
+  locale?: string
 ): Promise<CreateConversationResponse> {
   if (isDemoMode()) return mockCreateConversation();
   const response = await fetch('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenarioType, subType, communicationMode, sourceLang, targetLang }),
+    body: JSON.stringify({ scenarioType, subType, communicationMode, sourceLang, targetLang, locale }),
   });
   return handleResponse<CreateConversationResponse>(response);
 }

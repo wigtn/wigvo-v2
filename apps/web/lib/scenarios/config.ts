@@ -267,19 +267,55 @@ export function getScenarioOptions() {
 export function getScenarioGreeting(
   scenarioType: ScenarioType,
   subType: ScenarioSubType,
-  communicationMode?: CommunicationMode
+  communicationMode?: CommunicationMode,
+  locale = 'ko'
 ): string {
+  // 영문 인사말
+  if (locale !== 'ko') {
+    const config = getSubTypeConfig(scenarioType, subType);
+    if (!config) {
+      return 'How can I help you today?';
+    }
+
+    if (communicationMode && communicationMode !== 'full_agent') {
+      return "I'll make a direct call for you! Where would you like to call?";
+    }
+
+    const enGreetings: Record<ScenarioType, Record<string, string>> = {
+      RESERVATION: {
+        RESTAURANT: "I'll help you book a restaurant! Which restaurant would you like to reserve?",
+        SALON: "I'll help you book a hair salon! Which salon would you like to reserve?",
+        HOSPITAL: "I'll help you book a hospital appointment! Which hospital would you like to visit?",
+        HOTEL: "I'll help you book accommodation! Which hotel would you like to reserve?",
+        OTHER: "I'll help you make a reservation! Where would you like to book?",
+      },
+      INQUIRY: {
+        PROPERTY: "I'll help you check a property listing! Which property would you like to inquire about?",
+        BUSINESS_HOURS: "I'll help you check business hours or prices! Where would you like to inquire?",
+        AVAILABILITY: "I'll help you check availability! Where would you like to inquire?",
+        OTHER: "I'll help you make an inquiry! Where would you like to call?",
+      },
+      AS_REQUEST: {
+        HOME_APPLIANCE: "I'll help you request appliance service! What product needs service?",
+        ELECTRONICS: "I'll help you request electronics service! What product needs service?",
+        REPAIR: "I'll help you schedule a repair! What repair or installation do you need?",
+        OTHER: "I'll help you request service! What kind of service do you need?",
+      },
+    };
+
+    return enGreetings[scenarioType]?.[subType] || 'How can I help you today?';
+  }
+
+  // 한국어 인사말 (기존 로직)
   const config = getSubTypeConfig(scenarioType, subType);
   if (!config) {
     return '안녕하세요! 어떤 전화를 대신 걸어드릴까요?';
   }
 
-  // Direct call (relay) 모드: 간결한 인사 (전화할 곳 + 번호만 수집)
   if (communicationMode && communicationMode !== 'full_agent') {
     return '직접 통화 모드로 전화를 걸어드릴게요! 어디에 전화하시겠어요? (장소 이름과 전화번호만 알려주세요)';
   }
 
-  // full_agent: 기존 상세 인사
   const greetings: Record<ScenarioType, Record<string, string>> = {
     RESERVATION: {
       RESTAURANT: '식당 예약을 도와드릴게요! 어느 식당에 예약하시겠어요?',

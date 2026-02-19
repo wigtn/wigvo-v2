@@ -77,7 +77,9 @@
     "startError": "대화를 시작하지 못했습니다. 새로고침 해주세요.",
     "sendError": "메시지 전송에 실패했습니다. 다시 시도해주세요.",
     "callError": "전화 걸기에 실패했습니다. 다시 시도해주세요.",
-    "editPrompt": "수정할 내용을 말씀해주세요."
+    "editPrompt": "수정할 내용을 말씀해주세요.",
+    "validationError": "입력이 올바르지 않습니다.",
+    "conversationNotStarted": "대화가 시작되지 않았습니다."
   },
   "scenario": {
     "title": "어떤 방식으로 <accent>전화</accent>할까요?",
@@ -325,6 +327,18 @@
     "cancelMessage": "결제가 취소되었습니다. 언제든 다시 시도할 수 있습니다.",
     "viewPlans": "요금제 보기",
     "backToHome": "홈으로 돌아가기"
+  },
+  "place": {
+    "searching": "장소를 검색하는 중...",
+    "emptyHint1": "대화에서 장소를 언급하면",
+    "emptyHint2": "여기에 정보가 표시됩니다",
+    "searchResults": "검색 결과",
+    "resultCount": "({count}개)",
+    "colName": "상호명",
+    "colAddress": "주소",
+    "colPhone": "전화번호",
+    "colCategory": "카테고리",
+    "naverMap": "네이버지도"
   },
   "language": {
     "ko": "한국어",

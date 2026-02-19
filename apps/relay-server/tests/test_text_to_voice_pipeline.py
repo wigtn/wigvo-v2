@@ -132,8 +132,8 @@ class TestTextToVoiceAudioHandling:
         router.session_b.send_recipient_audio.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_twilio_audio_energy_gate_replaces_with_silence(self):
-        """Audio energy gate가 소음을 silence 프레임으로 교체하여 VAD에 전달한다."""
+    async def test_twilio_audio_energy_gate_drops_low_energy(self):
+        """Audio energy gate가 저에너지 소음을 드롭한다."""
         router = _make_router()
         router.session_b = MagicMock()
         router.session_b.send_recipient_audio = AsyncMock()
@@ -151,12 +151,8 @@ class TestTextToVoiceAudioHandling:
             noise = b"\x7f" * 100  # mu-law silence
             await router.handle_twilio_audio(noise)
 
-            # silence 프레임으로 교체되어 전송됨
-            router.session_b.send_recipient_audio.assert_called_once()
-            sent_b64 = router.session_b.send_recipient_audio.call_args[0][0]
-            import base64 as b64
-            sent_bytes = b64.b64decode(sent_b64)
-            assert sent_bytes == b"\xff" * len(noise)
+            # 저에너지 오디오는 드롭 (전송되지 않음)
+            router.session_b.send_recipient_audio.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_echo_window_sends_silence_instead_of_dropping(self):
@@ -191,8 +187,8 @@ class TestTextToVoiceAudioHandling:
             assert sent_bytes == b"\xff" * len(echo_audio)
 
     @pytest.mark.asyncio
-    async def test_non_echo_window_replaces_noise_with_silence(self):
-        """Echo window 외에서도 소음을 silence로 교체하여 VAD에 전달한다."""
+    async def test_non_echo_window_drops_noise(self):
+        """Echo window 외에서 저에너지 소음은 드롭된다."""
         router = _make_router()
         router.session_b = MagicMock()
         router.session_b.send_recipient_audio = AsyncMock()
@@ -204,19 +200,14 @@ class TestTextToVoiceAudioHandling:
 
         with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
             mock_s.audio_energy_gate_enabled = True
-            mock_s.echo_energy_threshold_rms = 400.0
             mock_s.audio_energy_min_rms = 150.0
 
             # PSTN 소음 데이터 (RMS < 150)
             noise = b"\x7f" * 100
             await router.handle_twilio_audio(noise)
 
-            # silence 프레임이 전송되어야 함 (drop이 아님)
-            router.session_b.send_recipient_audio.assert_called_once()
-            sent_b64 = router.session_b.send_recipient_audio.call_args[0][0]
-            import base64 as b64
-            sent_bytes = b64.b64decode(sent_b64)
-            assert sent_bytes == b"\xff" * len(noise)
+            # 저에너지 오디오는 드롭 (전송되지 않음)
+            router.session_b.send_recipient_audio.assert_not_called()
 
 
 class TestTextToVoiceTextHandling:

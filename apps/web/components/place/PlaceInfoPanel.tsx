@@ -1,6 +1,7 @@
 'use client';
 
 import { MapPin, Phone, Tag, ExternalLink } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { NaverPlaceResult } from '@/lib/naver-maps';
 import { cn } from '@/lib/utils';
 
@@ -17,13 +18,15 @@ export default function PlaceInfoPanel({
   onSelect,
   isSearching = false,
 }: PlaceInfoPanelProps) {
+  const t = useTranslations('place');
+
   if (isSearching) {
     return (
       <div className="h-full flex items-center justify-center bg-white rounded-2xl border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="text-center text-[#94A3B8]">
           <div className="animate-pulse flex flex-col items-center">
             <MapPin className="size-8 mb-2 text-[#CBD5E1]" />
-            <p className="text-sm">장소를 검색하는 중...</p>
+            <p className="text-sm">{t('searching')}</p>
           </div>
         </div>
       </div>
@@ -35,8 +38,8 @@ export default function PlaceInfoPanel({
       <div className="h-full flex items-center justify-center bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
         <div className="text-center text-[#94A3B8] p-4">
           <MapPin className="mx-auto size-8 mb-2 text-[#CBD5E1]" />
-          <p className="text-sm">대화에서 장소를 언급하면</p>
-          <p className="text-sm">여기에 정보가 표시됩니다</p>
+          <p className="text-sm">{t('emptyHint1')}</p>
+          <p className="text-sm">{t('emptyHint2')}</p>
         </div>
       </div>
     );
@@ -47,7 +50,7 @@ export default function PlaceInfoPanel({
       {/* 헤더 */}
       <div className="px-4 py-2.5 border-b border-[#E2E8F0]">
         <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
-          검색 결과 <span className="text-[#94A3B8] font-normal">({results.length}개)</span>
+          {t('searchResults')} <span className="text-[#94A3B8] font-normal">{t('resultCount', { count: results.length })}</span>
         </h3>
       </div>
 
@@ -57,10 +60,10 @@ export default function PlaceInfoPanel({
           <thead className="bg-[#F8FAFC] sticky top-0 z-10">
             <tr className="text-left text-[10px] text-[#94A3B8] uppercase tracking-wider">
               <th className="px-3 py-2 font-semibold" style={{ width: '40px' }}>#</th>
-              <th className="px-3 py-2 font-semibold" style={{ width: '25%' }}>상호명</th>
-              <th className="px-3 py-2 font-semibold" style={{ width: '30%' }}>주소</th>
-              <th className="px-3 py-2 font-semibold" style={{ width: '20%' }}>전화번호</th>
-              <th className="px-3 py-2 font-semibold" style={{ width: '15%' }}>카테고리</th>
+              <th className="px-3 py-2 font-semibold" style={{ width: '25%' }}>{t('colName')}</th>
+              <th className="px-3 py-2 font-semibold" style={{ width: '30%' }}>{t('colAddress')}</th>
+              <th className="px-3 py-2 font-semibold" style={{ width: '20%' }}>{t('colPhone')}</th>
+              <th className="px-3 py-2 font-semibold" style={{ width: '15%' }}>{t('colCategory')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F1F5F9]">
@@ -148,7 +151,7 @@ export default function PlaceInfoPanel({
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#0F172A] transition-colors"
             >
-              네이버지도
+              {t('naverMap')}
               <ExternalLink className="size-3" />
             </a>
           </div>

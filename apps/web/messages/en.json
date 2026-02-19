@@ -77,7 +77,9 @@
     "startError": "Failed to start conversation. Please refresh.",
     "sendError": "Failed to send message. Please try again.",
     "callError": "Failed to make the call. Please try again.",
-    "editPrompt": "Please tell me what you'd like to change."
+    "editPrompt": "Please tell me what you'd like to change.",
+    "validationError": "Invalid input.",
+    "conversationNotStarted": "Conversation has not started."
   },
   "scenario": {
     "title": "How would you like to <accent>call</accent>?",
@@ -325,6 +327,18 @@
     "cancelMessage": "Your payment was cancelled. You can try again anytime.",
     "viewPlans": "View Plans",
     "backToHome": "Back to Home"
+  },
+  "place": {
+    "searching": "Searching for places...",
+    "emptyHint1": "Mention a place in the chat",
+    "emptyHint2": "and info will appear here",
+    "searchResults": "Search Results",
+    "resultCount": "({count})",
+    "colName": "Name",
+    "colAddress": "Address",
+    "colPhone": "Phone",
+    "colCategory": "Category",
+    "naverMap": "Naver Map"
   },
   "language": {
     "ko": "한국어",

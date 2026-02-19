@@ -301,17 +301,7 @@ class TextToVoicePipeline(BasePipeline):
         # 오디오 에너지 게이트 (무음 필터링)
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
-            threshold = (
-                settings.echo_energy_threshold_rms
-                if self._in_echo_window
-                else settings.audio_energy_min_rms
-            )
-            if rms < threshold:
-                # 소음/에코를 silence로 교체 → VAD가 "무음"으로 인식
-                # drop하면 VAD가 오디오 스트림 단절로 speech_stopped를 감지 못함
-                silence = self._MULAW_SILENCE * len(audio_bytes)
-                silence_b64 = base64.b64encode(silence).decode("ascii")
-                await self.session_b.send_recipient_audio(silence_b64)
+            if rms < settings.audio_energy_min_rms:
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

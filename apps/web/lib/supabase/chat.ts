@@ -14,7 +14,7 @@ import {
   createEmptyCollectedData,
 } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
-import { GREETING_MESSAGE } from '@/lib/prompts';
+import { getGreetingMessage } from '@/lib/prompts';
 import { getScenarioGreeting } from '@/lib/scenarios/config';
 import { CONVERSATION_HISTORY_LIMIT } from '@/lib/constants';
 
@@ -55,7 +55,8 @@ export async function createConversation(
   subType?: ScenarioSubType,
   communicationMode?: CommunicationMode,
   sourceLang?: string,
-  targetLang?: string
+  targetLang?: string,
+  locale?: string
 ) {
   const supabase = await createClient();
 
@@ -89,10 +90,10 @@ export async function createConversation(
     throw new Error(`Failed to create conversation: ${convError?.message}`);
   }
 
-  // 3. v5: 모드 + 시나리오별 인사 메시지 선택
+  // 3. v5: 모드 + 시나리오별 인사 메시지 선택 (locale 반영)
   const greeting = scenarioType && subType
-    ? getScenarioGreeting(scenarioType, subType, communicationMode)
-    : GREETING_MESSAGE;
+    ? getScenarioGreeting(scenarioType, subType, communicationMode, locale)
+    : getGreetingMessage(locale);
 
   // 4. 초기 인사 메시지 저장
   const { error: msgError } = await supabase.from('messages').insert({

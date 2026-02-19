@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     let communicationMode: CommunicationMode | undefined;
     let sourceLang: string | undefined;
     let targetLang: string | undefined;
+    let locale: string | undefined;
 
     try {
       const body = await request.json();
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       communicationMode = body.communicationMode;
       sourceLang = body.sourceLang;
       targetLang = body.targetLang;
+      locale = body.locale;
     } catch {
       // body가 없거나 파싱 실패해도 OK (기존 호환성)
     }
@@ -51,7 +53,8 @@ export async function POST(request: NextRequest) {
       subType,
       communicationMode,
       sourceLang,
-      targetLang
+      targetLang,
+      locale
     );
 
     // 4. 응답 (snake_case → camelCase 변환)

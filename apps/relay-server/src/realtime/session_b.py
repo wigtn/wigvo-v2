@@ -104,6 +104,16 @@ class SessionBHandler:
             self._handle_input_transcription_completed,
         )
 
+    def stop(self) -> None:
+        """비동기 타스크를 정리한다 (파이프라인 stop 시 호출)."""
+        if self._response_debounce_task and not self._response_debounce_task.done():
+            self._response_debounce_task.cancel()
+            self._response_debounce_task = None
+        self._cancel_silence_timeout()
+        if self._max_speech_timer and not self._max_speech_timer.done():
+            self._max_speech_timer.cancel()
+            self._max_speech_timer = None
+
     @property
     def output_suppressed(self) -> bool:
         return self._output_suppressed

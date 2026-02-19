@@ -54,9 +54,13 @@ interface ChatResult {
 // OpenAI Client
 // -----------------------------------------------------------------------------
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 // -----------------------------------------------------------------------------
 // Naver API Configuration
@@ -294,7 +298,7 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
   let assistantContent: string;
   const tools = isNaverConfigured() ? [SEARCH_TOOL] : undefined;
 
-  let completion = await openai.chat.completions.create({
+  let completion = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: llmMessages,
     temperature: 0.7,
@@ -348,7 +352,7 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
       }
     }
 
-    completion = await openai.chat.completions.create({
+    completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: llmMessages,
       temperature: 0.7,

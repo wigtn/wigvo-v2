@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   createConversation,
   getConversation,
@@ -56,6 +57,7 @@ interface UseChatReturn {
 
 export function useChat(): UseChatReturn {
   const router = useRouter();
+  const t = useTranslations('chat');
 
   // ── Dashboard State ─────────────────────────────────────────
   const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
@@ -104,7 +106,7 @@ export function useChat(): UseChatReturn {
     tgtLang?: string
   ) => {
     try {
-      const data = await createConversation(scenarioType, subType, mode, srcLang, tgtLang);
+      const data = await createConversation(scenarioType, subType, mode, srcLang, tgtLang, getStoredLocale());
       setConversationId(data.id);
       setConversationStatus(data.status);
       setCollectedData(data.collectedData ?? createEmptyCollectedData());
@@ -147,9 +149,9 @@ export function useChat(): UseChatReturn {
         handle401();
         return;
       }
-      setErrorWithAutoDismiss('대화를 시작하지 못했습니다. 새로고침 해주세요.');
+      setErrorWithAutoDismiss(t('startError'));
     }
-  }, [handle401, setErrorWithAutoDismiss]);
+  }, [handle401, setErrorWithAutoDismiss, t]);
 
   // ── resumeConversation (v4: 시나리오 상태 복원) ────────────
   const resumeConversation = useCallback(
@@ -264,11 +266,11 @@ export function useChat(): UseChatReturn {
         handle401();
         return;
       }
-      setErrorWithAutoDismiss('대화를 시작하지 못했습니다. 다시 시도해주세요.');
+      setErrorWithAutoDismiss(t('startError'));
     } finally {
       setIsLoading(false);
     }
-  }, [startConversation, handle401, setErrorWithAutoDismiss]);
+  }, [startConversation, handle401, setErrorWithAutoDismiss, t]);
 
   // ── sendMessage (Optimistic update + rollback) ─────────────
   const sendMessage = useCallback(
@@ -276,12 +278,12 @@ export function useChat(): UseChatReturn {
       // 유효성 검사
       const validation = validateMessage(content);
       if (!validation.valid) {
-        setErrorWithAutoDismiss(validation.error ?? '입력이 올바르지 않습니다.');
+        setErrorWithAutoDismiss(validation.error ?? t('validationError'));
         return;
       }
 
       if (!conversationId) {
-        setErrorWithAutoDismiss('대화가 시작되지 않았습니다.');
+        setErrorWithAutoDismiss(t('conversationNotStarted'));
         return;
       }
 
@@ -405,12 +407,12 @@ export function useChat(): UseChatReturn {
           handle401();
           return;
         }
-        setErrorWithAutoDismiss('메시지 전송에 실패했습니다. 다시 시도해주세요.');
+        setErrorWithAutoDismiss(t('sendError'));
       } finally {
         setIsLoading(false);
       }
     },
-    [conversationId, communicationMode, handle401, setErrorWithAutoDismiss]
+    [conversationId, communicationMode, handle401, setErrorWithAutoDismiss, t]
   );
 
   // ── handleConfirm: 전화 걸기 (더블클릭 방지 포함) ─────────
@@ -437,12 +439,12 @@ export function useChat(): UseChatReturn {
         handle401();
         return;
       }
-      setErrorWithAutoDismiss('전화 걸기에 실패했습니다. 다시 시도해주세요.');
+      setErrorWithAutoDismiss(t('callError'));
     } finally {
       setIsLoading(false);
       confirmingRef.current = false;
     }
-  }, [conversationId, communicationMode, handle401, setCallingCallId, setCallingCommunicationMode, setErrorWithAutoDismiss]);
+  }, [conversationId, communicationMode, handle401, setCallingCallId, setCallingCommunicationMode, setErrorWithAutoDismiss, t]);
 
   // ── handleEdit: 수정하기 ──────────────────────────────────
   const handleEdit = useCallback(() => {
@@ -452,12 +454,12 @@ export function useChat(): UseChatReturn {
     const editMsg: Message = {
       id: `system-edit-${Date.now()}`,
       role: 'assistant',
-      content: '수정할 내용을 말씀해주세요.',
+      content: t('editPrompt'),
       createdAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, editMsg]);
-  }, []);
+  }, [t]);
 
   // ── handleNewConversation: 새 대화 시작 (v5: 모드 선택 화면으로) ─
   const handleNewConversation = useCallback(async () => {

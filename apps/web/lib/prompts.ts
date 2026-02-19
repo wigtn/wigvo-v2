@@ -266,9 +266,13 @@ ${examples}`;
 }
 
 /**
- * 초기 인사 메시지 (시나리오 선택 전)
+ * 초기 인사 메시지 (시나리오 선택 전, locale 지원)
  */
-export const GREETING_MESSAGE = '안녕하세요! 어떤 용건으로 전화를 걸어드릴까요?';
+export function getGreetingMessage(locale = 'ko'): string {
+  return locale !== 'ko'
+    ? 'Hello! What kind of call can I make for you?'
+    : '안녕하세요! 어떤 용건으로 전화를 걸어드릴까요?';
+}
 
 /**
  * 시나리오 선택 옵션

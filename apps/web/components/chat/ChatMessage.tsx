@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { Message } from '@/shared/types';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +9,7 @@ interface ChatMessageProps {
 }
 
 export default function ChatMessage({ message }: ChatMessageProps) {
+  const t = useTranslations('chat');
   const isUser = message.role === 'user';
 
   return (
@@ -24,7 +26,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       >
         {!isUser && (
           <div className="text-[10px] text-[#64748B] font-medium mb-1.5 uppercase tracking-wider">
-            Agent
+            {t('aiAssistant')}
           </div>
         )}
         {message.content}
