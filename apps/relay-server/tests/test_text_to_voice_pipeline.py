@@ -66,6 +66,7 @@ def _make_router(**call_overrides) -> AudioRouter:
         mock_settings.audio_energy_gate_enabled = False
         mock_settings.audio_energy_min_rms = 150.0
         mock_settings.echo_energy_threshold_rms = 400.0
+        mock_settings.local_vad_enabled = False
         router = AudioRouter(
             call=call,
             dual_session=dual,
@@ -86,10 +87,9 @@ class TestTextToVoicePipelineCreation:
         router = _make_router()
         assert isinstance(router._pipeline, TextToVoicePipeline)
 
-    def test_uses_dynamic_energy_threshold_not_detector(self):
-        """TextToVoice는 EchoDetector 대신 Dynamic Energy Threshold를 사용한다."""
+    def test_echo_gate_initialized(self):
+        """TextToVoice는 Echo Gate (Silence Injection)를 사용한다."""
         router = _make_router()
-        assert router._pipeline._echo_detector is None
         assert router._pipeline._in_echo_window is False
 
     def test_first_message_exact_utterance(self):

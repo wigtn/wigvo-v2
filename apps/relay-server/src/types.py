@@ -43,6 +43,7 @@ class CommunicationMode(str, Enum):
 class VadMode(str, Enum):
     CLIENT = "client"
     SERVER = "server"
+    LOCAL = "local"
     PUSH_TO_TALK = "push_to_talk"
 
 

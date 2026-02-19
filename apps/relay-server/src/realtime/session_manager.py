@@ -79,9 +79,10 @@ class RealtimeSession:
                     "threshold": settings.session_b_vad_threshold,
                     "silence_duration_ms": settings.session_b_vad_silence_ms,
                     "prefix_padding_ms": settings.session_b_vad_prefix_padding_ms,
+                    "create_response": False,
                 }
-                if self.config.vad_mode.value == "server"
-                else None
+                if self.config.vad_mode == VadMode.SERVER
+                else None  # VadMode.LOCAL / CLIENT / PUSH_TO_TALK → null (수동 제어)
             ),
         }
 
@@ -166,6 +167,10 @@ class RealtimeSession:
         """오디오 버퍼를 커밋하고 응답을 요청한다 (Client VAD 사용 시)."""
         await self._send({"type": "input_audio_buffer.commit"})
         await self._send({"type": "response.create"})
+
+    async def commit_audio_only(self) -> None:
+        """오디오 버퍼를 커밋한다 (response.create 없이, Local VAD에서 사용)."""
+        await self._send({"type": "input_audio_buffer.commit"})
 
     async def clear_input_buffer(self) -> None:
         """입력 오디오 버퍼를 비운다 (에코 잔여물 제거)."""
@@ -288,6 +293,13 @@ class DualSessionManager:
         self.vad_mode = vad_mode
         self.communication_mode = communication_mode
 
+        # Local VAD 활성 시 Session B의 VAD 모드를 LOCAL로 설정
+        session_b_vad_mode: VadMode
+        if settings.local_vad_enabled:
+            session_b_vad_mode = VadMode.LOCAL
+        else:
+            session_b_vad_mode = VadMode.SERVER
+
         # Session B modalities: 항상 ['text', 'audio'] 유지
         # modalities=['text']로 설정하면 server VAD가 비활성화될 수 있어
         # 수신자 발화 감지(speech_started/stopped)가 불가능해진다.
@@ -309,7 +321,7 @@ class DualSessionManager:
         )
 
         # Session B: 수신자 → User (PRD 3.2 / M-4)
-        # Session B는 항상 server VAD (Twilio 수신자 오디오는 서버가 감지)
+        # Local VAD 활성 시 turn_detection=null → 수동 commit + response.create
         self.session_b = RealtimeSession(
             label="SessionB",
             config=SessionConfig(
@@ -318,7 +330,7 @@ class DualSessionManager:
                 target_language=source_language,
                 input_audio_format="g711_ulaw",  # Twilio에서 입력
                 output_audio_format="pcm16",  # App으로 출력
-                vad_mode=VadMode.SERVER,
+                vad_mode=session_b_vad_mode,
                 modalities=session_b_modalities,
                 input_audio_transcription={"model": "whisper-1", "language": target_language},  # 2단계 자막: 원문 STT + 언어 힌트 (PRD 5.4)
             ),

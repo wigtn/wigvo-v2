@@ -75,18 +75,27 @@ class Settings(BaseSettings):
     # Echo Gate (에코 피드백 루프 차단)
     echo_gate_cooldown_s: float = 2.5  # TTS 완료 후 에코 소멸 대기 (레거시 폴백용)
 
-    # Echo Detector (에너지 핑거프린트 기반 에코 감지)
-    echo_detector_enabled: bool = True  # feature flag (False → 레거시 2.5s blanket block 폴백)
-    echo_detector_threshold: float = 0.6  # Pearson 상관계수 임계값
-    echo_detector_safety_cooldown_s: float = 0.15  # TTS 종료 후 안전 마진 (per-chunk 감지가 정확하므로 짧게)
-    echo_detector_min_delay_chunks: int = 4  # 최소 에코 딜레이 (80ms)
-    echo_detector_max_delay_chunks: int = 20  # 최대 에코 딜레이 (400ms, Twilio RTT ~100-300ms)
-    echo_detector_correlation_window: int = 8  # 비교 윈도우 크기 (160ms)
+    # Echo Detector (에너지 핑거프린트 기반 에코 감지) — 현재 비활성화, Echo Gate + Silence Injection 사용
+    echo_detector_enabled: bool = False
+    echo_detector_threshold: float = 0.6
+    echo_detector_safety_cooldown_s: float = 0.15
+    echo_detector_min_delay_chunks: int = 4
+    echo_detector_max_delay_chunks: int = 20
+    echo_detector_correlation_window: int = 8
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
-    session_b_vad_threshold: float = 0.7  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.7, 전화 오디오용)
-    session_b_vad_silence_ms: int = 300  # 발화 종료 판정까지 필요한 무음 시간 (500→300ms, 자연 대화 속도)
+    session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (전화 오디오 권장 0.8~0.85)
+    session_b_vad_silence_ms: int = 500  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 500ms)
     session_b_vad_prefix_padding_ms: int = 300  # 발화 시작 전 포함할 오디오 (기본 300ms)
+    session_b_min_speech_ms: int = 250  # 최소 발화 길이 — 이보다 짧은 segment는 노이즈로 간주
+
+    # Local VAD (Silero VAD + RMS Energy Gate)
+    local_vad_enabled: bool = True
+    local_vad_rms_threshold: float = 150.0
+    local_vad_speech_threshold: float = 0.5
+    local_vad_silence_threshold: float = 0.35
+    local_vad_min_speech_frames: int = 2    # 2 × 32ms = 64ms
+    local_vad_min_silence_frames: int = 15  # 15 × 32ms = 480ms
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
     # NOTE: Server VAD threshold 0.8이 소음 필터링을 담당하므로,
