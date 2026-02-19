@@ -264,14 +264,14 @@ class TextToVoicePipeline(BasePipeline):
                 if self._in_echo_window
                 else settings.audio_energy_min_rms
             )
+            # [TEMP] 프로덕션 RMS 분포 확인용 (높은 에너지만 INFO 로깅)
+            if rms > 100:
+                logger.info(
+                    "Session B audio: RMS=%.0f threshold=%.0f echo_window=%s passed=%s",
+                    rms, threshold, self._in_echo_window, rms >= threshold,
+                )
             if rms < threshold:
                 return
-            # 프로덕션 캘리브레이션용 RMS 로깅 (echo window 상태 포함)
-            if rms >= threshold:
-                logger.debug(
-                    "Session B audio: RMS=%.0f threshold=%.0f echo_window=%s",
-                    rms, threshold, self._in_echo_window,
-                )
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         await self.session_b.send_recipient_audio(audio_b64)
