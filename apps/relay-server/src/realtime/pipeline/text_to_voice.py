@@ -146,10 +146,10 @@ class TextToVoicePipeline(BasePipeline):
             on_notify_app=self._notify_app,
         )
 
-        # Dynamic Energy Threshold: echo window 중 높은 임계값으로 에코 필터링
-        # 에코(스피커→마이크 감쇠 20-30dB)는 RMS ~100-400으로 필터되고,
-        # 수신자 직접 발화(감쇠 없음)는 RMS ~500-2000+로 통과한다.
-        # Session B output은 항상 활성 — blanket block 하지 않음.
+        # Dynamic Energy Threshold: echo window 중 높은 임계값(400)으로 에코 필터링
+        # 에코(스피커→마이크 감쇠 20-30dB): RMS ~100-400 → 필터
+        # 수신자 직접 발화(감쇠 없음): RMS ~500-2000+ → 통과
+        # 수신자 발화 감지 시 echo window 즉시 종료 (early close)
         self._in_echo_window = False
         self._echo_cooldown_task: asyncio.Task | None = None
         self._echo_detector = None  # Dynamic Energy Threshold 전용 — EchoDetector 미사용
@@ -209,6 +209,7 @@ class TextToVoicePipeline(BasePipeline):
         if self.local_vad:
             self.local_vad.reset()
 
+        self.session_b.stop()
         await self.recovery_a.stop()
         await self.recovery_b.stop()
         logger.info("TextToVoicePipeline stopped for call %s", self.call.call_id)
@@ -261,6 +262,9 @@ class TextToVoicePipeline(BasePipeline):
 
     # --- Twilio -> Session B ---
 
+    # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
+    _MULAW_SILENCE = b"\xff"
+
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
@@ -297,7 +301,17 @@ class TextToVoicePipeline(BasePipeline):
         # 오디오 에너지 게이트 (무음 필터링)
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
-            if rms < settings.audio_energy_min_rms:
+            threshold = (
+                settings.echo_energy_threshold_rms
+                if self._in_echo_window
+                else settings.audio_energy_min_rms
+            )
+            if rms < threshold:
+                # 소음/에코를 silence로 교체 → VAD가 "무음"으로 인식
+                # drop하면 VAD가 오디오 스트림 단절로 speech_stopped를 감지 못함
+                silence = self._MULAW_SILENCE * len(audio_bytes)
+                silence_b64 = base64.b64encode(silence).decode("ascii")
+                await self.session_b.send_recipient_audio(silence_b64)
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

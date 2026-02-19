@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
-import { CheckCircle, XCircle, MapPin, Calendar, Clock, Scissors, FileText, RefreshCw, List, Home } from 'lucide-react';
+import { PhoneOff, MapPin, Calendar, Clock, Scissors, FileText, List, Home } from 'lucide-react';
 
 interface ResultCardProps {
   call: Call;
@@ -52,67 +52,30 @@ export default function ResultCard({ call }: ResultCardProps) {
   const t = useTranslations('result');
   const tc = useTranslations('common');
   const { resetCalling, callingCallId } = useDashboard();
-  const isInline = !!callingCallId; // 대시보드 인라인 모드 여부
-  const isSuccess = call.result === 'SUCCESS';
-
-  const getFailureMessage = (result: string | null): string => {
-    switch (result) {
-      case 'NO_ANSWER': return t('failureNoAnswer');
-      case 'REJECTED': return t('failureRejected');
-      case 'ERROR': return t('failureError');
-      default: return t('failureUnknown');
-    }
-  };
-
-  const getFailureHint = (result: string | null): string => {
-    switch (result) {
-      case 'NO_ANSWER': return t('hintNoAnswer');
-      case 'REJECTED': return t('hintRejected');
-      case 'ERROR': return t('hintError');
-      default: return t('hintDefault');
-    }
-  };
+  const isInline = !!callingCallId;
 
   return (
     <div className="flex flex-col items-center gap-6 py-6">
-      {/* 결과 헤더 */}
-      <div
-        className={`flex w-full flex-col items-center gap-4 rounded-2xl px-6 py-8 border ${
-          isSuccess
-            ? 'bg-teal-50/50 border-teal-100'
-            : 'bg-red-50/50 border-red-100'
-        }`}
-      >
-        <div
-          className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
-            isSuccess ? 'bg-teal-100' : 'bg-red-100'
-          }`}
-        >
-          {isSuccess ? (
-            <CheckCircle className="size-7 text-teal-600" />
-          ) : (
-            <XCircle className="size-7 text-red-500" />
-          )}
+      {/* 통화 종료 헤더 */}
+      <div className="flex w-full flex-col items-center gap-4 rounded-2xl px-6 py-8 border bg-[#F8FAFC] border-[#E2E8F0]">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F1F5F9]">
+          <PhoneOff className="size-7 text-[#64748B]" />
         </div>
         <h1 className="text-xl font-bold text-[#0F172A] tracking-tight">
-          {isSuccess ? t('reservationCompleted') : t('callFailed')}
+          {t('callEnded')}
         </h1>
-        {!isSuccess && (
-          <div className="text-center">
-            <p className="text-sm font-medium text-red-600">{getFailureMessage(call.result)}</p>
-            <p className="mt-1 text-xs text-[#94A3B8]">{getFailureHint(call.result)}</p>
-          </div>
-        )}
       </div>
 
-      {/* 예약 정보 카드 */}
-      {isSuccess && (
+      {/* 통화 정보 카드 */}
+      {(call.targetName || call.parsedDate || call.parsedTime || call.parsedService) && (
         <div className="w-full rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
           <div className="px-5 py-3.5 border-b border-[#E2E8F0]">
-            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">{t('reservationInfo')}</h3>
+            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">{t('callInfo')}</h3>
           </div>
           <div className="px-5 py-4 space-y-4">
-            <InfoRow icon={<MapPin className="size-4" />} label={t('place')} value={call.targetName ?? '-'} />
+            {call.targetName && (
+              <InfoRow icon={<MapPin className="size-4" />} label={t('place')} value={call.targetName} />
+            )}
             {call.parsedDate && (
               <InfoRow icon={<Calendar className="size-4" />} label={t('date')} value={formatDate(call.parsedDate)} />
             )}
@@ -143,17 +106,6 @@ export default function ResultCard({ call }: ResultCardProps) {
 
       {/* 액션 버튼 */}
       <div className="flex w-full flex-col gap-2 pt-2">
-        {!isSuccess && (
-          <button
-            onClick={() => {
-              if (isInline) { resetCalling(); } else { router.push('/'); }
-            }}
-            className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-[#0F172A] text-white hover:bg-[#1E293B] transition-all shadow-sm"
-          >
-            <RefreshCw className="size-4" />
-            {t('retryCall')}
-          </button>
-        )}
         <button
           onClick={() => router.push('/history')}
           className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-white border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] transition-all"

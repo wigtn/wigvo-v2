@@ -99,7 +99,7 @@ export default function SignupPage() {
     <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-gradient-to-b from-gray-900 to-gray-800">
       {/* Language Switcher - 우상단 고정 */}
       <div className="absolute top-4 right-4">
-        <LanguageSwitcher />
+        <LanguageSwitcher direction="down" />
       </div>
 
       <div className="w-full max-w-sm space-y-6">

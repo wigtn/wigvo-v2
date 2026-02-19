@@ -13,7 +13,7 @@ export default function LoginPage() {
     <div className="flex flex-col items-center justify-center min-h-screen px-5 bg-[#F8FAFC]">
       {/* Language Switcher - 우상단 고정 */}
       <div className="absolute top-5 right-5 z-10">
-        <LanguageSwitcher />
+        <LanguageSwitcher direction="down" />
       </div>
 
       <div className="w-full max-w-sm space-y-8">

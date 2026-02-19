@@ -7,6 +7,15 @@ import type {
   ScenarioSubType,
 } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
+import { isDemoMode } from '@/lib/demo';
+import {
+  mockCreateConversation,
+  mockGetConversation,
+  mockSendChatMessage,
+  mockCreateCall,
+  mockStartCall,
+  mockGetCall,
+} from '@/lib/demo/mock-api';
 
 // ============================================================
 // API Helper Functions
@@ -38,6 +47,7 @@ export async function createConversation(
   sourceLang?: string,
   targetLang?: string
 ): Promise<CreateConversationResponse> {
+  if (isDemoMode()) return mockCreateConversation();
   const response = await fetch('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,6 +57,7 @@ export async function createConversation(
 }
 
 export async function getConversation(id: string): Promise<Conversation> {
+  if (isDemoMode()) return mockGetConversation(id);
   const response = await fetch(`/api/conversations/${id}`);
   return handleResponse<Conversation>(response);
 }
@@ -60,6 +71,7 @@ export async function sendChatMessage(
   communicationMode?: CommunicationMode,
   locale?: string
 ): Promise<ChatResponse> {
+  if (isDemoMode()) return mockSendChatMessage(conversationId, message, previousSearchResults, communicationMode, locale);
   const body: Record<string, unknown> = { conversationId, message };
   if (previousSearchResults && previousSearchResults.length > 0) {
     body.previousSearchResults = previousSearchResults;
@@ -84,6 +96,7 @@ export async function createCall(
   conversationId: string,
   communicationMode?: CommunicationMode,
 ): Promise<Call> {
+  if (isDemoMode()) return mockCreateCall();
   const response = await fetch('/api/calls', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,6 +111,7 @@ export async function startCall(callId: string): Promise<{
   relayWsUrl?: string;
   callSid?: string;
 }> {
+  if (isDemoMode()) return mockStartCall();
   const response = await fetch(`/api/calls/${callId}/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -111,6 +125,7 @@ export async function startCall(callId: string): Promise<{
 }
 
 export async function getCall(id: string): Promise<Call> {
+  if (isDemoMode()) return mockGetCall(id);
   const response = await fetch(`/api/calls/${id}`);
   return handleResponse<Call>(response);
 }

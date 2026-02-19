@@ -21,7 +21,7 @@ from typing import Any, Callable, Coroutine
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
-from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
+from src.realtime.audio_utils import pcm16_rms as _pcm16_rms, ulaw_rms as _ulaw_rms
 from src.realtime.context_manager import ConversationContextManager
 from src.realtime.first_message import FirstMessageHandler
 from src.realtime.interrupt_handler import InterruptHandler
@@ -47,6 +47,9 @@ logger = logging.getLogger(__name__)
 
 class VoiceToVoicePipeline(BasePipeline):
     """양방향 음성 번역 파이프라인 (EchoDetector + Interrupt + Recovery)."""
+
+    # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
+    _MULAW_SILENCE = b"\xff"
 
     def __init__(
         self,
@@ -141,6 +144,9 @@ class VoiceToVoicePipeline(BasePipeline):
             capacity=settings.ring_buffer_capacity_slots,
         )
 
+        # User audio RMS logging (주기적 샘플링)
+        self._user_audio_chunk_count = 0
+
         # Echo Gate + Silence Injection
         # TTS 전송 중 + 동적 cooldown 구간에서 Twilio 오디오를 무음으로 대체
         self._in_echo_window = False
@@ -196,6 +202,7 @@ class VoiceToVoicePipeline(BasePipeline):
         if self.local_vad:
             self.local_vad.reset()
 
+        self.session_b.stop()
         await self.recovery_a.stop()
         await self.recovery_b.stop()
         logger.info("VoiceToVoicePipeline stopped for call %s", self.call.call_id)
@@ -205,6 +212,12 @@ class VoiceToVoicePipeline(BasePipeline):
     async def handle_user_audio(self, audio_b64: str) -> None:
         audio_bytes = base64.b64decode(audio_b64)
         seq = self.ring_buffer_a.write(audio_bytes)
+
+        # 사용자 오디오 RMS 로깅 (~1초마다, pcm16 100ms chunk 기준 10회)
+        self._user_audio_chunk_count += 1
+        if self._user_audio_chunk_count % 10 == 0:
+            rms = _pcm16_rms(audio_bytes)
+            logger.info("[SessionA] User audio RMS=%.0f", rms)
 
         if self.recovery_a.is_recovering:
             return

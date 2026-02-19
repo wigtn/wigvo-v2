@@ -10,10 +10,8 @@ import {
   Phone,
   Calendar,
   HelpCircle,
-  Search,
   Clock,
-  CheckCircle,
-  XCircle,
+  PhoneOff,
   PhoneCall,
   ArrowLeft,
   MapPin,
@@ -96,12 +94,9 @@ function getRequestTypeIcon(type: string) {
   }
 }
 
-function getListStatusIcon(status: string, result: string | null) {
-  if (status === 'COMPLETED' && result === 'SUCCESS') {
-    return <CheckCircle className="size-3.5 text-teal-500" />;
-  }
+function getListStatusIcon(status: string) {
   if (status === 'COMPLETED' || status === 'FAILED') {
-    return <XCircle className="size-3.5 text-red-500" />;
+    return <PhoneOff className="size-3.5 text-[#64748B]" />;
   }
   if (status === 'CALLING' || status === 'IN_PROGRESS') {
     return <PhoneCall className="size-3.5 text-[#0F172A] animate-pulse" />;
@@ -127,12 +122,9 @@ export default function CallHistoryPanel() {
     }
   };
 
-  const getStatusBadge = (status: string, result: string | null) => {
-    if (status === 'COMPLETED' && result === 'SUCCESS') {
-      return { label: t('status.success'), bg: 'bg-teal-50', text: 'text-teal-600' };
-    }
+  const getStatusBadge = (status: string) => {
     if (status === 'COMPLETED' || status === 'FAILED') {
-      return { label: t('status.failed'), bg: 'bg-red-50', text: 'text-red-600' };
+      return { label: t('status.callEnded'), bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
     }
     if (status === 'CALLING' || status === 'IN_PROGRESS') {
       return { label: t('status.inProgress'), bg: 'bg-amber-50', text: 'text-amber-600' };
@@ -330,7 +322,7 @@ export default function CallHistoryPanel() {
           ) : (
             <div className="px-2 py-2 space-y-0.5">
               {calls.map((call) => {
-                const badge = getStatusBadge(call.status, call.result);
+                const badge = getStatusBadge(call.status);
                 return (
                   <button
                     key={call.id}
@@ -342,7 +334,7 @@ export default function CallHistoryPanel() {
                     )}
                   >
                     <div className="flex items-start gap-2.5">
-                      {getListStatusIcon(call.status, call.result)}
+                      {getListStatusIcon(call.status)}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium text-[#0F172A] truncate">
@@ -420,8 +412,7 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
   const tc = useTranslations('common');
   const tr = useTranslations('result');
 
-  const isSuccess = call.status === 'COMPLETED' && call.result === 'SUCCESS';
-  const isFailed = call.status === 'FAILED' || (call.status === 'COMPLETED' && call.result !== 'SUCCESS');
+  const isEnded = call.status === 'COMPLETED' || call.status === 'FAILED';
   const isInProgress = call.status === 'CALLING' || call.status === 'IN_PROGRESS';
 
   const requestTypeLabel = (type: string) => {
@@ -433,12 +424,9 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
     }
   };
 
-  const getStatusBadge = (status: string, result: string | null) => {
-    if (status === 'COMPLETED' && result === 'SUCCESS') {
-      return { label: t('status.success'), bg: 'bg-teal-50', text: 'text-teal-600' };
-    }
+  const getStatusBadge = (status: string) => {
     if (status === 'COMPLETED' || status === 'FAILED') {
-      return { label: t('status.failed'), bg: 'bg-red-50', text: 'text-red-600' };
+      return { label: t('status.callEnded'), bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
     }
     if (status === 'CALLING' || status === 'IN_PROGRESS') {
       return { label: t('status.inProgress'), bg: 'bg-amber-50', text: 'text-amber-600' };
@@ -446,37 +434,17 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
     return { label: t('status.pending'), bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]' };
   };
 
-  const getResultLabel = (result: string | null): string => {
-    switch (result) {
-      case 'SUCCESS': return t('callResult.success');
-      case 'NO_ANSWER': return t('callResult.noAnswer');
-      case 'REJECTED': return t('callResult.rejected');
-      case 'ERROR': return t('callResult.error');
-      default: return '-';
-    }
-  };
-
   const getCallStatusLabel = (status: string): string => {
     switch (status) {
       case 'PENDING': return t('status.pending');
       case 'CALLING': return t('status.calling');
       case 'IN_PROGRESS': return t('status.callInProgress');
-      case 'COMPLETED': return t('status.callCompleted');
-      case 'FAILED': return t('status.callFailed');
+      case 'COMPLETED': case 'FAILED': return t('status.callEnded');
       default: return status;
     }
   };
 
-  const getFailureMessage = (result: string | null): string => {
-    switch (result) {
-      case 'NO_ANSWER': return tr('failureNoAnswer');
-      case 'REJECTED': return tr('failureRejected');
-      case 'ERROR': return tr('failureError');
-      default: return tr('failureUnknown');
-    }
-  };
-
-  const badge = getStatusBadge(call.status, call.result);
+  const badge = getStatusBadge(call.status);
 
   return (
     <>
@@ -518,36 +486,29 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
           <div
             className={cn(
               'flex items-center gap-4 rounded-2xl px-5 py-5 border',
-              isSuccess && 'bg-teal-50/50 border-teal-100',
-              isFailed && 'bg-red-50/50 border-red-100',
+              isEnded && 'bg-[#F8FAFC] border-[#E2E8F0]',
               isInProgress && 'bg-amber-50/50 border-amber-100',
-              !isSuccess && !isFailed && !isInProgress && 'bg-[#F1F5F9] border-[#E2E8F0]',
+              !isEnded && !isInProgress && 'bg-[#F1F5F9] border-[#E2E8F0]',
             )}
           >
             <div
               className={cn(
                 'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0',
-                isSuccess && 'bg-teal-100',
-                isFailed && 'bg-red-100',
+                isEnded && 'bg-[#F1F5F9]',
                 isInProgress && 'bg-amber-100',
-                !isSuccess && !isFailed && !isInProgress && 'bg-[#E2E8F0]',
+                !isEnded && !isInProgress && 'bg-[#E2E8F0]',
               )}
             >
-              {isSuccess && <CheckCircle className="size-6 text-teal-600" />}
-              {isFailed && <XCircle className="size-6 text-red-500" />}
+              {isEnded && <PhoneOff className="size-6 text-[#64748B]" />}
               {isInProgress && <PhoneCall className="size-6 text-amber-600 animate-pulse" />}
-              {!isSuccess && !isFailed && !isInProgress && <Clock className="size-6 text-[#64748B]" />}
+              {!isEnded && !isInProgress && <Clock className="size-6 text-[#64748B]" />}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-base font-bold text-[#0F172A] tracking-tight">
-                {isSuccess ? t('banner.success') : isFailed ? t('banner.failed') : isInProgress ? t('banner.inProgress') : t('banner.pending')}
+                {isEnded ? t('banner.ended') : isInProgress ? t('banner.inProgress') : t('banner.pending')}
               </p>
               <p className="text-sm text-[#64748B] mt-0.5">
-                {isSuccess
-                  ? getCallStatusLabel(call.status)
-                  : isFailed
-                    ? getFailureMessage(call.result)
-                    : getCallStatusLabel(call.status)}
+                {getCallStatusLabel(call.status)}
               </p>
             </div>
           </div>
@@ -598,27 +559,18 @@ function CallDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
           </div>
 
           {/* ── 결과 상세 카드 ── */}
-          {(call.status === 'COMPLETED' || call.status === 'FAILED') && (
+          {isEnded && (
             <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="px-5 py-3 border-b border-[#E2E8F0] flex items-center gap-2">
-                {isSuccess ? (
-                  <CheckCircle className="size-3.5 text-teal-500" />
-                ) : (
-                  <XCircle className="size-3.5 text-red-500" />
-                )}
+                <PhoneOff className="size-3.5 text-[#64748B]" />
                 <span className="text-xs font-semibold text-[#0F172A]">{t('resultDetail')}</span>
               </div>
 
               <div className="px-5 py-4 space-y-4">
                 <DetailRow
-                  icon={<PhoneCall className="size-4" />}
+                  icon={<PhoneOff className="size-4" />}
                   label={t('callStatus')}
                   value={getCallStatusLabel(call.status)}
-                />
-                <DetailRow
-                  icon={isSuccess ? <CheckCircle className="size-4" /> : <XCircle className="size-4" />}
-                  label={t('resultLabel')}
-                  value={getResultLabel(call.result)}
                 />
                 {call.completedAt && (
                   <DetailRow

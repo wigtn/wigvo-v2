@@ -75,6 +75,10 @@ class SessionBHandler:
         # 최소 발화 길이 필터: 너무 짧은 segment는 노이즈로 간주
         self._min_speech_s: float = settings.session_b_min_speech_ms / 1000.0
 
+        # Max speech duration timer: PSTN 배경 소음으로 Server VAD의
+        # speech_stopped가 지연되는 문제를 방지. 타이머 초과 시 강제 commit.
+        self._max_speech_timer: asyncio.Task | None = None
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -323,6 +327,9 @@ class SessionBHandler:
 
         이 이벤트는 First Message Strategy (PRD 3.4)와
         Interrupt 처리 (PRD 3.6)의 핵심 트리거다.
+
+        Max speech timer를 시작하여, PSTN 배경 소음으로 speech_stopped가
+        지연되는 경우에도 max_speech_duration_s 이내에 번역이 시작되도록 한다.
         """
         self._is_recipient_speaking = True
         self._speech_started_at = time.time()

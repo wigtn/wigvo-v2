@@ -21,6 +21,21 @@ _max_abs = max(abs(v) for v in _ULAW_TO_LINEAR)
 _ULAW_TO_FLOAT32 = np.array(_ULAW_TO_LINEAR, dtype=np.float32) / _max_abs
 
 
+def pcm16_rms(audio: bytes) -> float:
+    """PCM16 (16-bit signed LE) 오디오의 RMS 에너지를 계산한다.
+
+    Returns:
+        RMS 값 (0=무음, ~500=조용한 발화, ~2000=보통 발화, ~8000=매우 큰 소리)
+    """
+    if len(audio) < 2:
+        return 0.0
+    import struct
+    n = len(audio) // 2
+    samples = struct.unpack(f"<{n}h", audio[:n * 2])
+    total = sum(s * s for s in samples)
+    return (total / n) ** 0.5
+
+
 def ulaw_rms(audio: bytes) -> float:
     """g711 mu-law 오디오의 RMS 에너지를 계산한다.
 

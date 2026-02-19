@@ -261,9 +261,24 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
     );
   }
 
-  // Prepend locale instruction if user's UI is in English
-  if (locale === 'en') {
-    systemPrompt = `**IMPORTANT: The user's interface is in English. You MUST respond in English.** Use friendly, natural English. Keep the JSON block keys in English as-is.\n\n${systemPrompt}`;
+  // Locale-aware instruction: tell the LLM what language to respond in
+  // and what language pair the user has configured for the call.
+  const langNames: Record<string, string> = {
+    ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', vi: 'Vietnamese',
+  };
+  const srcName = langNames[existingData.source_language ?? ''] ?? existingData.source_language;
+  const tgtName = langNames[existingData.target_language ?? ''] ?? existingData.target_language;
+  const hasLangPair = existingData.source_language && existingData.target_language;
+
+  if (locale && locale !== 'ko') {
+    // Non-Korean UI: strong English override + language pair context
+    const langLine = hasLangPair
+      ? `\nThe user speaks ${srcName} and wants to call someone who speaks ${tgtName}.`
+      : '';
+    systemPrompt = `[SYSTEM OVERRIDE — LANGUAGE RULE]\nYou MUST respond ENTIRELY in English. The instructions below are in Korean for internal reference only — ignore their language and always reply in English.\nUse friendly, natural English. Keep JSON keys as-is.${langLine}\n[END OVERRIDE]\n\n${systemPrompt}`;
+  } else if (hasLangPair) {
+    // Korean UI: add language pair context (respond in Korean)
+    systemPrompt = `[언어 설정] 사용자의 언어: ${srcName}. 통화 상대방 언어: ${tgtName}. 반드시 한국어로 응답하세요.\n\n${systemPrompt}`;
   }
 
   // 2. LLM 메시지 구성

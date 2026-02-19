@@ -394,8 +394,8 @@ class TestUlawRmsAndEnergyGate:
         assert 0 < rms < _ulaw_rms(bytes([0x00] * 160))
 
     @pytest.mark.asyncio
-    async def test_energy_gate_blocks_silence(self):
-        """에너지 게이트 활성 시 무음 오디오가 Session B에 전달되지 않음."""
+    async def test_energy_gate_drops_silence(self):
+        """에너지 게이트 활성 시 무음 오디오가 드롭됨 (legacy Server VAD path)."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
 
@@ -406,6 +406,7 @@ class TestUlawRmsAndEnergyGate:
             mock_settings.audio_energy_min_rms = 150.0
             await router.handle_twilio_audio(silence)
 
+        # 무음은 드롭됨 (Local VAD 비활성 시 legacy path)
         router.session_b.send_recipient_audio.assert_not_called()
 
     @pytest.mark.asyncio

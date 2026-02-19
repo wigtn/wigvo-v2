@@ -98,12 +98,16 @@ class Settings(BaseSettings):
     local_vad_min_silence_frames: int = 15  # 15 × 32ms = 480ms
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
-    # NOTE: Server VAD threshold 0.8이 소음 필터링을 담당하므로,
-    # 에너지 게이트는 순수 무음만 차단하도록 낮은 임계값 사용
+    # 에너지 게이트: 임계값 이하 오디오를 silence로 교체하여 VAD에 전달
+    # PSTN 배경 소음(50-200 RMS)을 silence로 교체 → VAD가 speech_stopped 자연 감지
+    # 수신자 직접 발화(500-2000+ RMS)는 항상 통과
     audio_energy_gate_enabled: bool = True
-    audio_energy_min_rms: float = 150.0  # mu-law RMS 최소 임계값 (전화선 배경 소음 ~50-200 필터, 발화 ~500-2000+ 통과)
-    echo_energy_threshold_rms: float = 400.0  # Echo window 중 에너지 임계값
-                                               # 에코(감쇠): ~100-400, 발화(직접): ~500-2000+
+    audio_energy_min_rms: float = 150.0  # PSTN 소음(50-200) → silence 교체, 발화(500+) → 통과
+    echo_energy_threshold_rms: float = 400.0  # Echo window: 에코(100-400) → silence, 발화(500+) → 통과
+
+    # Max speech duration: 에너지 게이트로도 VAD speech_stopped가 지연되는 극단 케이스 안전망
+    # 이 시간 초과 시 오디오 버퍼를 강제 commit하여 번역 시작
+    max_speech_duration_s: float = 8.0
 
     # Logging
     log_level: str = "INFO"

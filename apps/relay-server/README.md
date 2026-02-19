@@ -1,5 +1,453 @@
 # WIGVO Relay Server
 
+[한국어](#한국어)
+
+Bidirectional real-time translation call server based on OpenAI Realtime API + Twilio Media Streams.
+
+## Quick Start
+
+```bash
+uv sync                              # Install dependencies
+cp .env.example .env                  # Configure environment variables
+uv run uvicorn src.main:app --reload  # Development server
+uv run pytest -v                      # Tests (147 tests)
+```
+
+## Directory Structure
+
+```
+src/
+├── main.py                  # FastAPI entrypoint, router registration, lifespan
+├── config.py                # Environment variables (pydantic-settings)
+├── types.py                 # Shared types/Enum/Pydantic models
+├── call_manager.py          # Call lifecycle singleton (central resource management)
+│
+├── routes/
+│   ├── calls.py             # POST /relay/calls/start, /end — call start/end API
+│   ├── stream.py            # WS /relay/calls/{id}/stream — App <-> Relay WebSocket
+│   ├── twilio_webhook.py    # POST /twilio/webhook — TwiML, WS /twilio/media-stream
+│   └── health.py            # GET /health
+│
+├── realtime/
+│   ├── pipeline/            # Strategy pattern pipelines (independent per-mode processing)
+│   │   ├── __init__.py      # Pipeline module documentation + mode mapping
+│   │   ├── base.py          # BasePipeline ABC (common interface)
+│   │   ├── voice_to_voice.py # VoiceToVoicePipeline (EchoDetector + full audio)
+│   │   ├── text_to_voice.py  # TextToVoicePipeline (per-response instruction + text-only B)
+│   │   └── full_agent.py     # FullAgentPipeline (Function Calling + autonomous AI)
+│   │
+│   ├── audio_router.py      # AudioRouter — thin delegator (Pipeline selection + common lifecycle)
+│   ├── echo_detector.py     # EchoDetector — Pearson correlation-based echo detection
+│   ├── audio_utils.py       # Shared mu-law -> linear PCM conversion + RMS calculation
+│   ├── session_manager.py   # RealtimeSession (OpenAI WS wrapper) + DualSessionManager
+│   ├── session_a.py         # SessionAHandler — User->recipient translation event handling
+│   ├── session_b.py         # SessionBHandler — Recipient->User translation event handling
+│   ├── interrupt_handler.py # Turn overlap/interrupt handling (recipient priority)
+│   ├── first_message.py     # Recipient answer detection -> AI notice + Exact Utterance
+│   ├── context_manager.py   # Conversation context sliding window (6 turns)
+│   ├── recovery.py          # Session failure detection -> auto-reconnect + catch-up
+│   └── ring_buffer.py       # 30-second circular audio buffer (for Recovery)
+│
+├── guardrail/
+│   ├── checker.py           # GuardrailChecker — Level 1/2/3 classification pipeline
+│   ├── filter.py            # Rule-based text filter (regex + keyword)
+│   ├── dictionary.py        # Prohibited/correction dictionary (ko/en/ja/zh)
+│   └── fallback_llm.py      # GPT-4o-mini text correction (Level 2/3)
+│
+├── prompt/
+│   ├── generator_v3.py      # Dynamic system prompt generation for Session A/B
+│   └── templates.py         # Prompt templates + per-language variables
+│
+├── tools/
+│   ├── definitions.py       # Agent Mode Function Calling tool definitions
+│   └── executor.py          # Function Call execution + result recording to ActiveCall
+│
+├── twilio/
+│   ├── outbound.py          # Twilio REST API outbound call (sync -> async wrapping)
+│   └── media_stream.py      # TwilioMediaStreamHandler (WS parsing/audio transmission)
+│
+└── db/
+    └── supabase_client.py   # Supabase persistence (upsert on call end)
+
+tests/
+├── conftest.py              # pytest fixtures
+├── helpers.py               # ANSI color utilities (run.py dependency)
+├── run.py                   # Custom runner (uv run python -m tests.run)
+├── test_*.py                # pytest unit tests (147 tests)
+├── component/               # Module benchmarks (no server required)
+│   ├── test_cost_tracking.py
+│   └── test_ring_buffer_perf.py
+├── integration/             # Requires live server (localhost:8000)
+│   ├── test_api.py
+│   └── test_websocket.py
+└── e2e/                     # Requires live server + Twilio + OpenAI
+    ├── call_client.py
+    └── scenarios.py
+```
+
+## Architecture Overview
+
+### Pipeline Architecture (Strategy Pattern)
+
+`AudioRouter` is a **thin delegator** that selects the appropriate pipeline based on `communication_mode` and only manages the common lifecycle (timer, recovery). The actual audio/text handling is processed independently by each pipeline.
+
+```
+AudioRouter._create_pipeline(call)
+    │
+    ├─ VOICE_TO_VOICE  → VoiceToVoicePipeline(...)
+    ├─ VOICE_TO_TEXT    → VoiceToVoicePipeline(..., suppress_b_audio=True)
+    ├─ TEXT_TO_VOICE    → TextToVoicePipeline(...)
+    └─ FULL_AGENT       → FullAgentPipeline(...)
+```
+
+#### BasePipeline Interface
+
+```python
+class BasePipeline(ABC):
+    async def handle_user_audio(audio_b64: str) -> None      # User audio input
+    async def handle_user_audio_commit() -> None              # Client VAD commit
+    async def handle_user_text(text: str) -> None             # User text input
+    async def handle_twilio_audio(audio_bytes: bytes) -> None # Twilio recipient audio
+    async def start() -> None                                 # Start pipeline
+    async def stop() -> None                                  # Stop pipeline
+```
+
+#### Per-Pipeline Configuration
+
+| Component | VoiceToVoice | VoiceToText (sub-mode) | TextToVoice | FullAgent |
+|-----------|-------------|----------------------|-------------|-----------|
+| **Pipeline** | VoiceToVoicePipeline | VoiceToVoicePipeline | TextToVoicePipeline | FullAgentPipeline |
+| **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
+| **Session A turn_detection** | client/server VAD | client/server VAD | `null` (manual) | `null` (manual) |
+| **Session B modalities** | `['text', 'audio']` | `['text', 'audio']` | **`['text']`** | **`['text']`** |
+| **Session B -> App audio** | Sent | **Suppressed** | N/A (text only) | N/A (text only) |
+| **EchoDetector** | **Active** | **Active** | Not needed | Not needed |
+| **Echo Gate** | Active | Active | Not needed | Not needed |
+| **Audio Energy Gate** | Active | Active | Active | Active |
+| **Interrupt Handler** | Active | Active | Active | Active |
+| **Function Calling** | None | None | None | **Active** |
+| **Per-response instruction** | None | None | **Active** | **Active** |
+
+### Dual Session Structure
+
+Each call operates with **2 independent OpenAI Realtime sessions**:
+
+```
+Session A: User -> Recipient (source -> target translation)
+  - Input: pcm16 (from App)
+  - Output: g711_ulaw (to Twilio)
+
+Session B: Recipient -> User (target -> source translation)
+  - Input: g711_ulaw (from Twilio)
+  - Output: pcm16 (to App) or text-only (T2V/Agent)
+```
+
+The reason for separating the two sessions: to prevent confusion of translation direction. If merged into a single session, source/target languages get mixed up.
+
+### Call Start Sequence
+
+```
+1. App -> POST /relay/calls/start
+   ├─ ActiveCall creation
+   ├─ System Prompt generation (prompt/generator_v3)
+   ├─ DualSessionManager -> 2 OpenAI Realtime WS connections
+   │   └─ Session B modalities branching based on communication_mode
+   └─ Outbound call via Twilio REST API
+
+2. App -> WS /relay/calls/{id}/stream connection
+   └─ Register App WS with call_manager
+
+3. Twilio -> POST /twilio/webhook/{id}
+   └─ TwiML <Stream> response -> instruct Media Stream connection
+
+4. Twilio -> WS /twilio/media-stream/{id} connection
+   ├─ TwilioMediaStreamHandler creation
+   ├─ AudioRouter creation -> Pipeline selection + register with call_manager
+   ├─ dual_session.listen_all() background start
+   └─ Start Twilio audio receive loop
+```
+
+> AudioRouter is created **when the Twilio WS connects**. Even if the App WS connects first, audio is not processed without an AudioRouter and the system waits.
+
+### Audio Pipeline
+
+#### Pipeline A: User -> Recipient (Voice Mode)
+
+```
+App                       Relay Server                      Twilio
+ │                             │                              │
+ │── audio_chunk ──> stream.py │                              │
+ │                      │      │                              │
+ │              Pipeline.handle_user_audio()                   │
+ │                      │                                     │
+ │              Record to RingBuffer A                         │
+ │                      │                                     │
+ │              SessionAHandler.send_user_audio()              │
+ │                      │                                     │
+ │                      v                                     │
+ │              OpenAI Session A                               │
+ │              [User speech STT -> translate -> TTS]          │
+ │                      │                                     │
+ │        response.audio.delta (g711_ulaw)                    │
+ │                      │                                     │
+ │              SessionAHandler._handle_audio_delta()          │
+ │                      │                                     │
+ │                (Guardrail check)                             │
+ │                      │                                     │
+ │              Pipeline._on_session_a_tts()                   │
+ │                      │                                     │
+ │                (EchoDetector.record_sent_chunk())            │
+ │                (Interrupt check)                             │
+ │                      │                                     │
+ │              TwilioHandler.send_audio() ─────────────────> │
+ │                                          g711_ulaw          │
+```
+
+#### Pipeline A: User -> Recipient (Text Mode)
+
+```
+App                       Relay Server                      Twilio
+ │                             │                              │
+ │── text_input ──> stream.py  │                              │
+ │                      │      │                              │
+ │              Pipeline.handle_user_text()                    │
+ │                      │                                     │
+ │              conversation.item.create (text)                │
+ │              response.create (per-response instruction)     │
+ │                      │                                     │
+ │                      v                                     │
+ │              OpenAI Session A                               │
+ │              [text -> translate -> TTS] (strict relay)      │
+ │                      │                                     │
+ │              TwilioHandler.send_audio() ─────────────────> │
+```
+
+#### Pipeline B: Recipient -> User
+
+```
+Twilio                    Relay Server                      App
+ │                             │                              │
+ │── media event ──> twilio_   │                              │
+ │   (g711_ulaw)     webhook   │                              │
+ │                      │      │                              │
+ │              Pipeline.handle_twilio_audio()                 │
+ │                      │                                     │
+ │              EchoDetector.is_echo() (Voice mode only)       │
+ │              ├─ Echo -> drop                                │
+ │              └─ Genuine speech -> continue                  │
+ │                      │                                     │
+ │              Record to RingBuffer B                         │
+ │              SessionBHandler.send_recipient_audio()         │
+ │                      │                                     │
+ │                      v                                     │
+ │              OpenAI Session B                               │
+ │                      │                                     │
+ │  ┌── Voice mode ─────┼──── Text mode ──────────┐           │
+ │  │                   │                         │           │
+ │  │ response.audio_   │  response.text.delta    │           │
+ │  │ transcript.done   │  response.text.done     │           │
+ │  │ + audio.delta     │  (no audio)             │           │
+ │  │                   │                         │           │
+ │  └───────────────────┼─────────────────────────┘           │
+ │                      │                                     │
+ │        ──────────────────────────────────────────────────> │
+ │                   caption + audio (Voice)                   │
+ │                   caption only   (Text)                     │
+```
+
+### Core Mechanisms
+
+#### EchoDetector (Fingerprint-Based Echo Detection)
+
+**VoiceToVoicePipeline only.** When Session A sends TTS to Twilio, the echo returns to Session B. EchoDetector remembers the energy pattern (fingerprint) of the sent TTS and compares it against incoming audio.
+
+```
+Session A TTS chunk              Twilio received audio
+       │                              │
+       v                              v
+  record_sent_chunk()          is_echo(chunk) -> bool
+       │                              │
+       v                              v
+  Reference Buffer             Extract 200ms window energy pattern
+  [timestamp, RMS]             Compare across 80~600ms delay offsets
+                                      │
+                                      v
+                               Pearson normalized correlation
+                               r > 0.6 -> ECHO (drop)
+                               r <= 0.6 -> GENUINE (pass immediately)
+```
+
+**Principle**: Echo = delayed + attenuated copy of sent audio -> high energy pattern correlation. Genuine speech = completely different voice pattern -> low correlation. Pearson normalization ignores attenuation differences (10~30dB) and compares patterns only.
+
+**Legacy Echo Gate fallback**: When `echo_detector_enabled=False`, falls back to the legacy 2.5-second full-block approach. EchoDetector is enabled by default.
+
+#### Echo Gate v2 (Output Gating)
+
+Output-side protection that works alongside EchoDetector:
+
+| Phase | Action |
+|---|---|
+| Session A TTS starts | `output_suppressed = True` (suppress Session B OUTPUT only, INPUT always active) |
+| Session A response complete | Start cooldown timer (default 0.3s) |
+| Cooldown complete | `output_suppressed = False` -> `flush_pending_output()` |
+| Recipient speaks during suppression | Immediately release gate (recipient priority) |
+
+Key point: **INPUT is never blocked** -> recipient speech can always be detected. Only OUTPUT is suppressed and stored in a pending queue for later flush.
+
+> In TextToVoice/FullAgent pipelines, both Echo Gate and EchoDetector are disabled. Since user input is text, a TTS echo loop is impossible.
+
+#### Per-Response Instruction (TextToVoice Only)
+
+TextToVoicePipeline injects a per-response instruction at `response.create` time to force the AI to only translate without adding arbitrary sentences:
+
+```python
+# TextToVoicePipeline.handle_user_text()
+await session_a.send_text_item(text)                     # conversation.item.create
+await session_a.create_response(instructions=strict_instruction)  # translate only
+```
+
+#### Exact Utterance (First Message)
+
+Prevents AI expansion when sending the first greeting in TextToVoice/FullAgent:
+
+```python
+# first_message.py
+await session_a.send_text_item(
+    f'Say exactly this sentence and nothing else: "{greeting}"'
+)
+```
+
+#### Session B Text-Only Modality
+
+In TextToVoice/FullAgent, Session B is set to `modalities=['text']`:
+- **0 audio output tokens** (cost savings)
+- Receives translated text via `response.text.delta` / `response.text.done` events
+- Uses `response.text.*` handlers instead of `response.audio_transcript.*`
+- Note: `response.text.done` uses the `text` field (not `transcript`)
+
+#### Interrupt (Turn Overlap Handling)
+
+Priority: Recipient speech > User speech > AI generation
+
+| Case | Handling |
+|---|---|
+| Recipient interrupts during Session A TTS | `response.cancel` + Twilio buffer `clear` |
+| Recipient interrupts during User speech | Notify App, User audio remains buffered |
+| Session A/B simultaneous output | Independent paths, parallel allowed |
+
+After recipient speech ends, a **1.5-second cooldown** protects the pattern of continuing to speak after a short pause.
+
+#### Context Manager (Conversation Context Retention)
+
+Tracks the conversation with a **6-turn sliding window**. Injects into the session via `conversation.item.create` at utterance commit/end time to ensure translation consistency. Reason for not using `session.update`: it resets the entire session configuration.
+
+#### First Message
+
+When the recipient answers the phone and speaks for the first time ("Hello") -> Session B Server VAD detects it -> AI notice message is delivered as TTS through Session A.
+
+#### Recovery
+
+- **RingBuffer**: All audio is constantly recorded in a 30-second circular buffer
+- **Heartbeat**: Failure detected if no events within 45 seconds
+- **Reconnection**: Exponential backoff (1s -> 2s -> 4s -> 8s, max 30s)
+- **Catch-up**: Unsent audio is batch-STT'd via Whisper API
+- **Degraded Mode**: Falls back to Whisper batch if recovery fails for 10+ seconds
+
+#### Guardrail (Translation Quality Protection)
+
+```
+Text delta arrives (ahead of audio)
+ │
+ ├─ Level 1: PASS -> audio forwarded to Twilio as-is
+ ├─ Level 2: Informal expression detected -> audio forwarded, background LLM correction (logged)
+ └─ Level 3: Profanity/prohibited word detected -> audio blocked, LLM correction then re-TTS
+```
+
+### Mode Comparison
+
+| | Voice-to-Voice | Voice-to-Text | Text-to-Voice | Full Agent |
+|---|---|---|---|---|
+| Session A role | Voice translation | Voice translation | Text translation (strict) | AI autonomous conversation |
+| User input | Voice | Voice | Text | Text instructions |
+| Session B output | Voice + text | Text only (App) | Text only | Text only |
+| Session B -> A feedback | None | None | None | Recipient translation auto-forwarded |
+| Function Calling | Disabled | Disabled | Disabled | Active |
+| Echo detection | EchoDetector + Gate | EchoDetector + Gate | Not needed | Not needed |
+| B audio tokens | Consumed | Consumed | **0** | **0** |
+
+### CallManager (Central Resource Management)
+
+A singleton that manages all resources via a `call_id`-based dictionary:
+
+```python
+_calls:        dict[str, ActiveCall]           # Call state
+_sessions:     dict[str, DualSessionManager]   # OpenAI sessions
+_routers:      dict[str, AudioRouter]          # Audio routers (-> Pipeline)
+_app_ws:       dict[str, WebSocket]            # App WebSocket
+_listen_tasks: dict[str, asyncio.Task]         # Session listening tasks
+```
+
+`cleanup_call(call_id)` -- **idempotent** central cleanup:
+1. Pipeline.stop() (via AudioRouter)
+2. listen_task.cancel()
+3. DualSession.close()
+4. App WS notification + close
+5. Supabase DB persist
+6. Remove from dictionaries
+
+Call sites: App WS disconnect, Twilio disconnect, status-callback, manual end, server shutdown.
+
+## Communication Protocol
+
+### App -> Relay (WebSocket JSON)
+
+| type | data | Description |
+|---|---|---|
+| `audio_chunk` | `{audio: base64}` | User voice (pcm16) |
+| `vad_state` | `{state: "committed"}` | Client VAD utterance end |
+| `text_input` | `{text: string}` | User text input |
+| `end_call` | `{}` | End call |
+
+### Relay -> App (WebSocket JSON)
+
+| type | data | Description |
+|---|---|---|
+| `caption.original` | `{role, text, stage:1}` | Recipient original caption (immediate) |
+| `caption.translated` | `{role, text, stage:2}` | Recipient translated caption |
+| `caption` | `{role, text, direction}` | Session A translation caption |
+| `recipient_audio` | `{audio: base64}` | Recipient translated voice (pcm16, Voice mode only) |
+| `call_status` | `{status, message}` | Call status change |
+| `translation.state` | `{state}` | Translation progress state (processing/done) |
+| `interrupt_alert` | `{speaking}` | Recipient interruption alert |
+| `session.recovery` | `{status, gap_ms}` | Session recovery status |
+| `guardrail.triggered` | `{level, original}` | Guardrail event |
+| `error` | `{message}` | Error |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `TWILIO_ACCOUNT_SID` | | Twilio Account SID |
+| `TWILIO_AUTH_TOKEN` | | Twilio Auth Token |
+| `TWILIO_PHONE_NUMBER` | | Twilio outbound phone number |
+| `OPENAI_API_KEY` | | OpenAI API key |
+| `OPENAI_REALTIME_MODEL` | `gpt-4o-realtime-preview` | Realtime model |
+| `SUPABASE_URL` | | Supabase URL |
+| `SUPABASE_SERVICE_KEY` | | Supabase service key |
+| `RELAY_SERVER_URL` | `http://localhost:8000` | Server URL (for Twilio webhooks) |
+| `GUARDRAIL_ENABLED` | `true` | Enable Guardrail |
+| `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate cooldown (seconds, for fallback) |
+| `ECHO_DETECTOR_ENABLED` | `true` | Enable Fingerprint EchoDetector |
+| `ECHO_DETECTOR_THRESHOLD` | `0.6` | Pearson correlation threshold |
+| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.3` | Safety margin after TTS ends (seconds) |
+| `ECHO_DETECTOR_MIN_DELAY_CHUNKS` | `4` | Minimum echo delay (80ms) |
+| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `30` | Maximum echo delay (600ms) |
+| `ECHO_DETECTOR_CORRELATION_WINDOW` | `10` | Comparison window size (200ms) |
+
+---
+
+## 한국어
+
 OpenAI Realtime API + Twilio Media Streams 기반 양방향 실시간 번역 통화 서버.
 
 ## Quick Start
@@ -27,7 +475,7 @@ src/
 │   └── health.py            # GET /health
 │
 ├── realtime/
-│   ├── pipeline/            # ★ Strategy 패턴 파이프라인 (모드별 독립 처리)
+│   ├── pipeline/            # Strategy 패턴 파이프라인 (모드별 독립 처리)
 │   │   ├── __init__.py      # Pipeline 모듈 문서화 + 모드 매핑
 │   │   ├── base.py          # BasePipeline ABC (공통 인터페이스)
 │   │   ├── voice_to_voice.py # VoiceToVoicePipeline (EchoDetector + 전체 오디오)

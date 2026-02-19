@@ -4,7 +4,7 @@
  * with gapless queue-based playback.
  */
 
-import { base64ToArrayBuffer, pcm16ToFloat32, SAMPLE_RATE } from './pcm16-utils';
+import { base64ToArrayBuffer, pcm16ToFloat32, PLAYBACK_SAMPLE_RATE } from './pcm16-utils';
 
 export class WebAudioPlayer {
   private audioContext: AudioContext | null = null;
@@ -58,7 +58,7 @@ export class WebAudioPlayer {
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+      this.audioContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
     }
     return this.audioContext;
   }
@@ -97,7 +97,7 @@ export class WebAudioPlayer {
     // Ensure a proper ArrayBuffer-backed Float32Array for copyToChannel
     const float32 = new Float32Array(rawFloat32);
 
-    const audioBuffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+    const audioBuffer = ctx.createBuffer(1, float32.length, PLAYBACK_SAMPLE_RATE);
     audioBuffer.copyToChannel(float32, 0);
 
     const source = ctx.createBufferSource();
