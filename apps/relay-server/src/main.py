@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.call_manager import call_manager
 from src.config import settings
+from src.logging_config import setup_logging
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.routes.calls import router as calls_router
 from src.routes.health import router as health_router
@@ -17,9 +18,11 @@ from src.routes.twilio_webhook import router as twilio_router
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+setup_logging(
+    log_level=settings.log_level,
+    log_dir=settings.log_dir,
+    max_bytes=settings.log_max_bytes,
+    backup_count=settings.log_backup_count,
 )
 logger = logging.getLogger("wigvo-relay")
 

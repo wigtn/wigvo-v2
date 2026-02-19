@@ -28,6 +28,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Logs
+logs/
+
 # Node
 node_modules/
 *.tsbuildinfo
