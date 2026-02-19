@@ -84,9 +84,10 @@ class Settings(BaseSettings):
     echo_detector_correlation_window: int = 8  # 비교 윈도우 크기 (160ms)
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
-    session_b_vad_threshold: float = 0.7  # 0.0~1.0, 높을수록 큰 소리만 감지 (기본 0.5 → 0.7, 전화 오디오용)
-    session_b_vad_silence_ms: int = 300  # 발화 종료 판정까지 필요한 무음 시간 (500→300ms, 자연 대화 속도)
-    session_b_vad_prefix_padding_ms: int = 300  # 발화 시작 전 포함할 오디오 (기본 300ms)
+    # PSTN 8kHz μ-law 저음질 오디오에 맞춰 민감하게 설정
+    session_b_vad_threshold: float = 0.5  # 0.0~1.0, 낮출수록 작은 소리도 감지 (0.7→0.5, PSTN 저음질 대응)
+    session_b_vad_silence_ms: int = 200  # 발화 종료 판정까지 필요한 무음 시간 (300→200ms, 빠른 턴 전환)
+    session_b_vad_prefix_padding_ms: int = 500  # 발화 시작 전 포함할 오디오 (300→500ms, "여..." 앞부분 유실 방지)
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
     # NOTE: Server VAD threshold 0.8이 소음 필터링을 담당하므로,
