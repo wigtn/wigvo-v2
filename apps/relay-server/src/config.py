@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     # NOTE: Server VAD threshold 0.8이 소음 필터링을 담당하므로,
     # 에너지 게이트는 순수 무음만 차단하도록 낮은 임계값 사용
     audio_energy_gate_enabled: bool = True
-    audio_energy_min_rms: float = 20.0  # mu-law RMS 최소 임계값 (0=무음, 전화 소음 ~50-200, 발화 ~300+)
+    audio_energy_min_rms: float = 150.0  # mu-law RMS 최소 임계값 (전화선 배경 소음 ~50-200 필터, 발화 ~500-2000+ 통과)
     echo_energy_threshold_rms: float = 400.0  # Echo window 중 에너지 임계값
                                                # 에코(감쇠): ~100-400, 발화(직접): ~500-2000+
 

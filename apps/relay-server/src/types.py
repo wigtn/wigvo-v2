@@ -24,6 +24,15 @@ class CallStatus(str, Enum):
     FAILED = "failed"
 
 
+# DB 저장용 매핑: Agent mode call_result → Web App result 컬럼 값
+CALL_RESULT_MAP: dict[str, str] = {
+    "success": "SUCCESS",
+    "partial_success": "SUCCESS",
+    "failed": "ERROR",
+    "callback_needed": "NO_ANSWER",
+}
+
+
 class CommunicationMode(str, Enum):
     VOICE_TO_VOICE = "voice_to_voice"
     TEXT_TO_VOICE = "text_to_voice"

@@ -246,24 +246,25 @@ class TextToVoicePipeline(BasePipeline):
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
-        Dynamic Energy Threshold: echo window에 따라 임계값 결정
-        - echo window 중: echo_energy_threshold_rms (에코 필터, 발화 통과)
-        - echo window 외: audio_energy_min_rms (무음만 필터)
+        Echo window 중(TTS 재생 중): 수신자 오디오 완전 차단
+        - 추임새("네네", "예")로 인한 불필요한 인터럽트 방지
+        - TTS 메시지가 끝까지 재생된 후에만 수신자 발화 처리
+
+        Echo window 외: audio_energy_min_rms로 배경 소음만 필터링
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
         if self.recovery_b.is_recovering or self.recovery_b.is_degraded:
             return
 
-        # Dynamic Energy Threshold: echo window에 따라 임계값 결정
+        # Echo window 중: TTS 재생 중이므로 수신자 오디오 완전 차단
+        if self._in_echo_window:
+            return
+
+        # Echo window 외: 배경 소음만 필터링
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
-            threshold = (
-                settings.echo_energy_threshold_rms
-                if self._in_echo_window
-                else settings.audio_energy_min_rms
-            )
-            if rms < threshold:
+            if rms < settings.audio_energy_min_rms:
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

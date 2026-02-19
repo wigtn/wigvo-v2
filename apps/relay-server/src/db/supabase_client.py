@@ -6,6 +6,7 @@ guardrail_events, recovery_events 등을 Supabase에 저장한다.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import time
 from typing import Any
@@ -13,7 +14,7 @@ from typing import Any
 from supabase import acreate_client, AsyncClient
 
 from src.config import settings
-from src.types import ActiveCall
+from src.types import ActiveCall, CallStatus, CALL_RESULT_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,15 @@ async def persist_call(call: ActiveCall) -> None:
     """통화 종료 시 전체 데이터를 Supabase에 저장한다."""
     client = await get_client()
 
+    # status 매핑: ENDED→COMPLETED, 그 외→FAILED
+    db_status = "COMPLETED" if call.status == CallStatus.ENDED else "FAILED"
+
+    # result 매핑: Agent mode → 판정 결과, Relay mode → 상태 기반 기본값
+    if call.call_result:
+        db_result = CALL_RESULT_MAP.get(call.call_result, "ERROR")
+    else:
+        db_result = "SUCCESS" if call.status == CallStatus.ENDED else "ERROR"
+
     data: dict[str, Any] = {
         "call_id": call.call_id,
         "call_sid": call.call_sid,
@@ -43,7 +53,9 @@ async def persist_call(call: ActiveCall) -> None:
         "target_language": call.target_language,
         "target_name": call.collected_data.get("target_name") or None,
         "target_phone": call.collected_data.get("target_phone") or None,
-        "status": call.status.value,
+        "status": db_status,
+        "result": db_result,
+        "completed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "communication_mode": call.communication_mode.value if call.communication_mode else None,
         "transcript_bilingual": [t.model_dump() for t in call.transcript_bilingual],
         "cost_tokens": call.cost_tokens.model_dump(),
