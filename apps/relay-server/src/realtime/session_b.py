@@ -19,6 +19,26 @@ from src.types import ActiveCall, CostTokens, TranscriptEntry
 
 logger = logging.getLogger(__name__)
 
+# Whisper 한국어 할루시네이션 블랙리스트
+# 학습 데이터(방송 뉴스 자막) 편향으로 무음/저에너지 구간에서 반복 생성되는 패턴
+_STT_HALLUCINATION_BLOCKLIST = frozenset({
+    "MBC 뉴스 이덕영입니다",
+    "MBC 뉴스 이덕영입니다.",
+    "MBC뉴스 이덕영입니다",
+    "시청해주셔서 감사합니다",
+    "시청해주셔서 감사합니다.",
+    "시청해 주셔서 감사합니다",
+    "시청해 주셔서 감사합니다.",
+    "영상을 시청해주셔서 감사합니다",
+    "구독과 좋아요 부탁드립니다",
+    "구독과 좋아요 부탁드립니다.",
+    "밝혔습니다",
+    "밝혔습니다.",
+    "전해드립니다",
+    "전해드립니다.",
+    "플러스포어 픽업",
+})
+
 
 class SessionBHandler:
     """Session B의 이벤트를 처리한다."""
@@ -466,6 +486,10 @@ class SessionBHandler:
         """
         transcript = event.get("transcript", "")
         if not transcript:
+            return
+        # Whisper STT 할루시네이션 필터링
+        if transcript.strip() in _STT_HALLUCINATION_BLOCKLIST:
+            logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
             return
         if self._output_suppressed:
             self._pending_output.append(("original_caption", ("recipient", transcript)))

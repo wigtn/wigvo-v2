@@ -149,16 +149,7 @@ async def end_call(call_id: str, req: CallEndRequest | None = None):
     reason = req.reason if req else "user_hangup"
     logger.info("Ending call: id=%s, reason=%s", call_id, reason)
 
-    # Twilio 통화 종료
-    try:
-        from src.twilio.outbound import get_twilio_client
-
-        client = get_twilio_client()
-        client.calls(call.call_sid).update(status="completed")
-    except Exception as e:
-        logger.warning("Failed to terminate Twilio call: %s", e)
-
-    # 중앙 정리 (DB persist 포함)
+    # 중앙 정리 (Twilio 종료 + DB persist 포함)
     await call_manager.cleanup_call(call_id, reason=reason)
 
     return {"status": "ended", "call_id": call_id, "reason": reason}

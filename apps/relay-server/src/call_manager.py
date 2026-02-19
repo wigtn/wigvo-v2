@@ -117,6 +117,18 @@ class CallManager:
 
             logger.info("Cleaning up call %s (reason: %s)", call_id, reason)
 
+            # 0. Twilio 통화 종료 (PSTN 전화 끊기)
+            call = self._calls.get(call_id)
+            if call and call.call_sid:
+                try:
+                    from src.twilio.outbound import get_twilio_client
+
+                    client = get_twilio_client()
+                    client.calls(call.call_sid).update(status="completed")
+                    logger.info("Twilio call terminated: %s", call.call_sid)
+                except Exception as e:
+                    logger.warning("Failed to terminate Twilio call %s: %s", call.call_sid, e)
+
             # 1. AudioRouter stop
             router = self._routers.pop(call_id, None)
             if router:
