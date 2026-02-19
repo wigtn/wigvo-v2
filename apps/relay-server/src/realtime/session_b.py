@@ -7,11 +7,13 @@ PRD 3.2:
   Output: sourceLanguage 음성 → App 스피커 (optional)
 """
 
+import asyncio
 import base64
 import logging
 import time
 from typing import Any, Callable, Coroutine
 
+from src.config import settings
 from src.realtime.session_manager import RealtimeSession
 from src.types import ActiveCall, CostTokens, TranscriptEntry
 
@@ -55,6 +57,10 @@ class SessionBHandler:
         self._output_suppressed = False
         self._pending_output: list[tuple[str, Any]] = []
         self._speech_started_at: float = 0.0  # 파이프라인 지연 계측용
+
+        # Max speech duration timer: PSTN 배경 소음으로 Server VAD의
+        # speech_stopped가 지연되는 문제를 방지. 타이머 초과 시 강제 commit.
+        self._max_speech_timer: asyncio.Task | None = None
 
         self._register_handlers()
 
@@ -233,9 +239,13 @@ class SessionBHandler:
 
         이 이벤트는 First Message Strategy (PRD 3.4)와
         Interrupt 처리 (PRD 3.6)의 핵심 트리거다.
+
+        Max speech timer를 시작하여, PSTN 배경 소음으로 speech_stopped가
+        지연되는 경우에도 max_speech_duration_s 이내에 번역이 시작되도록 한다.
         """
         self._is_recipient_speaking = True
         self._speech_started_at = time.time()
+        self._start_max_speech_timer()
         logger.info("[SessionB] Recipient speech started")
         if self._on_recipient_speech_started:
             await self._on_recipient_speech_started()
@@ -243,6 +253,7 @@ class SessionBHandler:
     async def _handle_speech_stopped(self, event: dict[str, Any]) -> None:
         """Server VAD가 수신자 발화 종료를 감지."""
         self._is_recipient_speaking = False
+        self._cancel_max_speech_timer()
         if self._speech_started_at > 0:
             speech_dur = (time.time() - self._speech_started_at) * 1000
             logger.info("[SessionB] Recipient speech stopped (duration=%.0fms)", speech_dur)
@@ -250,6 +261,53 @@ class SessionBHandler:
             logger.info("[SessionB] Recipient speech stopped")
         if self._on_recipient_speech_stopped:
             await self._on_recipient_speech_stopped()
+
+    # --- Max Speech Duration Timer ---
+
+    def _start_max_speech_timer(self) -> None:
+        """Max speech timer 시작. 기존 타이머가 있으면 취소 후 재시작."""
+        self._cancel_max_speech_timer()
+        self._max_speech_timer = asyncio.create_task(self._max_speech_timeout())
+
+    def _cancel_max_speech_timer(self) -> None:
+        """Max speech timer 취소."""
+        if self._max_speech_timer and not self._max_speech_timer.done():
+            self._max_speech_timer.cancel()
+            self._max_speech_timer = None
+
+    async def _max_speech_timeout(self) -> None:
+        """Max speech duration 초과 시 오디오 버퍼를 강제 commit.
+
+        PSTN 배경 소음(RMS 50-200)이 Server VAD의 silence 감지를 방해하여
+        speech_stopped가 45-72초 지연되는 문제를 해결한다.
+
+        commit_audio()는 input_audio_buffer.commit + response.create를 전송:
+        - commit: 현재 버퍼의 오디오를 대화 아이템으로 변환 → STT 시작
+        - response.create: STT 결과로 번역 생성 요청
+
+        타이머는 자동 재시작되어 연속 발화를 N초 단위로 분할 처리한다.
+        Server VAD가 정상적으로 speech_stopped를 감지하면 타이머는 취소된다.
+        """
+        try:
+            await asyncio.sleep(settings.max_speech_duration_s)
+            dur_ms = (time.time() - self._speech_started_at) * 1000 if self._speech_started_at > 0 else 0
+            logger.info(
+                "[SessionB] Max speech duration (%.1fs) — forcing audio commit (speech held %.0fms)",
+                settings.max_speech_duration_s, dur_ms,
+            )
+            # e2e 측정을 리셋 (다음 세그먼트의 시작점)
+            self._speech_started_at = time.time()
+            await self.session.commit_audio()
+            # 타이머 재시작: 발화가 계속될 수 있음 (PSTN 소음으로 VAD가 새 speech_started를 발생시키지 않을 수 있음)
+            self._max_speech_timer = asyncio.create_task(self._max_speech_timeout())
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("[SessionB] Force commit failed")
+
+    def stop(self) -> None:
+        """타이머 정리 (파이프라인 종료 시 호출)."""
+        self._cancel_max_speech_timer()
 
     # --- 2단계 자막 Stage 1: 원문 STT (PRD 5.4) ---
 

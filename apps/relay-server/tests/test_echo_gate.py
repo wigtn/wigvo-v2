@@ -259,8 +259,8 @@ class TestDynamicEnergyThreshold:
     """Dynamic Energy Threshold: echo window 중 에너지 기반 에코 필터링 테스트."""
 
     @pytest.mark.asyncio
-    async def test_low_energy_filtered_during_echo_window(self):
-        """echo window + 낮은 RMS → 에코로 필터됨."""
+    async def test_low_energy_replaced_with_silence_during_echo_window(self):
+        """echo window + 낮은 RMS → 에코를 silence로 교체하여 VAD에 전달."""
         router = _make_router(echo_detector_enabled=False)
         router.session_b.send_recipient_audio = AsyncMock()
         router._in_echo_window = True
@@ -274,7 +274,11 @@ class TestDynamicEnergyThreshold:
             mock_settings.echo_energy_threshold_rms = 400.0
             await router.handle_twilio_audio(low_energy)
 
-        router.session_b.send_recipient_audio.assert_not_called()
+        # silence 프레임이 전송됨 (drop 대신 교체)
+        router.session_b.send_recipient_audio.assert_called_once()
+        import base64
+        sent_bytes = base64.b64decode(router.session_b.send_recipient_audio.call_args[0][0])
+        assert sent_bytes == b"\xff" * 160
 
     @pytest.mark.asyncio
     async def test_high_energy_passes_during_echo_window(self):
@@ -483,8 +487,8 @@ class TestUlawRmsAndEnergyGate:
         assert 0 < rms < _ulaw_rms(bytes([0x00] * 160))
 
     @pytest.mark.asyncio
-    async def test_energy_gate_blocks_silence(self):
-        """에너지 게이트 활성 시 무음 오디오가 Session B에 전달되지 않음."""
+    async def test_energy_gate_replaces_silence_with_silence_frame(self):
+        """에너지 게이트 활성 시 무음 오디오가 silence 프레임으로 교체되어 VAD에 전달."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
 
@@ -496,7 +500,11 @@ class TestUlawRmsAndEnergyGate:
             mock_settings.echo_energy_threshold_rms = 400.0
             await router.handle_twilio_audio(silence)
 
-        router.session_b.send_recipient_audio.assert_not_called()
+        # silence 프레임이 전송됨 (drop 대신 교체)
+        router.session_b.send_recipient_audio.assert_called_once()
+        import base64
+        sent_bytes = base64.b64decode(router.session_b.send_recipient_audio.call_args[0][0])
+        assert sent_bytes == b"\xff" * 160
 
     @pytest.mark.asyncio
     async def test_energy_gate_passes_speech(self):

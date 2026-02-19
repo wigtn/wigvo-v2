@@ -49,6 +49,9 @@ logger = logging.getLogger(__name__)
 class VoiceToVoicePipeline(BasePipeline):
     """양방향 음성 번역 파이프라인 (EchoDetector + Interrupt + Recovery)."""
 
+    # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
+    _MULAW_SILENCE = b"\xff"
+
     def __init__(
         self,
         call: ActiveCall,
@@ -187,6 +190,7 @@ class VoiceToVoicePipeline(BasePipeline):
         if self._echo_detector is not None:
             self._echo_detector.reset()
 
+        self.session_b.stop()
         await self.recovery_a.stop()
         await self.recovery_b.stop()
         logger.info("VoiceToVoicePipeline stopped for call %s", self.call.call_id)
@@ -255,6 +259,10 @@ class VoiceToVoicePipeline(BasePipeline):
             if settings.audio_energy_gate_enabled:
                 rms = _ulaw_rms(audio_bytes)
                 if rms < settings.audio_energy_min_rms:
+                    # 소음을 silence로 교체 → VAD가 speech_stopped 자연 감지
+                    silence = self._MULAW_SILENCE * len(audio_bytes)
+                    silence_b64 = base64.b64encode(silence).decode("ascii")
+                    await self.session_b.send_recipient_audio(silence_b64)
                     return
         else:
             # Legacy: Dynamic Energy Threshold (기존 blanket block 교체)
@@ -266,6 +274,10 @@ class VoiceToVoicePipeline(BasePipeline):
                     else settings.audio_energy_min_rms
                 )
                 if rms < threshold:
+                    # 소음/에코를 silence로 교체 → VAD가 speech_stopped 자연 감지
+                    silence = self._MULAW_SILENCE * len(audio_bytes)
+                    silence_b64 = base64.b64encode(silence).decode("ascii")
+                    await self.session_b.send_recipient_audio(silence_b64)
                     return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

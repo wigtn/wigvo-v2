@@ -191,6 +191,7 @@ class TextToVoicePipeline(BasePipeline):
             except asyncio.CancelledError:
                 pass
 
+        self.session_b.stop()
         await self.recovery_a.stop()
         await self.recovery_b.stop()
         logger.info("TextToVoicePipeline stopped for call %s", self.call.call_id)
@@ -250,21 +251,19 @@ class TextToVoicePipeline(BasePipeline):
         """수신자 음성을 Session B에 전달한다.
 
         Dynamic Energy Threshold:
-        - Echo window 중: echo_energy_threshold_rms(400)로 에코(~100-400 RMS) 필터,
-          수신자 직접 발화(~500-2000+ RMS)는 통과
-        - Echo window 외: audio_energy_min_rms(30)로 순수 무음만 필터링
+        - Echo window 중: echo_energy_threshold_rms(400)로 에코(~100-400 RMS) 필터
+        - Echo window 외: audio_energy_min_rms(150)로 PSTN 배경 소음(50-200) 필터
 
-        핵심: echo window 중 에코 필터링 시 단순 drop 대신 silence 프레임을
-        Session B에 전송하여 Server VAD의 오디오 스트림을 유지한다.
-        이를 통해 VAD가 speech_stopped를 정상 감지할 수 있다.
-        (silence 미전송 시 VAD가 무한 대기 → speech_stopped 미발생 → 번역 불가)
+        핵심: 임계값 이하의 오디오를 drop하지 않고 silence 프레임으로 교체하여
+        Session B에 전송. Server VAD가 연속 오디오 스트림을 유지하면서도
+        소음 구간을 silence로 인식 → speech_stopped를 자연스럽게 감지.
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
         if self.recovery_b.is_recovering or self.recovery_b.is_degraded:
             return
 
-        # Dynamic Energy Threshold: echo window 중에는 높은 임계값으로 에코만 필터
+        # Dynamic Energy Threshold: 소음을 silence로 교체하여 VAD 스트림 유지
         if settings.audio_energy_gate_enabled:
             rms = _ulaw_rms(audio_bytes)
             threshold = (
@@ -273,13 +272,11 @@ class TextToVoicePipeline(BasePipeline):
                 else settings.audio_energy_min_rms
             )
             if rms < threshold:
-                if self._in_echo_window:
-                    # Echo window: silence 프레임 전송으로 VAD 오디오 스트림 유지
-                    # 단순 drop 시 VAD가 "오디오 없음"을 silence로 인식하지 않아
-                    # speech_stopped가 영원히 발생하지 않음
-                    silence = self._MULAW_SILENCE * len(audio_bytes)
-                    silence_b64 = base64.b64encode(silence).decode("ascii")
-                    await self.session_b.send_recipient_audio(silence_b64)
+                # 소음/에코를 silence로 교체 → VAD가 "무음"으로 인식
+                # drop하면 VAD가 오디오 스트림 단절로 speech_stopped를 감지 못함
+                silence = self._MULAW_SILENCE * len(audio_bytes)
+                silence_b64 = base64.b64encode(silence).decode("ascii")
+                await self.session_b.send_recipient_audio(silence_b64)
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
