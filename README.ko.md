@@ -15,7 +15,7 @@
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#기술-스택)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#기술-스택)
-[![Tests](https://img.shields.io/badge/Tests-136_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#테스트)
+[![Tests](https://img.shields.io/badge/Tests-147_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#테스트)
 
 <br />
 

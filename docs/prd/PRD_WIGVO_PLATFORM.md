@@ -542,7 +542,7 @@ Whisper Batch STT → 컨텍스트 재주입
 | Twilio Integration | `twilio/` | - | 발신 + Media Stream |
 | Docker + GCR | `Dockerfile`, `cloudbuild.yaml` | - | 양쪽 모두 |
 
-**Total Tests: 74 passing** (relay-server 49 pytest + scripts/tests/ 25 component/integration)
+**Total Tests: 147 passing** (relay-server pytest 단위 테스트 + tests/component/ + tests/integration/)
 
 ### 5.2 Gaps: Designed but Not Implemented
 

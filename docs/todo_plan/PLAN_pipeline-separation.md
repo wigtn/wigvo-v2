@@ -36,7 +36,7 @@
 ## Phases
 
 ### Phase 0: Spike — Session B `modalities=['text']` 이벤트 검증
-- [x] 0.1 `scripts/tests/spike_text_modality.py` — OpenAI Realtime API에서 `modalities=['text']` 설정 시 이벤트 타입 검증
+- [x] 0.1 `spike_text_modality.py` (완료 후 삭제됨) — OpenAI Realtime API에서 `modalities=['text']` 설정 시 이벤트 타입 검증
   - `response.text.delta` / `response.text.done` 이벤트 발생 확인
   - `input_audio_buffer.speech_started/stopped` 이벤트 발생 여부 확인
   - 이벤트 페이로드 필드명 (`delta` vs `text`) 확인
@@ -83,7 +83,7 @@
 
 | File | Action | Phase | Notes |
 |------|--------|-------|-------|
-| `scripts/tests/spike_text_modality.py` | NEW | 0 | C-3 spike 검증 |
+| `spike_text_modality.py` (완료 후 삭제됨) | NEW | 0 | C-3 spike 검증 |
 | `src/realtime/pipeline/__init__.py` | NEW | 1 | |
 | `src/realtime/pipeline/base.py` | NEW | 1 | |
 | `src/realtime/pipeline/voice_to_voice.py` | NEW | 2 | EchoDetector + suppress_b_audio |

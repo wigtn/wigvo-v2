@@ -8,7 +8,7 @@ OpenAI Realtime API + Twilio Media Streams 기반 양방향 실시간 번역 통
 uv sync                              # 의존성 설치
 cp .env.example .env                  # 환경변수 설정
 uv run uvicorn src.main:app --reload  # 개발 서버
-uv run pytest -v                      # 테스트 (136개+)
+uv run pytest -v                      # 테스트 (147개)
 ```
 
 ## 디렉토리 구조
@@ -66,6 +66,21 @@ src/
 │
 └── db/
     └── supabase_client.py   # Supabase 영속화 (통화 종료 시 upsert)
+
+tests/
+├── conftest.py              # pytest fixtures
+├── helpers.py               # ANSI 색상 유틸 (run.py 의존)
+├── run.py                   # 커스텀 러너 (uv run python -m tests.run)
+├── test_*.py                # pytest 단위 테스트 (147개)
+├── component/               # 모듈 벤치마크 (서버 불필요)
+│   ├── test_cost_tracking.py
+│   └── test_ring_buffer_perf.py
+├── integration/             # 라이브 서버 필요 (localhost:8000)
+│   ├── test_api.py
+│   └── test_websocket.py
+└── e2e/                     # 라이브 서버 + Twilio + OpenAI
+    ├── call_client.py
+    └── scenarios.py
 ```
 
 ## 아키텍처 개요

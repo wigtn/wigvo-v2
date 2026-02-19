@@ -361,7 +361,7 @@ class AudioRouter:
 
 Session B가 `modalities=['text']`인 경우, `response.audio_transcript.delta` 대신 `response.text.delta`와 `response.text.done` 이벤트가 발생한다. SessionBHandler에 이 핸들러를 추가해야 한다.
 
-**Spike 검증 결과** (`scripts/tests/spike_text_modality.py`):
+**Spike 검증 결과** (`spike_text_modality.py`, 완료 후 삭제됨):
 
 | 항목 | 결과 | 비고 |
 |------|------|------|
