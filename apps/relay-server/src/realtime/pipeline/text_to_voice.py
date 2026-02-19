@@ -243,13 +243,21 @@ class TextToVoicePipeline(BasePipeline):
 
     # --- Twilio -> Session B ---
 
+    # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
+    _MULAW_SILENCE = b"\xff"
+
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
         Dynamic Energy Threshold:
         - Echo window 중: echo_energy_threshold_rms(400)로 에코(~100-400 RMS) 필터,
           수신자 직접 발화(~500-2000+ RMS)는 통과
-        - Echo window 외: audio_energy_min_rms(80)로 배경 소음만 필터링
+        - Echo window 외: audio_energy_min_rms(30)로 순수 무음만 필터링
+
+        핵심: echo window 중 에코 필터링 시 단순 drop 대신 silence 프레임을
+        Session B에 전송하여 Server VAD의 오디오 스트림을 유지한다.
+        이를 통해 VAD가 speech_stopped를 정상 감지할 수 있다.
+        (silence 미전송 시 VAD가 무한 대기 → speech_stopped 미발생 → 번역 불가)
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
@@ -264,13 +272,14 @@ class TextToVoicePipeline(BasePipeline):
                 if self._in_echo_window
                 else settings.audio_energy_min_rms
             )
-            # [TEMP] 프로덕션 RMS 분포 확인용 (높은 에너지만 INFO 로깅)
-            if rms > 100:
-                logger.info(
-                    "Session B audio: RMS=%.0f threshold=%.0f echo_window=%s passed=%s",
-                    rms, threshold, self._in_echo_window, rms >= threshold,
-                )
             if rms < threshold:
+                if self._in_echo_window:
+                    # Echo window: silence 프레임 전송으로 VAD 오디오 스트림 유지
+                    # 단순 drop 시 VAD가 "오디오 없음"을 silence로 인식하지 않아
+                    # speech_stopped가 영원히 발생하지 않음
+                    silence = self._MULAW_SILENCE * len(audio_bytes)
+                    silence_b64 = base64.b64encode(silence).decode("ascii")
+                    await self.session_b.send_recipient_audio(silence_b64)
                 return
 
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

@@ -153,6 +153,62 @@ class TestTextToVoiceAudioHandling:
 
             router.session_b.send_recipient_audio.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_echo_window_sends_silence_instead_of_dropping(self):
+        """Echo window 중 에코 차단 시 silence 프레임을 Session B에 전송한다.
+
+        VAD 오디오 스트림을 유지하여 speech_stopped를 정상 감지하기 위함.
+        """
+        router = _make_router()
+        router.session_b = MagicMock()
+        router.session_b.send_recipient_audio = AsyncMock()
+        router.recovery_b = MagicMock()
+        router.recovery_b.is_recovering = False
+        router.recovery_b.is_degraded = False
+        # Echo window 활성 상태
+        router._pipeline._in_echo_window = True
+
+        with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
+            mock_s.audio_energy_gate_enabled = True
+            mock_s.echo_energy_threshold_rms = 400.0
+            mock_s.audio_energy_min_rms = 30.0
+
+            # 에코 수준 오디오 (0xF0 → mu-law linear ~219, threshold 400 미만)
+            echo_audio = b"\xf0" * 100
+            await router.handle_twilio_audio(echo_audio)
+
+            # silence 프레임이 전송되어야 함 (drop이 아님)
+            router.session_b.send_recipient_audio.assert_called_once()
+            sent_b64 = router.session_b.send_recipient_audio.call_args[0][0]
+            import base64 as b64
+            sent_bytes = b64.b64decode(sent_b64)
+            # 전송된 바이트가 mu-law silence (0xFF)로 채워져야 함
+            assert sent_bytes == b"\xff" * len(echo_audio)
+
+    @pytest.mark.asyncio
+    async def test_non_echo_window_drops_silence(self):
+        """Echo window 외에서는 무음을 그냥 drop한다 (silence 전송 안 함)."""
+        router = _make_router()
+        router.session_b = MagicMock()
+        router.session_b.send_recipient_audio = AsyncMock()
+        router.recovery_b = MagicMock()
+        router.recovery_b.is_recovering = False
+        router.recovery_b.is_degraded = False
+        # Echo window 비활성
+        router._pipeline._in_echo_window = False
+
+        with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
+            mock_s.audio_energy_gate_enabled = True
+            mock_s.echo_energy_threshold_rms = 400.0
+            mock_s.audio_energy_min_rms = 150.0
+
+            # 무음 데이터 (RMS < 150)
+            silence = b"\x7f" * 100
+            await router.handle_twilio_audio(silence)
+
+            # Session B에 아무것도 전송하지 않아야 함
+            router.session_b.send_recipient_audio.assert_not_called()
+
 
 class TestTextToVoiceTextHandling:
     """TextToVoice의 텍스트 입력 처리 검증."""
