@@ -64,7 +64,26 @@ class RealtimeSession:
         }
 
         logger.info("[%s] Connecting to OpenAI Realtime API...", self.label)
-        self.ws = await websockets.connect(url, additional_headers=headers)
+        last_err: Exception | None = None
+        for attempt in range(1, settings.openai_ws_connect_retries + 2):  # 1 + retries
+            try:
+                self.ws = await websockets.connect(
+                    url,
+                    additional_headers=headers,
+                    open_timeout=settings.openai_ws_connect_timeout_s,
+                )
+                break
+            except Exception as e:
+                last_err = e
+                max_attempts = settings.openai_ws_connect_retries + 1
+                if attempt < max_attempts:
+                    logger.warning(
+                        "[%s] Connect attempt %d/%d failed: %s — retrying...",
+                        self.label, attempt, max_attempts, e,
+                    )
+                    await asyncio.sleep(1)
+                else:
+                    raise last_err
         logger.info("[%s] Connected", self.label)
 
         # 세션 설정
