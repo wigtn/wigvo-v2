@@ -159,6 +159,9 @@ export async function POST(request: NextRequest) {
 
     // 13. 응답 반환
     const searchResults = chatResult.searchResults;
+    if (searchResults.length > 0) {
+      console.log(`[Chat] 🗺️ Returning ${searchResults.length} search results to client`);
+    }
     return NextResponse.json({
       message: chatResult.message,
       collected: mergedData,
