@@ -6,7 +6,11 @@ import { Globe } from 'lucide-react';
 import { changeLocale } from '@/components/providers/I18nProvider';
 import { getStoredLocale, type Locale } from '@/lib/i18n';
 
-export default function LanguageSwitcher() {
+interface LanguageSwitcherProps {
+  direction?: 'up' | 'down';
+}
+
+export default function LanguageSwitcher({ direction = 'up' }: LanguageSwitcherProps) {
   const t = useTranslations('language');
   const [isOpen, setIsOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState<Locale>('en');
@@ -55,7 +59,9 @@ export default function LanguageSwitcher() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50">
+        <div className={`absolute right-0 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50 ${
+          direction === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'
+        }`}>
           <button
             onClick={() => handleLocaleChange('en')}
             className={`w-full px-4 py-2.5 text-left text-sm hover:bg-[#F8FAFC] transition-colors ${

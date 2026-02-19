@@ -77,14 +77,11 @@ export function getCallCategory(mode: CommunicationMode): CallCategory {
 export interface DirectCallOptions {
   translation: boolean;    // 번역 on/off
   inputMethod: 'voice' | 'text';  // 사용자 입력 방식
-  outputMethod: 'voice' | 'caption';  // 상대방 출력 방식
 }
 
 /** Resolve DirectCallOptions to CommunicationMode */
 export function resolveDirectMode(options: DirectCallOptions): CommunicationMode {
-  if (options.inputMethod === 'text') return 'text_to_voice';
-  if (options.outputMethod === 'caption') return 'voice_to_text';
-  return 'voice_to_voice';
+  return options.inputMethod === 'text' ? 'text_to_voice' : 'voice_to_voice';
 }
 
 export interface ModeUIConfig {

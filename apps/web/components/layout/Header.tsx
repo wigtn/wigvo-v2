@@ -34,7 +34,7 @@ export default function Header() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <LanguageSwitcher />
+          <LanguageSwitcher direction="down" />
           <button
             onClick={handleSignOut}
             className="flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors"
