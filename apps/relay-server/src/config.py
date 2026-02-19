@@ -4,7 +4,11 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 # Monorepo 루트의 .env 파일 경로 (config.py → src → relay-server → apps → wigvo)
-_ROOT_DIR = Path(__file__).resolve().parents[3]
+# Docker(/app/src/config.py)에서는 parents[3]이 없으므로 안전하게 처리
+try:
+    _ROOT_DIR = Path(__file__).resolve().parents[3]
+except IndexError:
+    _ROOT_DIR = Path(__file__).resolve().parent  # Docker fallback → env vars 사용
 _ENV_FILE = _ROOT_DIR / ".env"
 
 
