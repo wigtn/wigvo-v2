@@ -86,14 +86,18 @@ export default function MobileDrawer({
       >
         {/* 헤더 */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-[#E2E8F0]">
-          <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => { setActiveMenu("chat"); setSidebarOpen(false); }}
+            className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          >
             <div className="w-8 h-8 rounded-xl bg-[#F1F5F9] flex items-center justify-center glow-accent">
               <Zap className="size-4 text-[#0F172A]" />
             </div>
             <span className="text-[15px] font-bold tracking-tight text-[#0F172A]">
               WIGVO
             </span>
-          </div>
+          </button>
           <button
             onClick={() => setSidebarOpen(false)}
             className="p-2 hover:bg-[#F1F5F9] rounded-lg transition-colors"

@@ -59,10 +59,12 @@ export default function Sidebar({
         isSidebarCollapsed ? "w-16" : "w-60",
       )}
     >
-      {/* 로고 */}
-      <div
+      {/* 로고 — 클릭 시 메인 대시보드(포탈)로 이동 */}
+      <button
+        type="button"
+        onClick={() => setActiveMenu("chat")}
         className={cn(
-          "h-14 flex items-center border-b border-[#E2E8F0] px-4",
+          "h-14 flex items-center border-b border-[#E2E8F0] px-4 w-full hover:bg-[#F8FAFC] transition-colors",
           isSidebarCollapsed && "justify-center px-2",
         )}
       >
@@ -74,7 +76,7 @@ export default function Sidebar({
             WIGVO
           </span>
         )}
-      </div>
+      </button>
 
       {/* 접기/펼치기 */}
       <button
