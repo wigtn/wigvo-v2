@@ -7,7 +7,20 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
+// 레거시 Cloud Run URL → 새 URL 리다이렉트
+const CANONICAL_HOST = process.env.CANONICAL_HOST;
+const LEGACY_HOST = process.env.LEGACY_HOST;
+
 export async function middleware(request: NextRequest) {
+  // 레거시 도메인 접속 시 새 도메인으로 301 리다이렉트
+  if (CANONICAL_HOST && LEGACY_HOST && request.nextUrl.hostname === LEGACY_HOST) {
+    const url = request.nextUrl.clone();
+    url.hostname = CANONICAL_HOST;
+    url.protocol = 'https';
+    url.port = '';
+    return NextResponse.redirect(url, 301);
+  }
+
   // Demo mode: skip Supabase auth
   if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
     return NextResponse.next();
