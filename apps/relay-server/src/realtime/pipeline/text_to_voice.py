@@ -259,6 +259,7 @@ class TextToVoicePipeline(BasePipeline):
         Lock으로 직렬화하여 여러 텍스트가 동시에 response.create를 호출하는
         race condition (conversation_already_has_active_response)을 방지한다.
         """
+        self._typing_filler_sent = False
         async with self._text_send_lock:
             self.call.transcript_history.append({"role": "user", "text": text})
             self.session_a.mark_user_input()
