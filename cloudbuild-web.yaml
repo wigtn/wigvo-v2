@@ -1,25 +1,27 @@
 # wigvo-web: push to main → auto build + deploy
 # 트리거 경로 필터: apps/web/**
-# NEXT_PUBLIC_* 빌드 인자는 트리거 substitutions에서 주입
+# NEXT_PUBLIC_* — 트리거 substitutions (공개 값, 브라우저 노출)
+# OPENAI_API_KEY — Secret Manager (민감 값)
 
 steps:
-  # Docker 이미지 빌드 (NEXT_PUBLIC_* 빌드타임 주입)
+  # Docker 이미지 빌드
   - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
     args:
-      - build
-      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
-      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
-      - --build-arg=NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL}
-      - --build-arg=NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID}
-      - --build-arg=NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}
-      - --build-arg=OPENAI_API_KEY=${_OPENAI_API_KEY}
-      - -t
-      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA
-      - -t
-      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest
-      - -f
-      - apps/web/Dockerfile
-      - apps/web
+      - -c
+      - |
+        docker build \
+          --build-arg NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL} \
+          --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY} \
+          --build-arg NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL} \
+          --build-arg NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID} \
+          --build-arg NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL} \
+          --build-arg OPENAI_API_KEY=$$OPENAI_API_KEY \
+          -t asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA \
+          -t asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest \
+          -f apps/web/Dockerfile \
+          apps/web
+    secretEnv: ['OPENAI_API_KEY']
 
   # 이미지 푸시
   - name: gcr.io/cloud-builders/docker
@@ -46,7 +48,11 @@ substitutions:
   _NEXT_PUBLIC_RELAY_WS_URL: ""
   _NEXT_PUBLIC_NAVER_MAP_CLIENT_ID: ""
   _NEXT_PUBLIC_BASE_URL: ""
-  _OPENAI_API_KEY: ""
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/OPENAI_API_KEY/versions/latest
+      env: OPENAI_API_KEY
 
 timeout: 1200s
 options:

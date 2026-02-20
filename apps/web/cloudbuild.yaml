@@ -1,19 +1,30 @@
+# 레거시 빌드 파일 — 실제 트리거는 루트 cloudbuild-web.yaml 사용
+# OPENAI_API_KEY → Secret Manager, NEXT_PUBLIC_* → substitutions
+
 steps:
   - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
     args:
-      - build
-      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
-      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
-      - --build-arg=NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL}
-      - --build-arg=NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID}
-      - --build-arg=NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}
-      - --build-arg=OPENAI_API_KEY=${_OPENAI_API_KEY}
-      - -t
-      - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvo-repo/wigvo-web:latest
-      - .
+      - -c
+      - |
+        docker build \
+          --build-arg NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL} \
+          --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY} \
+          --build-arg NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL} \
+          --build-arg NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID} \
+          --build-arg NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL} \
+          --build-arg OPENAI_API_KEY=$$OPENAI_API_KEY \
+          -t asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest \
+          .
+    secretEnv: ['OPENAI_API_KEY']
 
 images:
   - asia-northeast3-docker.pkg.dev/${PROJECT_ID}/wigvo-repo/wigvo-web:latest
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/OPENAI_API_KEY/versions/latest
+      env: OPENAI_API_KEY
 
 options:
   logging: CLOUD_LOGGING_ONLY
