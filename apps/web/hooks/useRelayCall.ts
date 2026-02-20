@@ -192,8 +192,14 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
         }
 
         case WsMessageType.TRANSLATION_STATE: {
-          const state = msg.data.state as TranslationState;
-          if (state) setTranslationState(state);
+          const state = msg.data.state as string;
+          if (state === 'caption_done') {
+            // Session B 번역 완료 → 스트리밍 컨텍스트 리셋
+            // 다음 수신자 발화 delta가 새 캡션 엔트리로 생성됨
+            streamingRef.current = null;
+          } else if (state) {
+            setTranslationState(state as TranslationState);
+          }
           break;
         }
 

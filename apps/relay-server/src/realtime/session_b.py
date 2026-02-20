@@ -53,6 +53,7 @@ class SessionBHandler:
         on_recipient_speech_started: Callable[[], Coroutine] | None = None,
         on_recipient_speech_stopped: Callable[[], Coroutine] | None = None,
         on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
+        on_caption_done: Callable[[], Coroutine] | None = None,
         use_local_vad: bool = False,
     ):
         """
@@ -75,6 +76,7 @@ class SessionBHandler:
         self._on_recipient_speech_started = on_recipient_speech_started
         self._on_recipient_speech_stopped = on_recipient_speech_stopped
         self._on_transcript_complete = on_transcript_complete
+        self._on_caption_done = on_caption_done
         self._is_recipient_speaking = False
         self._speech_started_count: int = 0
         self._transcript_completed_count: int = 0
@@ -341,6 +343,10 @@ class SessionBHandler:
         # 대화 컨텍스트 콜백
         if self._on_transcript_complete:
             await self._on_transcript_complete("recipient", transcript)
+
+        # 번역 완료 알림 (클라이언트 streamingRef 리셋용)
+        if self._on_caption_done:
+            await self._on_caption_done()
 
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
         """Session B 응답 완료 + cost token 추적."""

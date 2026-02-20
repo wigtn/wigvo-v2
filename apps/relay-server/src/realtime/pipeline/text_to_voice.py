@@ -115,6 +115,7 @@ class TextToVoicePipeline(BasePipeline):
             on_recipient_speech_started=self._on_recipient_started,
             on_recipient_speech_stopped=self._on_recipient_stopped,
             on_transcript_complete=self._on_turn_complete,
+            on_caption_done=self._on_session_b_caption_done,
             use_local_vad=settings.local_vad_enabled,
         )
 
@@ -360,6 +361,15 @@ class TextToVoicePipeline(BasePipeline):
                     "language": self.call.source_language,
                     "direction": "inbound",
                 },
+            )
+        )
+
+    async def _on_session_b_caption_done(self) -> None:
+        """Session B 번역 완료 → 클라이언트에 스트림 종료 신호 전송."""
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.TRANSLATION_STATE,
+                data={"state": "caption_done", "direction": "inbound"},
             )
         )
 

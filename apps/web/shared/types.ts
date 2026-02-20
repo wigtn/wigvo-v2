@@ -192,6 +192,15 @@ export interface Conversation {
 // -----------------------------------------------------------------------------
 // Call
 // -----------------------------------------------------------------------------
+// Transcript entry from relay server (bilingual transcript)
+export interface TranscriptEntry {
+  role: 'user' | 'recipient';
+  original_text: string;
+  translated_text: string;
+  language: string;
+  timestamp: number;
+}
+
 export interface Call {
   id: string;
   userId: string;
@@ -215,6 +224,7 @@ export interface Call {
   durationS?: number | null;
   totalTokens?: number | null;
   autoEnded?: boolean;
+  transcriptBilingual?: TranscriptEntry[];
   createdAt: string;
   completedAt: string | null;
 }
@@ -264,6 +274,7 @@ export interface CallRow {
   duration_s: number | null;
   total_tokens: number | null;
   auto_ended: boolean;
+  transcript_bilingual: TranscriptEntry[] | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;

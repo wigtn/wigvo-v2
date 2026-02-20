@@ -33,6 +33,7 @@ export function toCallResponse(row: CallRow): Call {
     durationS: row.duration_s,
     totalTokens: row.total_tokens,
     autoEnded: row.auto_ended,
+    transcriptBilingual: row.transcript_bilingual ?? undefined,
     createdAt: row.created_at,
     completedAt: row.completed_at,
   };

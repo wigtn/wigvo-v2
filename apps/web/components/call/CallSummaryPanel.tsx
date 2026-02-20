@@ -42,7 +42,7 @@ const MODE_ICONS: Record<CommunicationMode, typeof Mic> = {
 
 function formatDuration(seconds: number): string {
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
-  const ss = String(seconds % 60).padStart(2, '0');
+  const ss = String(Math.floor(seconds % 60)).padStart(2, '0');
   return `${mm}:${ss}`;
 }
 

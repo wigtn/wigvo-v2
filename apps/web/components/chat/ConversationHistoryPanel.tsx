@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationSummary } from '@/hooks/useDashboard';
-import type { Conversation, CollectedData, Message, Call } from '@/shared/types';
+import type { Conversation, CollectedData, Message, Call, TranscriptEntry } from '@/shared/types';
 
 // ---------------------------------------------------------------------------
 // 날짜 포맷 헬퍼
@@ -723,6 +723,42 @@ function CallResultCard({ call }: { call: Call }) {
             </p>
           </div>
         )}
+
+        {/* 통화 자막 (transcript_bilingual) */}
+        {call.transcriptBilingual && call.transcriptBilingual.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-[#F1F5F9]">
+            <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider mb-2">
+              통화 자막
+            </p>
+            <div className="space-y-1.5">
+              {call.transcriptBilingual.map((entry, idx) => (
+                <TranscriptBubble key={idx} entry={entry} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// TranscriptBubble (통화 자막 버블)
+// ===========================================================================
+function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
+  const isUser = entry.role === 'user';
+
+  return (
+    <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+      <div
+        className={cn(
+          'max-w-[80%] rounded-xl px-3 py-1.5 text-xs leading-relaxed',
+          isUser
+            ? 'bg-[#0F172A] text-white rounded-br-sm'
+            : 'bg-[#F1F5F9] text-[#334155] rounded-bl-sm',
+        )}
+      >
+        {entry.translated_text}
       </div>
     </div>
   );

@@ -13,17 +13,11 @@ export default function CaptionMessage({ entry }: CaptionMessageProps) {
   const isUser = entry.speaker === 'user';
   const isAi = entry.speaker === 'ai';
   const isStage1 = entry.stage === 1;
-  const isStage2 = entry.stage === 2;
 
   const speakerLabel =
     isUser ? t('you')
     : isAi ? t('ai')
     : t('recipient');
-
-  const stageLabel =
-    isStage1 ? t('original')
-    : isStage2 ? t('translated')
-    : null;
 
   return (
     <div className={cn('flex w-full mb-3', isUser ? 'justify-end' : 'justify-start')}>
@@ -45,7 +39,6 @@ export default function CaptionMessage({ entry }: CaptionMessageProps) {
           isUser ? 'text-white/60' : 'text-[#94A3B8]',
         )}>
           {speakerLabel}
-          {stageLabel && ` · ${stageLabel}`}
         </div>
         <p className={cn(isStage1 ? 'text-xs' : 'text-sm')}>
           {entry.text}

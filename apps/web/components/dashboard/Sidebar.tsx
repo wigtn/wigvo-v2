@@ -47,6 +47,9 @@ export default function Sidebar({
     const supabase = createClient();
     await supabase.auth.signOut();
     localStorage.removeItem("currentConversationId");
+    localStorage.removeItem("currentCommunicationMode");
+    localStorage.removeItem("currentSourceLang");
+    localStorage.removeItem("currentTargetLang");
     router.push("/login");
   };
 

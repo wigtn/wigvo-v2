@@ -18,7 +18,7 @@ import { useCallPolling } from "@/hooks/useCallPolling";
 
 function formatDuration(seconds: number): string {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const ss = String(seconds % 60).padStart(2, "0");
+  const ss = String(Math.floor(seconds % 60)).padStart(2, "0");
   return `${mm}:${ss}`;
 }
 
@@ -109,7 +109,7 @@ export default function ChatContainer() {
 
   // AI 음성 자막 제외 (사용자 입력의 번역이므로 중복 표시 불필요)
   const visibleCaptions = useMemo(
-    () => captions.filter((entry) => entry.speaker !== 'ai'),
+    () => captions.filter((entry) => entry.speaker !== 'ai' && entry.stage !== 1),
     [captions],
   );
 
