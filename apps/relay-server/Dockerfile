@@ -32,6 +32,9 @@ print('Cleared execstack flag from silero_vad_lite.so')"
 COPY src/ src/
 COPY static/ static/
 
+# Python stdout/stderr 버퍼링 비활성화 (Cloud Run 로그 실시간 출력)
+ENV PYTHONUNBUFFERED=1
+
 # Cloud Run은 PORT 환경변수를 주입함
 ENV PORT=8080
 
