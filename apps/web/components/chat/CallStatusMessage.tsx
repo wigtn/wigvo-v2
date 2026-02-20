@@ -1,22 +1,30 @@
 'use client';
 
-import { Phone, PhoneOff, Loader2 } from 'lucide-react';
+import { Phone, PhoneOff, Loader2, CheckCircle2 } from 'lucide-react';
 
 interface CallStatusMessageProps {
   type: 'connecting' | 'connected' | 'ended';
   targetName?: string | null;
   duration?: string;
+  isActive?: boolean;
 }
 
-export default function CallStatusMessage({ type, targetName, duration }: CallStatusMessageProps) {
+export default function CallStatusMessage({ type, targetName, duration, isActive = true }: CallStatusMessageProps) {
   return (
     <div className="flex justify-center my-4">
       <div className="inline-flex items-center gap-2 rounded-full bg-[#F1F5F9] border border-[#E2E8F0] px-4 py-2">
         {type === 'connecting' && (
           <>
-            <Loader2 className="size-3.5 text-[#64748B] animate-spin" />
-            <span className="text-xs text-[#64748B]">
-              {targetName ? `${targetName}에 전화 연결 중...` : '전화 연결 중...'}
+            {isActive ? (
+              <Loader2 className="size-3.5 text-[#64748B] animate-spin" />
+            ) : (
+              <CheckCircle2 className="size-3.5 text-teal-600" />
+            )}
+            <span className={`text-xs ${isActive ? 'text-[#64748B]' : 'text-teal-600'}`}>
+              {isActive
+                ? (targetName ? `${targetName}에 전화 연결 중...` : '전화 연결 중...')
+                : (targetName ? `${targetName}에 전화 연결됨` : '전화 연결 완료')
+              }
             </span>
           </>
         )}

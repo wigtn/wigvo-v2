@@ -11,7 +11,7 @@ import CallStatusMessage from "./CallStatusMessage";
 import CallChatInput from "./CallChatInput";
 import ChatInput, { type ChatInputHandle } from "./ChatInput";
 import CollectionSummary from "./CollectionSummary";
-import ResultCard from "@/components/call/ResultCard";
+
 import ScenarioSelector from "./ScenarioSelector";
 import { Phone, Loader2, Plus } from "lucide-react";
 import { useCallPolling } from "@/hooks/useCallPolling";
@@ -197,6 +197,7 @@ export default function ChatContainer() {
               <CallStatusMessage
                 type="connecting"
                 targetName={call?.targetName}
+                isActive={callStatus === 'connecting' || callStatus === 'waiting'}
               />
             )}
 
@@ -229,12 +230,6 @@ export default function ChatContainer() {
               />
             )}
 
-            {/* 통화 종료 후 결과 카드 인라인 */}
-            {(isCallEnded || isCallTerminal) && call && (
-              <div className="my-4 px-0">
-                <ResultCard call={call} />
-              </div>
-            )}
           </>
         )}
 

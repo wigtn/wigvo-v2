@@ -8,7 +8,7 @@ import { useCallPolling } from '@/hooks/useCallPolling';
 import { useDashboard } from '@/hooks/useDashboard';
 import CallingStatus from './CallingStatus';
 import CallStatusBar from './CallStatusBar';
-import ResultCard from './ResultCard';
+import CallSummaryPanel from './CallSummaryPanel';
 import {
   PhoneOff,
   Mic,
@@ -122,13 +122,9 @@ export default function CallEffectPanel() {
     // resetCalling은 결과 확인 후 사용자가 직접 호출
   };
 
-  // 통화 완료 → 결과 카드
+  // 통화 완료 → 요약 대시보드
   if (isEnded && call) {
-    return (
-      <div className="h-full overflow-y-auto styled-scrollbar px-4 py-6">
-        <ResultCard call={call} />
-      </div>
-    );
+    return <CallSummaryPanel call={call} onNewChat={resetCalling} />;
   }
 
   return (

@@ -237,6 +237,26 @@
     "time": "시간",
     "service": "서비스"
   },
+  "summary": {
+    "callCompleted": "통화 완료",
+    "callFailed": "통화 실패",
+    "callInfo": "통화 정보",
+    "aiSummary": "AI 통화 요약",
+    "viewHistory": "기록 보기",
+    "newChat": "새 대화",
+    "place": "장소",
+    "date": "날짜",
+    "time": "시간",
+    "service": "서비스",
+    "duration": "통화 시간",
+    "tokens": "토큰",
+    "mode": {
+      "voiceToVoice": "양방향 음성",
+      "textToVoice": "텍스트→음성",
+      "voiceToText": "음성→자막",
+      "fullAgent": "AI 자율"
+    }
+  },
   "history": {
     "title": "통화 기록",
     "totalCount": "총 {count}건",

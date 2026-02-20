@@ -237,6 +237,26 @@
     "time": "Time",
     "service": "Service"
   },
+  "summary": {
+    "callCompleted": "Call Completed",
+    "callFailed": "Call Failed",
+    "callInfo": "Call Info",
+    "aiSummary": "AI Call Summary",
+    "viewHistory": "View History",
+    "newChat": "New Chat",
+    "place": "Place",
+    "date": "Date",
+    "time": "Time",
+    "service": "Service",
+    "duration": "Duration",
+    "tokens": "Tokens",
+    "mode": {
+      "voiceToVoice": "Voice-to-Voice",
+      "textToVoice": "Text-to-Voice",
+      "voiceToText": "Voice-to-Text",
+      "fullAgent": "AI Auto"
+    }
+  },
   "history": {
     "title": "Call History",
     "totalCount": "{count} total",
