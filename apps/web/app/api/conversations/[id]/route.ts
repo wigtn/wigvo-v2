@@ -40,11 +40,25 @@ export async function GET(
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // 4. 응답 (snake_case → camelCase 변환)
+    // 4. CALLING 상태인데 통화가 이미 끝났으면 COMPLETED로 보정
+    let effectiveStatus = conversation.status;
+    if (conversation.status === 'CALLING') {
+      const { data: calls } = await supabase
+        .from('calls')
+        .select('status')
+        .eq('conversation_id', id)
+        .limit(1);
+      const call = calls?.[0];
+      if (call && (call.status === 'COMPLETED' || call.status === 'FAILED')) {
+        effectiveStatus = 'COMPLETED';
+      }
+    }
+
+    // 5. 응답 (snake_case → camelCase 변환)
     return NextResponse.json({
       id: conversation.id,
       userId: conversation.user_id,
-      status: conversation.status,
+      status: effectiveStatus,
       collectedData: conversation.collected_data,
       messages: conversation.messages.map((msg) => ({
         id: msg.id,
