@@ -84,7 +84,7 @@ def setup_logging(
 
     if is_cloud_run:
         handler = logging.StreamHandler()
-        handler.setFormatter(CloudRunJsonFormatter())
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
         root.addHandler(handler)
     else:
         # Color console
