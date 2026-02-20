@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "WIGVO — AI Voice Agent Platform",
-  description: "AI voice assistant service that makes phone calls on your behalf",
+  description:
+    "AI voice assistant service that makes phone calls on your behalf",
 };
 
 export default function RootLayout({
