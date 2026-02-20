@@ -46,6 +46,18 @@ FIRST_MESSAGE_TEMPLATES = {
         "Hello, this is an AI translation assistant calling "
         "on behalf of a customer. I'll relay their message now."
     ),
+    "ja": (
+        "Hello, this is an AI translation assistant calling "
+        "on behalf of a customer. I'll relay their message now."
+    ),
+    "zh": (
+        "Hello, this is an AI translation assistant calling "
+        "on behalf of a customer. I'll relay their message now."
+    ),
+    "vi": (
+        "Hello, this is an AI translation assistant calling "
+        "on behalf of a customer. I'll relay their message now."
+    ),
 }
 
 # --- Session A: Relay Mode 프롬프트 ---

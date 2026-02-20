@@ -83,6 +83,11 @@ class SessionBHandler:
         self._speech_started_at: float = 0.0  # 파이프라인 지연 계측용
         self._use_local_vad = use_local_vad
 
+        # Response 생성 상태 추적: conversation_already_has_active_response 방지
+        self._is_response_active = False
+        self._response_done_event = asyncio.Event()
+        self._response_done_event.set()  # 초기 상태: 응답 없음
+
         # Debounced response creation (create_response=False 모드)
         # VAD speech_stopped 후 일정 시간 대기, 새 speech_started가 없으면 수동 response.create
         self._response_debounce_task: asyncio.Task | None = None
@@ -339,6 +344,9 @@ class SessionBHandler:
 
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
         """Session B 응답 완료 + cost token 추적."""
+        self._is_response_active = False
+        self._response_done_event.set()
+
         if self._call:
             response = event.get("response", {})
             usage = response.get("usage", {})
@@ -427,9 +435,21 @@ class SessionBHandler:
 
         Server VAD 모드: speech_stopped 시 자동 commit → response.create만 호출.
         Local VAD 모드: turn_detection=null이므로 수동 commit_audio_only() 후 response.create.
+
+        conversation_already_has_active_response 방지:
+        이전 응답이 아직 생성 중이면 완료 대기 후 새 응답을 생성한다.
         """
         try:
             await asyncio.sleep(self._response_debounce_s)
+
+            # 이전 응답 생성 중이면 완료 대기 (최대 5초)
+            if self._is_response_active:
+                logger.info("[SessionB] Waiting for previous response to complete before new create_response...")
+                try:
+                    await asyncio.wait_for(self._response_done_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("[SessionB] Previous response wait timeout (5s) — proceeding anyway")
+
             if self._use_local_vad:
                 logger.info(
                     "[SessionB] Debounce complete (%.0fms) — committing audio + creating response (local VAD)",
@@ -441,6 +461,9 @@ class SessionBHandler:
                     "[SessionB] Debounce complete (%.0fms) — creating response",
                     self._response_debounce_s * 1000,
                 )
+
+            self._is_response_active = True
+            self._response_done_event.clear()
             await self.session.create_response()
         except asyncio.CancelledError:
             logger.debug("[SessionB] Debounced response creation cancelled")
@@ -471,8 +494,19 @@ class SessionBHandler:
             self._is_recipient_speaking = False
             self._timeout_forced = True
 
+            # 이전 응답 생성 중이면 완료 대기 (최대 5초)
+            if self._is_response_active:
+                logger.info("[SessionB] Timeout: waiting for previous response to complete...")
+                try:
+                    await asyncio.wait_for(self._response_done_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("[SessionB] Timeout: previous response wait timeout (5s) — proceeding anyway")
+
             if self._use_local_vad:
                 await self.session.commit_audio_only()
+
+            self._is_response_active = True
+            self._response_done_event.clear()
             await self.session.create_response()
 
             if self._on_recipient_speech_stopped:

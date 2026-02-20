@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     call_mode: str = "realtime"
 
     # First message timeouts (C-3)
-    recipient_answer_timeout_s: int = 15
+    recipient_answer_timeout_s: int = 45
 
     # Phase 3: Recovery settings (PRD 5.3)
     recovery_max_attempts: int = 5

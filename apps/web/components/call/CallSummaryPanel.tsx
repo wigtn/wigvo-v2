@@ -4,8 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
 import {
-  CheckCircle2,
-  XCircle,
+  PhoneOff,
   MapPin,
   Calendar,
   Clock,
@@ -85,7 +84,6 @@ export default function CallSummaryPanel({ call, onNewChat }: CallSummaryPanelPr
   const router = useRouter();
   const t = useTranslations('summary');
 
-  const isSuccess = call.status === 'COMPLETED';
   const commMode = (call.communicationMode ?? 'voice_to_voice') as CommunicationMode;
   const ModeIcon = MODE_ICONS[commMode];
 
@@ -94,18 +92,12 @@ export default function CallSummaryPanel({ call, onNewChat }: CallSummaryPanelPr
       <div className="flex flex-col gap-5">
         {/* Status Header */}
         <div className="flex items-center gap-3">
-          {isSuccess ? (
-            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="size-5 text-teal-600" />
-            </div>
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-              <XCircle className="size-5 text-red-500" />
-            </div>
-          )}
+          <div className="w-10 h-10 rounded-full bg-[#F1F5F9] flex items-center justify-center shrink-0">
+            <PhoneOff className="size-5 text-[#64748B]" />
+          </div>
           <div>
-            <h2 className={`text-base font-semibold ${isSuccess ? 'text-teal-700' : 'text-red-600'}`}>
-              {isSuccess ? t('callCompleted') : t('callFailed')}
+            <h2 className="text-base font-semibold text-[#0F172A]">
+              {t('callCompleted')}
             </h2>
             {call.targetName && (
               <p className="text-xs text-[#94A3B8]">{call.targetName}</p>

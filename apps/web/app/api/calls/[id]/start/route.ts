@@ -150,14 +150,21 @@ export async function POST(
     const phoneNumber = formatPhoneToE164(typedCall.target_phone);
 
     // ── 8. Relay Server에 통화 시작 요청 ──
+    if (!collectedData.source_language || !collectedData.target_language) {
+      console.warn("[Start] Language not set in collected_data, using defaults:", {
+        source: collectedData.source_language,
+        target: collectedData.target_language,
+      });
+    }
+
     let relayResult;
     try {
       relayResult = await startRelayCall({
         call_id: callId,
         phone_number: phoneNumber,
         mode: callMode,
-        source_language: collectedData.source_language || "en",
-        target_language: collectedData.target_language || "ko",
+        source_language: collectedData.source_language || "ko",
+        target_language: collectedData.target_language || "en",
         vad_mode: callMode === "relay" ? "client" : "server",
         collected_data: collectedData as unknown as Record<string, unknown>,
         system_prompt_override: systemPromptOverride,
