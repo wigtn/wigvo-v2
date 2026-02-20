@@ -45,8 +45,9 @@ async def persist_call(call: ActiveCall) -> None:
     else:
         db_result = "SUCCESS" if call.status == CallStatus.ENDED else "ERROR"
 
+    # call.call_id는 Web app의 Supabase calls.id (PK) 값이다.
+    # upsert(on_conflict="call_id")가 아닌 update().eq("id")로 기존 row를 직접 갱신.
     data: dict[str, Any] = {
-        "call_id": call.call_id,
         "call_sid": call.call_sid,
         "call_mode": call.mode.value,
         "source_language": call.source_language,
@@ -70,17 +71,22 @@ async def persist_call(call: ActiveCall) -> None:
     }
 
     try:
-        result = await client.table("calls").upsert(data, on_conflict="call_id").execute()
-        logger.info("Call %s persisted to DB", call.call_id)
+        result = (
+            await client.table("calls")
+            .update(data)
+            .eq("id", call.call_id)
+            .execute()
+        )
+        logger.info("Call %s persisted to DB (status=%s)", call.call_id, db_status)
         return result
     except Exception:
         logger.exception("Failed to persist call %s", call.call_id)
 
 
 async def update_call_field(call_id: str, field: str, value: Any) -> None:
-    """특정 필드만 업데이트한다."""
+    """특정 필드만 업데이트한다. call_id는 Supabase calls.id (PK)."""
     client = await get_client()
     try:
-        await client.table("calls").update({field: value}).eq("call_id", call_id).execute()
+        await client.table("calls").update({field: value}).eq("id", call_id).execute()
     except Exception:
         logger.exception("Failed to update %s for call %s", field, call_id)
