@@ -11,6 +11,7 @@ export enum WsMessageType {
   AUDIO_CHUNK = 'audio_chunk',
   TEXT_INPUT = 'text_input',
   VAD_STATE = 'vad_state',
+  TYPING_STATE = 'typing_state',
   END_CALL = 'end_call',
 
   // Relay → App

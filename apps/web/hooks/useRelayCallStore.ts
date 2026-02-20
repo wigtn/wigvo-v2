@@ -35,6 +35,7 @@ interface RelayCallStoreState {
   startCall: ((callId: string, relayWsUrl: string, mode: CallMode) => void) | null;
   endCall: (() => void) | null;
   sendText: ((text: string) => void) | null;
+  sendTypingState: (() => void) | null;
   toggleMute: (() => void) | null;
 
   // 동기화
@@ -56,6 +57,7 @@ const initialState = {
   startCall: null as RelayCallStoreState['startCall'],
   endCall: null as RelayCallStoreState['endCall'],
   sendText: null as RelayCallStoreState['sendText'],
+  sendTypingState: null as RelayCallStoreState['sendTypingState'],
   toggleMute: null as RelayCallStoreState['toggleMute'],
 };
 

@@ -79,9 +79,10 @@ export default function RelayCallProvider({
       startCall: relay.startCall,
       endCall: relay.endCall,
       sendText: relay.sendText,
+      sendTypingState: relay.sendTypingState,
       toggleMute: relay.toggleMute,
     });
-  }, [relay.startCall, relay.endCall, relay.sendText, relay.toggleMute, syncState]);
+  }, [relay.startCall, relay.endCall, relay.sendText, relay.sendTypingState, relay.toggleMute, syncState]);
 
   // 언마운트 시 정리
   useEffect(() => {

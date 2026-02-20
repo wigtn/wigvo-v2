@@ -82,6 +82,8 @@ async def app_websocket(ws: WebSocket, call_id: str):
                     text = msg.get("data", {}).get("text", "")
                     if text:
                         await audio_router.handle_user_text(text)
+                case "typing_state":
+                    await audio_router.handle_typing_started()
                 case "end_call":
                     logger.info("User ended call via WebSocket (call=%s)", call_id)
                     break

@@ -137,6 +137,9 @@ class AudioRouter:
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         await self._pipeline.handle_twilio_audio(audio_bytes)
 
+    async def handle_typing_started(self) -> None:
+        await self._pipeline.handle_typing_started()
+
     # --- 투명 프록시: Pipeline 내부 속성 접근 (테스트 호환성) ---
 
     def __getattr__(self, name: str) -> Any:

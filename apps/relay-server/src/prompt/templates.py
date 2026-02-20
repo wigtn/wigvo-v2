@@ -37,6 +37,14 @@ TERM_EXPLANATION_RULES = {
 
 # --- First Message 템플릿 (PRD 3.4) ---
 
+TYPING_FILLER_TEMPLATES = {
+    "ko": "잠시만 기다려주세요, 메시지를 작성 중입니다.",
+    "en": "Please hold on, they're typing a message.",
+    "ja": "少々お待ちください、メッセージを入力中です。",
+    "zh": "请稍等，正在输入消息。",
+    "vi": "Xin vui lòng chờ, đang soạn tin nhắn.",
+}
+
 FIRST_MESSAGE_TEMPLATES = {
     "ko": (
         "Hello, I'm calling on behalf of a customer through an AI translation service. "

@@ -53,6 +53,7 @@ export default function ChatContainer() {
     translationState,
     callDuration,
     sendText,
+    sendTypingState,
   } = useRelayCallStore();
 
   // Call 메타데이터 (targetName 등) - 통화 중에만 폴링
@@ -263,6 +264,7 @@ export default function ChatContainer() {
       {isCallActive && isTextMode ? (
         <CallChatInput
           onSend={(text) => sendText?.(text)}
+          onTypingStart={() => sendTypingState?.()}
           disabled={callStatus !== 'connected'}
         />
       ) : (

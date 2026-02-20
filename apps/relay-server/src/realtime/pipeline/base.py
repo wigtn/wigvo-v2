@@ -51,3 +51,6 @@ class BasePipeline(ABC):
     @abstractmethod
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """Twilio에서 받은 수신자 오디오를 처리한다."""
+
+    async def handle_typing_started(self) -> None:
+        """사용자가 타이핑을 시작했을 때 호출 (T2V 전용, 기본 no-op)."""

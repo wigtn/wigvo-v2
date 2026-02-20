@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Send } from 'lucide-react';
 
 interface CallChatInputProps {
   onSend: (text: string) => void;
+  onTypingStart?: () => void;
   disabled?: boolean;
 }
 
-export default function CallChatInput({ onSend, disabled }: CallChatInputProps) {
+export default function CallChatInput({ onSend, onTypingStart, disabled }: CallChatInputProps) {
   const t = useTranslations('call');
   const [textInput, setTextInput] = useState('');
+  const typingSentRef = useRef(false);
 
   const quickReplies = [
     { label: t('quickReplyYes'), value: t('quickReplyYesValue') },
@@ -20,12 +22,24 @@ export default function CallChatInput({ onSend, disabled }: CallChatInputProps) 
     { label: t('quickReplyRepeat'), value: t('quickReplyRepeatValue') },
   ];
 
+  const handleChange = useCallback(
+    (value: string) => {
+      setTextInput(value);
+      if (value.length > 0 && !typingSentRef.current && onTypingStart) {
+        typingSentRef.current = true;
+        onTypingStart();
+      }
+    },
+    [onTypingStart],
+  );
+
   const handleSend = useCallback(
     (text?: string) => {
       const msg = text ?? textInput.trim();
       if (!msg) return;
       onSend(msg);
       setTextInput('');
+      typingSentRef.current = false;
     },
     [textInput, onSend],
   );
@@ -61,7 +75,7 @@ export default function CallChatInput({ onSend, disabled }: CallChatInputProps) 
         <input
           type="text"
           value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={t('sendMessage')}

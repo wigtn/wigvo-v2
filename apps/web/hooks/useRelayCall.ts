@@ -26,6 +26,7 @@ interface UseRelayCallReturn {
   startCall: (callId: string, relayWsUrl: string, mode: CallMode) => void;
   endCall: () => void;
   sendText: (text: string) => void;
+  sendTypingState: () => void;
   toggleMute: () => void;
   isMuted: boolean;
   isRecording: boolean;
@@ -337,6 +338,10 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
     [ws],
   );
 
+  const sendTypingState = useCallback(() => {
+    ws.sendTypingState();
+  }, [ws]);
+
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => !prev);
   }, []);
@@ -359,6 +364,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
     startCall,
     endCall,
     sendText,
+    sendTypingState,
     toggleMute,
     isMuted,
     isRecording: vadEnabled && isSpeaking,

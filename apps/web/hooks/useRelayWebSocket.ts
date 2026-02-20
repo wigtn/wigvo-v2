@@ -19,6 +19,7 @@ interface UseRelayWebSocketReturn {
   sendAudioChunk: (base64Audio: string) => boolean;
   sendVadState: (state: string) => boolean;
   sendText: (text: string) => boolean;
+  sendTypingState: () => boolean;
   sendEndCall: () => boolean;
   disconnect: () => void;
 }
@@ -145,6 +146,10 @@ export function useRelayWebSocket({
     [sendMessage],
   );
 
+  const sendTypingState = useCallback((): boolean => {
+    return sendMessage({ type: WsMessageType.TYPING_STATE, data: {} });
+  }, [sendMessage]);
+
   const sendEndCall = useCallback((): boolean => {
     return sendMessage({ type: WsMessageType.END_CALL, data: {} });
   }, [sendMessage]);
@@ -166,6 +171,7 @@ export function useRelayWebSocket({
     sendAudioChunk,
     sendVadState,
     sendText,
+    sendTypingState,
     sendEndCall,
     disconnect,
   };

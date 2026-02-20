@@ -24,6 +24,7 @@ from typing import Any, Callable, Coroutine
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
+from src.prompt.templates import TYPING_FILLER_TEMPLATES
 from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
 from src.realtime.context_manager import ConversationContextManager
 from src.realtime.first_message import FirstMessageHandler
@@ -69,6 +70,9 @@ class TextToVoicePipeline(BasePipeline):
 
         # 텍스트 전송 직렬화 Lock (race condition 방지)
         self._text_send_lock = asyncio.Lock()
+
+        # 타이핑 필러: 통화당 1회만 전송
+        self._typing_filler_sent = False
 
         # Per-response instruction override (hskim 이식)
         self._strict_relay_instruction = (
@@ -224,6 +228,26 @@ class TextToVoicePipeline(BasePipeline):
     async def handle_user_audio_commit(self) -> None:
         """TextToVoice 모드에서 audio commit은 무시한다."""
         logger.debug("TextToVoice: ignoring audio commit (text-only mode)")
+
+    async def handle_typing_started(self) -> None:
+        """사용자 타이핑 시작 → 수신자에게 '잠시만 기다려주세요' TTS 전송."""
+        if self._typing_filler_sent:
+            return
+        self._typing_filler_sent = True
+
+        filler = TYPING_FILLER_TEMPLATES.get(
+            self.call.target_language,
+            TYPING_FILLER_TEMPLATES["en"],
+        )
+        logger.info("Typing filler → recipient: %s", filler)
+
+        async with self._text_send_lock:
+            if self.session_a.is_generating:
+                await self.session_a.wait_for_done(timeout=3.0)
+            await self.dual_session.session_a.send_text_item(filler)
+            await self.dual_session.session_a.create_response(
+                instructions=f'Say exactly this sentence and nothing else: "{filler}"',
+            )
 
     async def handle_user_text(self, text: str) -> None:
         """텍스트 입력을 Session A에 per-response instruction override로 전달한다.
