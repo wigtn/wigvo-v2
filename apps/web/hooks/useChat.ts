@@ -60,7 +60,7 @@ export function useChat(): UseChatReturn {
   const t = useTranslations('chat');
 
   // ── Dashboard State ─────────────────────────────────────────
-  const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
+  const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, scenarioSelected, setScenarioSelected, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
 
   // ── State ───────────────────────────────────────────────────
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -72,8 +72,7 @@ export function useChat(): UseChatReturn {
   const [conversationStatus, setConversationStatus] = useState<ConversationStatus>('COLLECTING');
   const [error, setError] = useState<string | null>(null);
   
-  // v5: 모드 + 시나리오 선택 상태
-  const [scenarioSelected, setScenarioSelected] = useState(false);
+  // v5: 모드 + 시나리오 선택 상태 (scenarioSelected는 useDashboard Zustand 스토어)
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
   const [selectedSubType, setSelectedSubType] = useState<ScenarioSubType | null>(null);
   const [communicationMode, setCommunicationMode] = useState<CommunicationMode | null>(null);

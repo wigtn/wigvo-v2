@@ -26,6 +26,7 @@ export default function DashboardLayout() {
     selectedPlace,
     setSelectedPlace,
     isSearching,
+    scenarioSelected,
     setActiveConversationId,
     setSidebarOpen,
     resetDashboard,
@@ -33,7 +34,7 @@ export default function DashboardLayout() {
     callingCommunicationMode,
   } = useDashboard();
 
-  const { handleNewConversation, scenarioSelected } = useChat();
+  const { handleNewConversation } = useChat();
   const t = useTranslations("dashboard");
 
   const [mobileTab, setMobileTab] = useState<"chat" | "map" | "calling">(

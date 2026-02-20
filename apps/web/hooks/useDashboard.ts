@@ -32,6 +32,9 @@ interface DashboardState {
   conversations: ConversationSummary[];
   activeConversationId: string | null;
 
+  // 시나리오 선택 상태 (전역 공유)
+  scenarioSelected: boolean;
+
   // 통화 상태 (인라인)
   callingCallId: string | null;
   callingCommunicationMode: CommunicationMode | null;
@@ -47,6 +50,7 @@ interface DashboardState {
   setIsSearching: (searching: boolean) => void;
   setConversations: (conversations: ConversationSummary[]) => void;
   setActiveConversationId: (id: string | null) => void;
+  setScenarioSelected: (selected: boolean) => void;
   setCallingCallId: (id: string | null) => void;
   setCallingCommunicationMode: (mode: CommunicationMode | null) => void;
 
@@ -71,6 +75,7 @@ export const useDashboard = create<DashboardState>((set) => ({
   isSearching: false,
   conversations: [],
   activeConversationId: null,
+  scenarioSelected: false,
   callingCallId: null,
   callingCommunicationMode: null,
 
@@ -85,6 +90,7 @@ export const useDashboard = create<DashboardState>((set) => ({
   setIsSearching: (searching) => set({ isSearching: searching }),
   setConversations: (conversations) => set({ conversations }),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
+  setScenarioSelected: (selected) => set({ scenarioSelected: selected }),
   setCallingCallId: (id) => set({ callingCallId: id }),
   setCallingCommunicationMode: (mode) => set({ callingCommunicationMode: mode }),
 
@@ -99,6 +105,7 @@ export const useDashboard = create<DashboardState>((set) => ({
   // 대시보드 초기화
   resetDashboard: () =>
     set({
+      scenarioSelected: false,
       mapCenter: DEFAULT_CENTER,
       mapZoom: 15,
       searchResults: [],
