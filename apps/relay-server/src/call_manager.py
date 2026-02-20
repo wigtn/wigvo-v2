@@ -11,6 +11,7 @@ idempotent cleanup_call()로 모든 정리를 처리한다.
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from src.types import ActiveCall, CallStatus, WsMessage, WsMessageType
@@ -172,6 +173,39 @@ class CallManager:
             call = self._calls.pop(call_id, None)
             if call:
                 call.status = CallStatus.ENDED
+
+                # 통화 요약 로그
+                duration_s = round(time.time() - call.started_at, 1) if call.started_at > 0 else 0
+                m = call.call_metrics
+                avg_a = (
+                    sum(m.session_a_latencies_ms) / len(m.session_a_latencies_ms)
+                    if m.session_a_latencies_ms else 0
+                )
+                avg_b = (
+                    sum(m.session_b_e2e_latencies_ms) / len(m.session_b_e2e_latencies_ms)
+                    if m.session_b_e2e_latencies_ms else 0
+                )
+                logger.info(
+                    "=== Call Summary ===\n"
+                    "  call_id=%s  mode=%s  comm=%s\n"
+                    "  duration=%.1fs  turns=%d  cost=$%.4f\n"
+                    "  session_a: avg=%.0fms  samples=%d  %s\n"
+                    "  session_b: avg_e2e=%.0fms  samples=%d  %s\n"
+                    "  first_msg=%.0fms  echo=%d  tokens=%d",
+                    call.call_id, call.mode.value, call.communication_mode.value,
+                    duration_s, m.turn_count, call.cost_tokens.cost_usd,
+                    avg_a, len(m.session_a_latencies_ms),
+                    [round(x) for x in m.session_a_latencies_ms],
+                    avg_b, len(m.session_b_e2e_latencies_ms),
+                    [round(x) for x in m.session_b_e2e_latencies_ms],
+                    m.first_message_latency_ms, m.echo_suppressions,
+                    call.cost_tokens.total,
+                )
+
+                # call_result_data에 메트릭 삽입 (기존 JSONB 컬럼 활용)
+                call.call_result_data["metrics"] = m.model_dump()
+                call.call_result_data["cost_usd"] = round(call.cost_tokens.cost_usd, 6)
+
                 try:
                     from src.db.supabase_client import persist_call
 

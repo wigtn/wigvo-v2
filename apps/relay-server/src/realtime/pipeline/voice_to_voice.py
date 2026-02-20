@@ -244,6 +244,7 @@ class VoiceToVoicePipeline(BasePipeline):
 
     async def handle_user_text(self, text: str) -> None:
         self.call.transcript_history.append({"role": "user", "text": text})
+        self.session_a.mark_user_input()
 
         if self.interrupt.is_recipient_speaking:
             logger.info("Recipient is speaking — holding text until they finish...")
@@ -309,6 +310,11 @@ class VoiceToVoicePipeline(BasePipeline):
         if self._tts_first_chunk_at == 0.0:
             self._tts_first_chunk_at = time.time()
             self._tts_total_bytes = 0
+            # 첫 메시지 레이턴시 측정 (pipeline start → first TTS to Twilio)
+            if self.call.call_metrics.first_message_latency_ms == 0.0 and self.call.started_at > 0:
+                self.call.call_metrics.first_message_latency_ms = (
+                    time.time() - self.call.started_at
+                ) * 1000
         self._tts_total_bytes += len(audio_bytes)
         self._activate_echo_window()
         await self.twilio_handler.send_audio(audio_bytes)
@@ -386,6 +392,7 @@ class VoiceToVoicePipeline(BasePipeline):
     def _activate_echo_window(self) -> None:
         if not self._in_echo_window:
             logger.info("Echo window activated — silence injection for Session B input")
+            self.call.call_metrics.echo_suppressions += 1
         self._in_echo_window = True
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()

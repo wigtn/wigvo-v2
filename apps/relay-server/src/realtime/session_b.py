@@ -308,9 +308,9 @@ class SessionBHandler:
                 "[SessionB] Translation complete (e2e=%.0fms): %s",
                 e2e_ms, transcript[:80],
             )
-            # _speech_started_at는 여기서 리셋하지 않음.
-            # _handle_speech_stopped가 duration 계산에 사용하므로
-            # 다음 speech_started에서 새 값으로 덮어쓴다.
+            if self._call:
+                self._call.call_metrics.session_b_e2e_latencies_ms.append(e2e_ms)
+                self._call.call_metrics.turn_count += 1
         else:
             logger.info("[SessionB] Translation complete: %s", transcript[:80])
 
@@ -497,6 +497,8 @@ class SessionBHandler:
         if self._speech_started_at > 0:
             stt_ms = (time.time() - self._speech_started_at) * 1000
             logger.info("[SessionB] Original STT (Stage 1, stt=%.0fms): %s", stt_ms, transcript[:80])
+            if self._call:
+                self._call.call_metrics.session_b_stt_latencies_ms.append(stt_ms)
         else:
             logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
         if self._on_original_caption:

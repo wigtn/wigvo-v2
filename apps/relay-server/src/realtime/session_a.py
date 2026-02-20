@@ -81,6 +81,10 @@ class SessionAHandler:
         self._fc_name: str = ""
         self._fc_arguments: str = ""
 
+        # 성능 계측: User 입력 → TTS first chunk 레이턴시
+        self._user_input_at: float = 0.0
+        self._first_audio_received: bool = False
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -117,11 +121,17 @@ class SessionAHandler:
 
     async def commit_user_audio(self) -> None:
         """Client VAD가 발화 종료를 감지하면 오디오를 커밋한다."""
+        self._user_input_at = time.time()
         await self.session.commit_audio()
 
     async def send_user_text(self, text: str) -> None:
         """User 텍스트를 Session A에 전달 (Agent Mode / Push-to-Talk)."""
+        self._user_input_at = time.time()
         await self.session.send_text(text)
+
+    def mark_user_input(self) -> None:
+        """User 입력 시점을 기록한다 (Text 모드에서 파이프라인이 호출)."""
+        self._user_input_at = time.time()
 
     async def wait_for_done(self, timeout: float = 5.0) -> bool:
         """응답 생성 완료를 대기한다. 이미 완료 상태면 즉시 반환."""
@@ -147,6 +157,16 @@ class SessionAHandler:
 
         PRD M-2: Level 3인 경우 오디오를 Twilio로 전달하지 않음.
         """
+        # 성능 계측: 응답의 첫 번째 TTS 청크 → 번역 레이턴시 기록
+        if not self._first_audio_received:
+            self._first_audio_received = True
+            if self._user_input_at > 0 and self._call:
+                latency_ms = (time.time() - self._user_input_at) * 1000
+                self._call.call_metrics.session_a_latencies_ms.append(latency_ms)
+                self._call.call_metrics.turn_count += 1
+                logger.info("[SessionA] Translation latency: %.0fms", latency_ms)
+                self._user_input_at = 0.0
+
         self._is_generating = True
         self._done_event.clear()
         delta_b64 = event.get("delta", "")
@@ -253,7 +273,8 @@ class SessionAHandler:
                     self._call.cost_tokens.total,
                 )
 
-        # 다음 응답을 위해 guardrail 상태 초기화
+        # 다음 응답을 위해 상태 초기화
+        self._first_audio_received = False
         if self._guardrail:
             self._guardrail.reset()
         self._current_transcript = ""
@@ -266,6 +287,7 @@ class SessionAHandler:
 
     async def _handle_user_speech_stopped(self, event: dict[str, Any]) -> None:
         """Server VAD가 User 발화 종료를 감지."""
+        self._user_input_at = time.time()
         logger.debug("[SessionA] User speech stopped")
 
     # --- Function Calling 핸들러 (Agent Mode) ---

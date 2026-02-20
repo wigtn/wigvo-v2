@@ -208,6 +208,38 @@ class CostTokens(BaseModel):
     def total(self) -> int:
         return self.audio_input + self.audio_output + self.text_input + self.text_output
 
+    @property
+    def cost_usd(self) -> float:
+        """OpenAI Realtime API 가격 기준 USD 비용 계산.
+
+        Pricing (per 1K tokens):
+          audio_input: $0.06, audio_output: $0.24
+          text_input: $0.005, text_output: $0.02
+        """
+        return (
+            self.audio_input * 0.06 / 1000
+            + self.audio_output * 0.24 / 1000
+            + self.text_input * 0.005 / 1000
+            + self.text_output * 0.02 / 1000
+        )
+
+
+class CallMetrics(BaseModel):
+    """통화 성능 지표 (통화 종료 시 로그 출력 + call_result_data에 저장)."""
+
+    # Session A: User 입력 완료 → TTS first chunk (번역 라운드트립)
+    session_a_latencies_ms: list[float] = Field(default_factory=list)
+    # Session B: 수신자 발화 시작 → 번역 완료 (end-to-end)
+    session_b_e2e_latencies_ms: list[float] = Field(default_factory=list)
+    # Session B: 수신자 발화 시작 → STT 완료
+    session_b_stt_latencies_ms: list[float] = Field(default_factory=list)
+    # 첫 메시지 지연 (pipeline start → first TTS to Twilio)
+    first_message_latency_ms: float = 0.0
+    # 번역 턴 수 (Session A + Session B 각 번역 완료 시 +1)
+    turn_count: int = 0
+    # 에코 윈도우 활성화 횟수
+    echo_suppressions: int = 0
+
 
 class ActiveCall(BaseModel):
     call_id: str
@@ -238,3 +270,4 @@ class ActiveCall(BaseModel):
     auto_ended: bool = False
     function_call_logs: list[dict[str, Any]] = Field(default_factory=list)
     guardrail_events_log: list[dict[str, Any]] = Field(default_factory=list)
+    call_metrics: CallMetrics = Field(default_factory=CallMetrics)
