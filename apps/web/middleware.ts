@@ -13,12 +13,13 @@ const LEGACY_HOST = process.env.LEGACY_HOST;
 
 export async function middleware(request: NextRequest) {
   // 레거시 도메인 접속 시 새 도메인으로 301 리다이렉트
-  if (CANONICAL_HOST && LEGACY_HOST && request.nextUrl.hostname === LEGACY_HOST) {
-    const url = request.nextUrl.clone();
-    url.hostname = CANONICAL_HOST;
-    url.protocol = 'https';
-    url.port = '';
-    return NextResponse.redirect(url, 301);
+  const host = request.headers.get('host') || '';
+  if (CANONICAL_HOST && LEGACY_HOST && host.startsWith(LEGACY_HOST)) {
+    const { pathname, search } = request.nextUrl;
+    return NextResponse.redirect(
+      `https://${CANONICAL_HOST}${pathname}${search}`,
+      301,
+    );
   }
 
   // Demo mode: skip Supabase auth
