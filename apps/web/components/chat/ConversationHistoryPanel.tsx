@@ -145,6 +145,14 @@ export default function ConversationHistoryPanel() {
   // ── 모바일 뷰 전환 ──
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
 
+  // 실효 상태: CALLING이지만 통화 완료/실패된 경우 COMPLETED로 표시
+  const effectiveDetailStatus =
+    detail?.status === 'CALLING' &&
+    callResult &&
+    (callResult.status === 'COMPLETED' || callResult.status === 'FAILED')
+      ? 'COMPLETED'
+      : detail?.status;
+
   // ────────────────────────────────────────────────────────────────
   // 대화 목록 fetch
   // ────────────────────────────────────────────────────────────────
@@ -433,10 +441,10 @@ export default function ConversationHistoryPanel() {
                     <span
                       className={cn(
                         'shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold',
-                        getStatusBadgeClass(detail.status),
+                        getStatusBadgeClass(effectiveDetailStatus!),
                       )}
                     >
-                      {getStatusLabel(detail.status)}
+                      {getStatusLabel(effectiveDetailStatus!)}
                     </span>
                   </div>
                   <p className="text-[11px] text-[#94A3B8] mt-0.5">
@@ -446,34 +454,54 @@ export default function ConversationHistoryPanel() {
               </div>
             </div>
 
-            {/* 메시지 영역 */}
+            {/* 콘텐츠 영역 — 3섹션: Summary → AI 대화 → 통화 내용 */}
             <div className="flex-1 overflow-y-auto styled-scrollbar">
-              <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
-                {/* 메시지 목록 */}
+              <div className="max-w-2xl mx-auto px-4 py-5 space-y-6">
+
+                {/* ── Section 1: Summary ── */}
+                {((detail.collectedData && hasCollectedData(detail.collectedData)) || callResult) && (
+                  <section>
+                    <SectionHeader icon={Info} title="Summary" />
+                    <div className="space-y-3 mt-3">
+                      {detail.collectedData && hasCollectedData(detail.collectedData) && (
+                        <CollectedDataCard data={detail.collectedData} />
+                      )}
+                      {callResult && (
+                        <CallInfoCard call={callResult} />
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* ── Section 2: AI 대화 ── */}
                 {detail.messages && detail.messages.length > 0 ? (
-                  detail.messages.map((msg) => (
-                    <MessageBubble key={msg.id} message={msg} />
-                  ))
-                ) : (
+                  <section>
+                    <SectionHeader icon={MessageSquare} title="AI 대화" />
+                    <div className="space-y-4 mt-3">
+                      {detail.messages.map((msg) => (
+                        <MessageBubble key={msg.id} message={msg} />
+                      ))}
+                    </div>
+                  </section>
+                ) : !callResult ? (
                   <div className="text-center py-10">
                     <p className="text-sm text-[#94A3B8]">메시지가 없습니다</p>
                   </div>
+                ) : null}
+
+                {/* ── Section 3: 통화 내용 ── */}
+                {callResult?.transcriptBilingual && callResult.transcriptBilingual.length > 0 && (
+                  <section>
+                    <SectionHeader icon={Phone} title="통화 내용" />
+                    <div className="space-y-1.5 mt-3">
+                      {callResult.transcriptBilingual.map((entry, idx) => (
+                        <TranscriptBubble key={idx} entry={entry} />
+                      ))}
+                    </div>
+                  </section>
                 )}
+
               </div>
-
-              {/* 수집 정보 카드 */}
-              {detail.collectedData && hasCollectedData(detail.collectedData) && (
-                <div className="max-w-2xl mx-auto px-4 pb-5">
-                  <CollectedDataCard data={detail.collectedData} />
-                </div>
-              )}
-
-              {/* 통화 결과 카드 */}
-              {callResult && (
-                <div className="max-w-2xl mx-auto px-4 pb-5">
-                  <CallResultCard call={callResult} />
-                </div>
-              )}
             </div>
           </>
         ) : null}
@@ -524,6 +552,18 @@ function MessageBubble({ message }: { message: Message }) {
           <User className="size-3.5 text-white" />
         </div>
       )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// SectionHeader (섹션 구분 헤더)
+// ===========================================================================
+function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
+  return (
+    <div className="flex items-center gap-2 pb-2 border-b border-[#E2E8F0]">
+      <Icon className="size-3.5 text-[#64748B]" />
+      <span className="text-xs font-semibold text-[#0F172A] tracking-tight">{title}</span>
     </div>
   );
 }
@@ -615,126 +655,59 @@ function getCallStatusLabel(status: string): string {
 }
 
 // ===========================================================================
-// CallResultCard (통화 결과 카드)
+// CallInfoCard (통화 정보 카드 — Summary 섹션용, transcript 제외)
 // ===========================================================================
-function CallResultCard({ call }: { call: Call }) {
-  const isEnded = call.status === 'COMPLETED' || call.status === 'FAILED';
-  const isInProgress = call.status === 'CALLING' || call.status === 'IN_PROGRESS';
-  const isPending = call.status === 'PENDING';
-
-  // 테마 결정
-  let theme: {
-    headerBg: string;
-    headerBorder: string;
-    headerText: string;
-    badgeBg: string;
-    badgeText: string;
-    icon: React.ReactNode;
-    badgeLabel: string;
+function CallInfoCard({ call }: { call: Call }) {
+  const formatDuration = (seconds: number) => {
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(Math.floor(seconds % 60)).padStart(2, '0');
+    return `${mm}:${ss}`;
   };
 
-  if (isEnded) {
-    theme = {
-      headerBg: 'bg-[#F8FAFC]',
-      headerBorder: 'border-[#E2E8F0]',
-      headerText: 'text-[#64748B]',
-      badgeBg: 'bg-[#F1F5F9]',
-      badgeText: 'text-[#64748B]',
-      icon: <PhoneOff className="size-4 text-[#64748B]" />,
-      badgeLabel: '통화 종료',
-    };
-  } else if (isInProgress) {
-    theme = {
-      headerBg: 'bg-amber-50',
-      headerBorder: 'border-amber-100',
-      headerText: 'text-amber-600',
-      badgeBg: 'bg-amber-100',
-      badgeText: 'text-amber-700',
-      icon: <PhoneCall className="size-4 text-amber-600 animate-pulse" />,
-      badgeLabel: '진행중',
-    };
-  } else {
-    // PENDING / default
-    theme = {
-      headerBg: 'bg-[#F1F5F9]',
-      headerBorder: 'border-[#E2E8F0]',
-      headerText: 'text-[#64748B]',
-      badgeBg: 'bg-[#E2E8F0]',
-      badgeText: 'text-[#64748B]',
-      icon: <Clock className="size-4 text-[#64748B]" />,
-      badgeLabel: '대기',
-    };
-  }
+  const modeLabel: Record<string, string> = {
+    voice_to_voice: 'Voice to Voice',
+    text_to_voice: 'Text to Voice',
+    voice_to_text: 'Voice to Text',
+    full_agent: 'Full Agent',
+  };
+
+  const fields = [
+    { icon: Phone, label: '상태', value: getCallStatusLabel(call.status) },
+    {
+      icon: Clock,
+      label: call.completedAt ? '완료' : '시작',
+      value: formatFullDate(call.completedAt || call.createdAt),
+    },
+    call.durationS != null
+      ? { icon: Clock, label: '통화 시간', value: formatDuration(call.durationS) }
+      : null,
+    call.communicationMode
+      ? { icon: PhoneCall, label: '모드', value: modeLabel[call.communicationMode] || call.communicationMode }
+      : null,
+  ].filter(Boolean) as Array<{ icon: typeof Phone; label: string; value: string }>;
 
   return (
     <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-      {/* 카드 헤더 */}
-      <div
-        className={cn(
-          'px-4 py-3 border-b flex items-center gap-2',
-          theme.headerBg,
-          theme.headerBorder,
-        )}
-      >
-        {theme.icon}
-        <span className={cn('text-xs font-semibold', theme.headerText)}>통화 정보</span>
-        <span
-          className={cn(
-            'ml-auto px-2 py-0.5 rounded-full text-[10px] font-semibold',
-            theme.badgeBg,
-            theme.badgeText,
-          )}
-        >
-          {theme.badgeLabel}
-        </span>
-      </div>
-
-      {/* 카드 본문 */}
-      <div className="px-4 py-3 space-y-2">
-        {/* 상태 */}
-        <div className="flex items-start gap-2.5">
-          <Phone className="size-3.5 text-[#94A3B8] mt-0.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">
-              상태
-            </span>
-            <p className="text-sm text-[#334155] mt-0.5">{getCallStatusLabel(call.status)}</p>
-          </div>
-        </div>
-
-        {/* 시간 */}
-        <div className="flex items-start gap-2.5">
-          <Clock className="size-3.5 text-[#94A3B8] mt-0.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">
-              {call.completedAt ? '완료' : isPending ? '생성' : '시작'}
-            </span>
-            <p className="text-sm text-[#334155] mt-0.5">
-              {formatFullDate(call.completedAt || call.createdAt)}
-            </p>
-          </div>
-        </div>
-
-        {/* 요약 (있을 경우) */}
+      <div className="px-4 py-3 space-y-2.5">
+        {fields.map((field) => {
+          const Icon = field.icon;
+          return (
+            <div key={field.label} className="flex items-start gap-2.5">
+              <Icon className="size-3.5 text-[#94A3B8] mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">
+                  {field.label}
+                </span>
+                <p className="text-sm text-[#334155] mt-0.5">{field.value}</p>
+              </div>
+            </div>
+          );
+        })}
         {call.summary && (
           <div className="mt-1 pt-2 border-t border-[#F1F5F9]">
             <p className="text-sm text-[#334155] leading-relaxed pl-3 border-l-2 border-[#E2E8F0] italic">
               {call.summary}
             </p>
-          </div>
-        )}
-
-        {/* 통화 자막 (transcript_bilingual) */}
-        {call.transcriptBilingual && call.transcriptBilingual.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-[#F1F5F9]">
-            <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider mb-2">
-              통화 자막
-            </p>
-            <div className="space-y-1.5">
-              {call.transcriptBilingual.map((entry, idx) => (
-                <TranscriptBubble key={idx} entry={entry} />
-              ))}
-            </div>
           </div>
         )}
       </div>

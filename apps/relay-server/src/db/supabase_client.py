@@ -78,6 +78,28 @@ async def persist_call(call: ActiveCall) -> None:
             .execute()
         )
         logger.info("Call %s persisted to DB (status=%s)", call.call_id, db_status)
+
+        # conversation 상태도 COMPLETED로 업데이트
+        try:
+            call_row = (
+                await client.table("calls")
+                .select("conversation_id")
+                .eq("id", call.call_id)
+                .single()
+                .execute()
+            )
+            conv_id = call_row.data.get("conversation_id") if call_row.data else None
+            if conv_id:
+                await (
+                    client.table("conversations")
+                    .update({"status": "COMPLETED"})
+                    .eq("id", conv_id)
+                    .execute()
+                )
+                logger.info("Conversation %s status updated to COMPLETED", conv_id)
+        except Exception:
+            logger.warning("Failed to update conversation status for call %s", call.call_id, exc_info=True)
+
         return result
     except Exception:
         logger.exception("Failed to persist call %s", call.call_id)

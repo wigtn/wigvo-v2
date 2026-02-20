@@ -117,20 +117,42 @@ export async function GET() {
       );
     }
 
+    // 2.5. CALLING 상태 conversation에 대해 calls 테이블에서 실제 상태 확인
+    const callingIds = (conversations || [])
+      .filter((c) => c.status === 'CALLING')
+      .map((c) => c.id);
+
+    const callStatusMap = new Map<string, string>();
+    if (callingIds.length > 0) {
+      const { data: calls } = await supabase
+        .from('calls')
+        .select('conversation_id, status')
+        .in('conversation_id', callingIds);
+
+      for (const call of calls || []) {
+        if (call.status === 'COMPLETED' || call.status === 'FAILED') {
+          callStatusMap.set(call.conversation_id, 'COMPLETED');
+        }
+      }
+    }
+
     // 3. 응답 변환 (사이드바용 요약 형태)
     const summaries = (conversations || []).map((conv) => {
       const collectedData = conv.collected_data as CollectedData | null;
       const messages = conv.messages as Array<{ content: string; role: string; created_at: string }> | null;
-      
+
       // 마지막 메시지 찾기 (정렬 후)
       const sortedMessages = (messages || []).sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       const lastMessage = sortedMessages[0];
 
+      // effective status: CALLING이지만 call이 COMPLETED/FAILED이면 COMPLETED로 표시
+      const effectiveStatus = callStatusMap.get(conv.id) ?? conv.status;
+
       return {
         id: conv.id,
-        status: conv.status,
+        status: effectiveStatus,
         targetName: collectedData?.target_name || null,
         lastMessage: lastMessage?.content?.slice(0, 50) || '새 대화',
         createdAt: conv.created_at,
