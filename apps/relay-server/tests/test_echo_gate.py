@@ -160,13 +160,13 @@ class TestSilenceInjection:
     """Silence Injection: echo window 중 무음 대체 + 이벤트 무시 테스트."""
 
     @pytest.mark.asyncio
-    async def test_silence_injected_during_echo_window(self):
-        """echo window 중 Twilio 오디오가 무음(0xFF)으로 대체되어 Session B에 전송."""
+    async def test_silence_injected_during_echo_window_low_energy(self):
+        """echo window 중 저에너지 오디오(에코)가 무음(0xFF)으로 대체되어 Session B에 전송."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
         router._pipeline._in_echo_window = True
 
-        audio = bytes([0x10] * 160)  # 실제 오디오 (에코)
+        audio = bytes([0xFE] * 160)  # 저에너지 오디오 (에코 수준)
         await router.handle_twilio_audio(audio)
 
         # 무음(0xFF)이 Session B에 전송됨
@@ -175,6 +175,24 @@ class TestSilenceInjection:
         sent_bytes = base64.b64decode(sent_b64)
         assert all(b == 0xFF for b in sent_bytes)
         assert len(sent_bytes) == 160
+
+    @pytest.mark.asyncio
+    async def test_high_energy_breaks_echo_gate(self):
+        """echo window 중 고에너지 오디오(실제 발화)는 게이트를 해제하고 원본 전달."""
+        router = _make_router()
+        router.session_b.send_recipient_audio = AsyncMock()
+        router._pipeline._in_echo_window = True
+
+        audio = bytes([0x10] * 160)  # 고에너지 오디오 (실제 발화)
+        await router.handle_twilio_audio(audio)
+
+        # 에코 게이트가 해제됨
+        assert router._pipeline._in_echo_window is False
+        # 원본 오디오가 Session B에 전송됨
+        router.session_b.send_recipient_audio.assert_called_once()
+        sent_b64 = router.session_b.send_recipient_audio.call_args[0][0]
+        sent_bytes = base64.b64decode(sent_b64)
+        assert sent_bytes == audio
 
     @pytest.mark.asyncio
     async def test_real_audio_passes_outside_echo_window(self):
@@ -195,8 +213,8 @@ class TestSilenceInjection:
         assert sent_bytes == audio
 
     @pytest.mark.asyncio
-    async def test_speech_started_ignored_during_echo_window(self):
-        """echo window 중 speech_started는 무시된다 (에코 반응 방지)."""
+    async def test_speech_started_breaks_echo_window(self):
+        """echo window 중 speech_started는 게이트를 해제하고 정상 처리된다."""
         router = _make_router()
         router._pipeline._in_echo_window = True
 
@@ -206,12 +224,13 @@ class TestSilenceInjection:
 
         await router._on_recipient_started()
 
-        # echo window 중에는 무시
-        router.first_message.on_recipient_speech_detected.assert_not_called()
+        # echo window 해제 + 정상 처리
+        assert router._pipeline._in_echo_window is False
+        router.first_message.on_recipient_speech_detected.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_speech_stopped_ignored_during_echo_window(self):
-        """echo window 중 speech_stopped는 무시된다."""
+    async def test_speech_stopped_processed_during_echo_window(self):
+        """echo window 중에도 speech_stopped는 정상 처리된다."""
         router = _make_router()
         router._pipeline._in_echo_window = True
 
@@ -222,9 +241,9 @@ class TestSilenceInjection:
 
         await router._on_recipient_stopped()
 
-        # echo window 중에는 무시
-        router.interrupt.on_recipient_speech_stopped.assert_not_called()
-        router.context_manager.inject_context.assert_not_called()
+        # echo window 중에도 정상 처리
+        router.interrupt.on_recipient_speech_stopped.assert_called_once()
+        router.context_manager.inject_context.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_speech_processed_outside_echo_window(self):

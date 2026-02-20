@@ -3,5 +3,4 @@
 # Usage: ./tail-logs.sh
 
 gcloud beta run services logs tail wigvo-relay \
-  --region=asia-northeast3 \
-  --log-filter='severity>=INFO AND NOT jsonPayload.logger=~"twilio.http" AND NOT jsonPayload.logger="uvicorn.access"'
+  --region=asia-northeast3

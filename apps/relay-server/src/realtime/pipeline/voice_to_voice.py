@@ -17,7 +17,7 @@ import asyncio
 import base64
 import logging
 import time
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine, Literal
 
 from src.config import settings
 from src.guardrail.checker import GuardrailChecker
@@ -50,6 +50,8 @@ class VoiceToVoicePipeline(BasePipeline):
 
     # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
     _MULAW_SILENCE = b"\xff"
+    # 에코 윈도우 최대 지속 시간 (수신자 발화 차단 방지)
+    _MAX_ECHO_WINDOW_S = 2.0
 
     def __init__(
         self,
@@ -159,6 +161,17 @@ class VoiceToVoicePipeline(BasePipeline):
         _ECHO_ROUND_TRIP_S = 0.5  # 에코 왕복 마진 (Relay → Twilio → 전화 → Twilio → Relay)
         self._echo_margin_s = _ECHO_ROUND_TRIP_S
 
+        # Session B 출력 큐 (수신자 TTS 순차 스트리밍)
+        # 현재 응답은 즉시 스트리밍, 다음 응답은 재생 완료 대기 후 시작
+        _BOutputItem = tuple[
+            Literal["audio", "caption", "original_caption", "caption_done"],
+            Any,
+        ]
+        self._b_output_queue: asyncio.Queue[_BOutputItem] = asyncio.Queue()
+        self._b_output_drain_task: asyncio.Task | None = None
+        self._b_playback_first_chunk_at: float = 0.0
+        self._b_playback_total_bytes: int = 0
+
         # Recovery Managers
         tools_a = get_tools_for_mode(call.mode) if call.mode == CallMode.AGENT else None
         self.recovery_a = SessionRecoveryManager(
@@ -181,6 +194,7 @@ class VoiceToVoicePipeline(BasePipeline):
     async def start(self) -> None:
         self.call.started_at = time.time()
         self._call_timer_task = asyncio.create_task(self._call_duration_timer())
+        self._b_output_drain_task = asyncio.create_task(self._drain_b_output())
         self.recovery_a.start_monitoring()
         self.recovery_b.start_monitoring()
         logger.info("VoiceToVoicePipeline started for call %s", self.call.call_id)
@@ -197,6 +211,13 @@ class VoiceToVoicePipeline(BasePipeline):
             self._echo_cooldown_task.cancel()
             try:
                 await self._echo_cooldown_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._b_output_drain_task and not self._b_output_drain_task.done():
+            self._b_output_drain_task.cancel()
+            try:
+                await self._b_output_drain_task
             except asyncio.CancelledError:
                 pass
 
@@ -272,9 +293,16 @@ class VoiceToVoicePipeline(BasePipeline):
         if self.recovery_b.is_degraded:
             return
 
-        # Echo Gate: echo window 중에는 무음으로 대체
+        # Echo Gate: echo window 중 에너지 기반 필터링
+        # 에코(RMS 낮음)는 무음 처리, 실제 발화(RMS 높음)는 즉시 게이트 해제
         if self._in_echo_window:
-            effective_audio = bytes([0xFF] * len(audio_bytes))  # mu-law 무음
+            rms = _ulaw_rms(audio_bytes)
+            if rms > settings.echo_energy_threshold_rms:
+                logger.info("High energy (RMS=%.0f) during echo window — breaking echo gate", rms)
+                self._deactivate_echo_window()
+                effective_audio = audio_bytes
+            else:
+                effective_audio = bytes([0xFF] * len(audio_bytes))  # mu-law 무음
         else:
             effective_audio = audio_bytes
 
@@ -338,55 +366,101 @@ class VoiceToVoicePipeline(BasePipeline):
         )
         await self._send_metrics_snapshot()
 
-    # --- Session B 콜백 ---
+    # --- Session B 콜백 (큐 기반 순차 스트리밍) ---
 
     async def _on_session_b_audio(self, audio_bytes: bytes) -> None:
         if self._suppress_b_audio:
             return
-        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-        await self._app_ws_send(
-            WsMessage(
-                type=WsMessageType.RECIPIENT_AUDIO,
-                data={"audio": audio_b64},
-            )
-        )
+        await self._b_output_queue.put(("audio", audio_bytes))
 
     async def _on_session_b_caption(self, role: str, text: str) -> None:
-        await self._app_ws_send(
-            WsMessage(
-                type=WsMessageType.CAPTION_TRANSLATED,
-                data={
-                    "role": role,
-                    "text": text,
-                    "stage": 2,
-                    "language": self.call.source_language,
-                    "direction": "inbound",
-                },
-            )
-        )
+        await self._b_output_queue.put(("caption", (role, text)))
 
     async def _on_session_b_caption_done(self) -> None:
-        """Session B 번역 완료 → 클라이언트에 스트림 종료 신호 전송."""
-        await self._app_ws_send(
-            WsMessage(
-                type=WsMessageType.TRANSLATION_STATE,
-                data={"state": "caption_done", "direction": "inbound"},
-            )
-        )
+        await self._b_output_queue.put(("caption_done", None))
 
     async def _on_session_b_original_caption(self, role: str, text: str) -> None:
-        await self._app_ws_send(
-            WsMessage(
-                type=WsMessageType.CAPTION_ORIGINAL,
-                data={
-                    "role": role,
-                    "text": text,
-                    "stage": 1,
-                    "language": self.call.target_language,
-                    "direction": "inbound",
-                },
-            )
-        )
+        await self._b_output_queue.put(("original_caption", (role, text)))
+
+    async def _drain_b_output(self) -> None:
+        """Session B 출력 큐 소비자 — 응답 단위로 순차 스트리밍.
+
+        현재 응답의 오디오/캡션은 즉시 전달 (레이턴시 유지).
+        응답 경계(caption_done) 도달 시 클라이언트 재생 완료를 추정 대기한 후
+        다음 응답을 스트리밍 → 겹침 없이 모든 발화를 순서대로 전달.
+
+        오디오 포맷: pcm16 24kHz (1초 = 48,000 bytes)
+        """
+        _PCM16_24K_BPS = 48_000  # bytes per second
+        try:
+            while True:
+                item_type, data = await self._b_output_queue.get()
+
+                if item_type == "audio":
+                    if self._b_playback_first_chunk_at == 0.0:
+                        self._b_playback_first_chunk_at = time.time()
+                    self._b_playback_total_bytes += len(data)
+                    audio_b64 = base64.b64encode(data).decode("ascii")
+                    await self._app_ws_send(
+                        WsMessage(
+                            type=WsMessageType.RECIPIENT_AUDIO,
+                            data={"audio": audio_b64},
+                        )
+                    )
+
+                elif item_type == "caption":
+                    role, text = data
+                    await self._app_ws_send(
+                        WsMessage(
+                            type=WsMessageType.CAPTION_TRANSLATED,
+                            data={
+                                "role": role,
+                                "text": text,
+                                "stage": 2,
+                                "language": self.call.source_language,
+                                "direction": "inbound",
+                            },
+                        )
+                    )
+
+                elif item_type == "original_caption":
+                    role, text = data
+                    await self._app_ws_send(
+                        WsMessage(
+                            type=WsMessageType.CAPTION_ORIGINAL,
+                            data={
+                                "role": role,
+                                "text": text,
+                                "stage": 1,
+                                "language": self.call.target_language,
+                                "direction": "inbound",
+                            },
+                        )
+                    )
+
+                elif item_type == "caption_done":
+                    await self._app_ws_send(
+                        WsMessage(
+                            type=WsMessageType.TRANSLATION_STATE,
+                            data={"state": "caption_done", "direction": "inbound"},
+                        )
+                    )
+                    # 응답 경계 — 클라이언트 재생 완료 추정 대기
+                    if self._b_playback_total_bytes > 0:
+                        audio_duration_s = self._b_playback_total_bytes / _PCM16_24K_BPS
+                        elapsed = time.time() - self._b_playback_first_chunk_at
+                        remaining = max(audio_duration_s - elapsed, 0)
+                        if remaining > 0.05:
+                            logger.info(
+                                "B output queue: waiting %.1fs for playback (%.1fs audio, %.1fs elapsed)",
+                                remaining, audio_duration_s, elapsed,
+                            )
+                            await asyncio.sleep(remaining)
+                    self._b_playback_first_chunk_at = 0.0
+                    self._b_playback_total_bytes = 0
+
+        except asyncio.CancelledError:
+            pass
 
     # --- Local VAD 콜백 ---
 
@@ -408,6 +482,15 @@ class VoiceToVoicePipeline(BasePipeline):
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
             self._echo_cooldown_task = None
+
+    def _deactivate_echo_window(self) -> None:
+        """수신자 발화 감지 시 에코 윈도우 즉시 해제."""
+        self._in_echo_window = False
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            self._echo_cooldown_task = None
+        self._tts_first_chunk_at = 0.0
+        self._tts_total_bytes = 0
 
     def _start_echo_cooldown(self) -> None:
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
@@ -432,7 +515,7 @@ class VoiceToVoicePipeline(BasePipeline):
             audio_duration_s = total_bytes / 8000  # g711_ulaw @ 8kHz
             elapsed = time.time() - first_chunk_at if first_chunk_at > 0 else 0
             remaining_playback = max(audio_duration_s - elapsed, 0)
-            cooldown = remaining_playback + self._echo_margin_s
+            cooldown = min(remaining_playback + self._echo_margin_s, self._MAX_ECHO_WINDOW_S)
 
             await asyncio.sleep(cooldown)
             self._in_echo_window = False
@@ -447,10 +530,8 @@ class VoiceToVoicePipeline(BasePipeline):
 
     async def _on_recipient_started(self) -> None:
         if self._in_echo_window:
-            logger.debug("Ignoring speech during echo window (likely TTS echo)")
-            self.call.call_metrics.echo_loops_detected += 1
-            await self._send_metrics_snapshot()
-            return
+            logger.info("Recipient speech during echo window — breaking echo gate")
+            self._deactivate_echo_window()
 
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
@@ -458,9 +539,6 @@ class VoiceToVoicePipeline(BasePipeline):
             await self.interrupt.on_recipient_speech_started()
 
     async def _on_recipient_stopped(self) -> None:
-        if self._in_echo_window:
-            logger.debug("Ignoring speech_stopped during echo window")
-            return
         await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
 
