@@ -58,6 +58,12 @@ export default function ChatContainer() {
   // Call 메타데이터 (targetName 등) - 통화 중에만 폴링
   const { call, refetch } = useCallPolling(callingCallId ?? '');
 
+  // 통화 끝났는지 판별 (입력 활성화용)
+  const isCallEnded = callStatus === 'ended';
+  const isCallActive = isCalling && !isCallEnded;
+  const isTextMode = callingCommunicationMode === 'text_to_voice';
+  const isCallTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
+
   // 통화 상태 추적 (연결 중/연결됨/종료 상태 메시지용)
   const prevCallStatusRef = useRef(callStatus);
   const shownStatusesRef = useRef<Set<string>>(new Set());
@@ -97,15 +103,11 @@ export default function ChatContainer() {
 
   // AI 답변 완료 후 입력창 자동 포커스
   useEffect(() => {
-    if (prevLoadingRef.current && !isLoading && !isComplete && !isCalling) {
+    if (prevLoadingRef.current && !isLoading && !isComplete && !isCallActive) {
       chatInputRef.current?.focus();
     }
     prevLoadingRef.current = isLoading;
-  }, [isLoading, isComplete, isCalling]);
-
-  const isCallEnded = callStatus === 'ended';
-  const isTextMode = callingCommunicationMode === 'text_to_voice';
-  const isCallTerminal = call?.status === 'COMPLETED' || call?.status === 'FAILED';
+  }, [isLoading, isComplete, isCallActive]);
 
   // AI 음성 자막 제외 (사용자 입력의 번역이므로 중복 표시 불필요)
   const visibleCaptions = useMemo(
@@ -157,7 +159,7 @@ export default function ChatContainer() {
         <button
           type="button"
           onClick={handleNewConversation}
-          disabled={isLoading || isCalling}
+          disabled={isLoading || isCallActive}
           className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors disabled:opacity-40"
         >
           <Plus className="size-3.5" />
@@ -258,7 +260,7 @@ export default function ChatContainer() {
       )}
 
       {/* 입력 영역: 모드별 전환 */}
-      {isCalling && isTextMode && !isCallEnded ? (
+      {isCallActive && isTextMode ? (
         <CallChatInput
           onSend={(text) => sendText?.(text)}
           disabled={callStatus !== 'connected'}
@@ -267,9 +269,9 @@ export default function ChatContainer() {
         <ChatInput
           ref={chatInputRef}
           onSend={sendMessage}
-          disabled={isLoading || isComplete || isCalling}
+          disabled={isLoading || isComplete || isCallActive}
           placeholder={
-            isCalling
+            isCallActive
               ? t("callingPlaceholder")
               : isComplete
                 ? t("completePlaceholder")
