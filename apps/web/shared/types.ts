@@ -102,6 +102,8 @@ export function createEmptyCollectedData(): CollectedData {
     customer_name: null,
     party_size: null,
     special_request: null,
+    source_language: null,
+    target_language: null,
   };
 }
 
@@ -162,6 +164,8 @@ export function mergeCollectedData(
     customer_name: mergeString(existing.customer_name, incoming.customer_name),
     party_size: mergeNumber(existing.party_size, incoming.party_size),
     special_request: mergeString(existing.special_request, incoming.special_request),
+    source_language: mergeString(existing.source_language ?? null, incoming.source_language),
+    target_language: mergeString(existing.target_language ?? null, incoming.target_language),
   };
 }
 
