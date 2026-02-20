@@ -336,6 +336,7 @@ class DualSessionManager:
                 input_audio_format="pcm16",
                 output_audio_format="g711_ulaw",  # Twilio로 출력
                 vad_mode=vad_mode,
+                input_audio_transcription={"model": "whisper-1", "language": source_language},
             ),
         )
 

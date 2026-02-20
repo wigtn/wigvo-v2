@@ -51,7 +51,7 @@ class VoiceToVoicePipeline(BasePipeline):
     # mu-law silence byte (0xFF → linear PCM ≈ 0, VAD가 silence로 인식)
     _MULAW_SILENCE = b"\xff"
     # 에코 윈도우 최대 지속 시간 (수신자 발화 차단 방지)
-    _MAX_ECHO_WINDOW_S = 2.0
+    _MAX_ECHO_WINDOW_S = 1.2
 
     def __init__(
         self,
@@ -96,6 +96,7 @@ class VoiceToVoicePipeline(BasePipeline):
             on_guardrail_event=self._on_guardrail_event,
             on_function_call_result=self._on_function_call_result,
             on_transcript_complete=self._on_turn_complete,
+            on_user_transcription=self._on_user_transcription,
         )
 
         # Session B 핸들러: 수신자 -> User
@@ -158,7 +159,7 @@ class VoiceToVoicePipeline(BasePipeline):
         # 동적 cooldown: TTS 길이에 비례하는 cooldown 계산용
         self._tts_first_chunk_at: float = 0.0
         self._tts_total_bytes: int = 0
-        _ECHO_ROUND_TRIP_S = 0.5  # 에코 왕복 마진 (Relay → Twilio → 전화 → Twilio → Relay)
+        _ECHO_ROUND_TRIP_S = 0.3  # 에코 왕복 마진 (Relay → Twilio → 전화 → Twilio → Relay)
         self._echo_margin_s = _ECHO_ROUND_TRIP_S
 
         # Session B 출력 큐 (수신자 TTS 순차 스트리밍)
@@ -347,6 +348,20 @@ class VoiceToVoicePipeline(BasePipeline):
         self._tts_total_bytes += len(audio_bytes)
         self._activate_echo_window()
         await self.twilio_handler.send_audio(audio_bytes)
+
+    async def _on_user_transcription(self, text: str) -> None:
+        """사용자 원문 STT → App 채팅창에 표시."""
+        await self._app_ws_send(
+            WsMessage(
+                type=WsMessageType.CAPTION,
+                data={
+                    "role": "user",
+                    "text": text,
+                    "direction": "outbound",
+                    "language": self.call.source_language,
+                },
+            )
+        )
 
     async def _on_session_a_caption(self, role: str, text: str) -> None:
         await self._app_ws_send(

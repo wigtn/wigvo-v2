@@ -37,6 +37,7 @@ class SessionAHandler:
         on_guardrail_event: Callable[[dict], Coroutine] | None = None,
         on_function_call_result: Callable[[str, dict], Coroutine] | None = None,
         on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
+        on_user_transcription: Callable[[str], Coroutine] | None = None,
     ):
         """
         Args:
@@ -58,6 +59,7 @@ class SessionAHandler:
         self._on_caption = on_caption
         self._on_response_done = on_response_done
         self._on_transcript_complete = on_transcript_complete
+        self._on_user_transcription = on_user_transcription
         self._guardrail = guardrail
         self._on_guardrail_filler = on_guardrail_filler
         self._on_guardrail_corrected_tts = on_guardrail_corrected_tts
@@ -97,6 +99,10 @@ class SessionAHandler:
         )
         self.session.on(
             "input_audio_buffer.speech_stopped", self._handle_user_speech_stopped
+        )
+        self.session.on(
+            "conversation.item.input_audio_transcription.completed",
+            self._handle_user_transcription,
         )
 
         # Function Calling 이벤트 (Agent Mode)
@@ -289,6 +295,15 @@ class SessionAHandler:
         """Server VAD가 User 발화 종료를 감지."""
         self._user_input_at = time.time()
         logger.debug("[SessionA] User speech stopped")
+
+    async def _handle_user_transcription(self, event: dict[str, Any]) -> None:
+        """User 음성 STT 결과 (Whisper) → App에 원문 자막으로 전달."""
+        transcript = event.get("transcript", "")
+        if not transcript:
+            return
+        logger.info("[SessionA] User STT: %s", transcript[:80])
+        if self._on_user_transcription:
+            await self._on_user_transcription(transcript)
 
     # --- Function Calling 핸들러 (Agent Mode) ---
 
