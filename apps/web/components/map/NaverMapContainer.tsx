@@ -34,7 +34,7 @@ function loadNaverMapsScript(clientId: string): Promise<void> {
 
   _scriptLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `${NAVER_MAPS_SRC}?ncpKeyId=${clientId}`;
+    script.src = `${NAVER_MAPS_SRC}?ncpClientId=${clientId}`;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Naver Maps script load failed"));

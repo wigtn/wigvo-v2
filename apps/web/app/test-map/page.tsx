@@ -137,7 +137,7 @@ export default function TestMapPage() {
 
       {clientId && (
         <Script
-          src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}`}
+          src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`}
           onLoad={handleScriptLoad}
           onError={handleScriptError}
         />
