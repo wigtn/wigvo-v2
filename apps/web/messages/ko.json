@@ -298,8 +298,7 @@
   "sidebar": {
     "menu": "메뉴",
     "newChat": "새 대화",
-    "history": "대화 기록",
-    "reservations": "예약 기록",
+    "history": "통화 기록",
     "pricing": "요금제",
     "recentChats": "최근 대화",
     "viewAllReservations": "전체 예약 기록 보기"

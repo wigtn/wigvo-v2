@@ -8,7 +8,6 @@ import {
   X,
   MessageSquarePlus,
   History,
-  Calendar,
   CreditCard,
   Zap,
   LogOut,
@@ -59,7 +58,7 @@ export default function MobileDrawer({
     };
   }, [isSidebarOpen, setSidebarOpen]);
 
-  const handleMenuClick = (menu: "chat" | "conversations" | "reservations" | "pricing") => {
+  const handleMenuClick = (menu: "chat" | "conversations" | "pricing") => {
     if (menu === "chat") {
       onNewConversation();
     }
@@ -122,13 +121,6 @@ export default function MobileDrawer({
               isCollapsed={false}
               isActive={activeMenu === "conversations"}
               onClick={() => handleMenuClick("conversations")}
-            />
-            <SidebarMenu
-              icon={<Calendar className="size-[18px]" />}
-              label={t("reservations")}
-              isCollapsed={false}
-              isActive={activeMenu === "reservations"}
-              onClick={() => handleMenuClick("reservations")}
             />
             <SidebarMenu
               icon={<CreditCard className="size-[18px]" />}

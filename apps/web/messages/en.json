@@ -298,8 +298,7 @@
   "sidebar": {
     "menu": "Menu",
     "newChat": "New Chat",
-    "history": "Chat History",
-    "reservations": "Reservations",
+    "history": "Call History",
     "pricing": "Pricing",
     "recentChats": "Recent Chats",
     "viewAllReservations": "View All Reservations"

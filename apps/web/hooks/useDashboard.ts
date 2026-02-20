@@ -17,7 +17,7 @@ interface DashboardState {
   // 사이드바
   isSidebarOpen: boolean;
   isSidebarCollapsed: boolean;
-  activeMenu: 'chat' | 'conversations' | 'reservations' | 'pricing';
+  activeMenu: 'chat' | 'conversations' | 'pricing';
 
   // 지도
   mapCenter: { lat: number; lng: number } | null;
@@ -39,7 +39,7 @@ interface DashboardState {
   // Actions
   setSidebarOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
-  setActiveMenu: (menu: 'chat' | 'conversations' | 'reservations' | 'pricing') => void;
+  setActiveMenu: (menu: 'chat' | 'conversations' | 'pricing') => void;
   setMapCenter: (center: { lat: number; lng: number } | null) => void;
   setMapZoom: (zoom: number) => void;
   setSearchResults: (results: NaverPlaceResult[]) => void;

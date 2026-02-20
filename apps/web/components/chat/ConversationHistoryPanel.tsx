@@ -293,7 +293,7 @@ export default function ConversationHistoryPanel() {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-[#0F172A] tracking-tight">
-                  대화 기록
+                  통화 기록
                 </h2>
                 {!listLoading && !listError && (
                   <p className="text-[10px] text-[#94A3B8] mt-0.5">
