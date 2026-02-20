@@ -3,6 +3,18 @@
 import { create } from 'zustand';
 import type { CallMode, CaptionEntry, CommunicationMode } from '@/shared/call-types';
 
+export interface CallMetrics {
+  session_a_latencies_ms: number[];
+  session_b_e2e_latencies_ms: number[];
+  session_b_stt_latencies_ms: number[];
+  first_message_latency_ms: number;
+  turn_count: number;
+  echo_suppressions: number;
+  hallucinations_blocked: number;
+  vad_false_triggers: number;
+  echo_loops_detected: number;
+}
+
 type CallStatus = 'idle' | 'connecting' | 'waiting' | 'connected' | 'ended';
 type TranslationState = 'idle' | 'processing' | 'done';
 
@@ -17,6 +29,7 @@ interface RelayCallStoreState {
   isRecording: boolean;
   isPlaying: boolean;
   error: string | null;
+  metrics: CallMetrics | null;
 
   // 액션 (Provider가 주입)
   startCall: ((callId: string, relayWsUrl: string, mode: CallMode) => void) | null;
@@ -39,6 +52,7 @@ const initialState = {
   isRecording: false,
   isPlaying: false,
   error: null as string | null,
+  metrics: null as CallMetrics | null,
   startCall: null as RelayCallStoreState['startCall'],
   endCall: null as RelayCallStoreState['endCall'],
   sendText: null as RelayCallStoreState['sendText'],

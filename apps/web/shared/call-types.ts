@@ -23,6 +23,7 @@ export enum WsMessageType {
   SESSION_RECOVERY = 'session.recovery',
   GUARDRAIL_TRIGGERED = 'guardrail.triggered',
   TRANSLATION_STATE = 'translation.state',
+  METRICS = 'metrics',
   ERROR = 'error',
 }
 

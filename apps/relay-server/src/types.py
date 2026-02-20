@@ -124,6 +124,7 @@ class WsMessageType(str, Enum):
     SESSION_RECOVERY = "session.recovery"
     GUARDRAIL_TRIGGERED = "guardrail.triggered"
     TRANSLATION_STATE = "translation.state"
+    METRICS = "metrics"
     ERROR = "error"
 
 
@@ -239,6 +240,12 @@ class CallMetrics(BaseModel):
     turn_count: int = 0
     # 에코 윈도우 활성화 횟수
     echo_suppressions: int = 0
+    # STT 환각 차단 횟수
+    hallucinations_blocked: int = 0
+    # VAD false trigger 횟수 (speech_started → 유효 번역 없이 종료)
+    vad_false_triggers: int = 0
+    # Echo window 중 speech 감지 횟수 (에코가 발화로 오인)
+    echo_loops_detected: int = 0
 
 
 class ActiveCall(BaseModel):

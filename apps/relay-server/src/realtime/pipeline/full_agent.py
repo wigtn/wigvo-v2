@@ -57,6 +57,7 @@ class FullAgentPipeline(TextToVoicePipeline):
         self.context_manager.add_turn(role, text)
         if role == "recipient":
             await self._forward_recipient_to_session_a(text)
+        await self._send_metrics_snapshot()
 
     async def _forward_recipient_to_session_a(self, text: str) -> None:
         """수신자 번역 텍스트를 Session A에 전달한다."""

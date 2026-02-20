@@ -12,6 +12,7 @@ import {
 import { useRelayWebSocket } from './useRelayWebSocket';
 import { useClientVad } from './useClientVad';
 import { useWebAudioPlayer } from './useWebAudioPlayer';
+import { useRelayCallStore, type CallMetrics } from './useRelayCallStore';
 
 type CallStatus = 'idle' | 'connecting' | 'waiting' | 'connected' | 'ended';
 type TranslationState = 'idle' | 'processing' | 'done';
@@ -201,6 +202,10 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
           player.clearQueue();
           break;
         }
+
+        case WsMessageType.METRICS:
+          useRelayCallStore.getState().syncState({ metrics: msg.data as unknown as CallMetrics });
+          break;
 
         case WsMessageType.ERROR: {
           const message = (msg.data.message as string) ?? 'Unknown error';

@@ -335,6 +335,7 @@ class VoiceToVoicePipeline(BasePipeline):
                 data={"state": "done"},
             )
         )
+        await self._send_metrics_snapshot()
 
     # --- Session B 콜백 ---
 
@@ -437,6 +438,8 @@ class VoiceToVoicePipeline(BasePipeline):
     async def _on_recipient_started(self) -> None:
         if self._in_echo_window:
             logger.debug("Ignoring speech during echo window (likely TTS echo)")
+            self.call.call_metrics.echo_loops_detected += 1
+            await self._send_metrics_snapshot()
             return
 
         if not self.call.first_message_sent:
@@ -457,6 +460,7 @@ class VoiceToVoicePipeline(BasePipeline):
         self.context_manager.add_turn(role, text)
         if role == "recipient" and self.call.mode == CallMode.AGENT:
             await self._forward_recipient_to_session_a(text)
+        await self._send_metrics_snapshot()
 
     async def _forward_recipient_to_session_a(self, text: str) -> None:
         self.call.transcript_history.append({"role": "recipient", "text": text})

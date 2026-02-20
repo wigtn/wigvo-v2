@@ -76,6 +76,8 @@ class SessionBHandler:
         self._on_recipient_speech_stopped = on_recipient_speech_stopped
         self._on_transcript_complete = on_transcript_complete
         self._is_recipient_speaking = False
+        self._speech_started_count: int = 0
+        self._transcript_completed_count: int = 0
         self._output_suppressed = False
         self._pending_output: list[tuple[str, Any]] = []
         self._speech_started_at: float = 0.0  # 파이프라인 지연 계측용
@@ -163,6 +165,7 @@ class SessionBHandler:
         # 축적된 무음/노이즈 제거 → Whisper 할루시네이션 방지
         await self.session.clear_input_buffer()
 
+        self._speech_started_count += 1
         self._is_recipient_speaking = True
         self._speech_started_at = time.time()
         self._timeout_forced = False
@@ -302,6 +305,10 @@ class SessionBHandler:
 
     async def _save_transcript_and_notify(self, transcript: str) -> None:
         """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
+        self._transcript_completed_count += 1
+        if self._call:
+            self._call.call_metrics.vad_false_triggers = max(0, self._speech_started_count - self._transcript_completed_count)
+
         if self._speech_started_at > 0:
             e2e_ms = (time.time() - self._speech_started_at) * 1000
             logger.info(
@@ -362,6 +369,7 @@ class SessionBHandler:
         지연되는 경우에도 max_speech_duration_s 이내에 번역이 시작되도록 한다.
         """
         self._is_recipient_speaking = True
+        self._speech_started_count += 1
         self._speech_started_at = time.time()
         self._timeout_forced = False  # 새 발화 시작 → timeout 플래그 초기화
 
@@ -490,6 +498,8 @@ class SessionBHandler:
         # Whisper STT 할루시네이션 필터링
         if transcript.strip() in _STT_HALLUCINATION_BLOCKLIST:
             logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
             return
         if self._output_suppressed:
             self._pending_output.append(("original_caption", ("recipient", transcript)))

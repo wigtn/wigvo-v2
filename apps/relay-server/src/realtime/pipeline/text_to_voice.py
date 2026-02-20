@@ -341,6 +341,7 @@ class TextToVoicePipeline(BasePipeline):
                 data={"state": "done"},
             )
         )
+        await self._send_metrics_snapshot()
 
     # --- Session B 콜백 ---
 
@@ -381,6 +382,8 @@ class TextToVoicePipeline(BasePipeline):
     async def _on_recipient_started(self) -> None:
         if self._in_echo_window:
             logger.debug("Ignoring speech during echo window (likely TTS echo)")
+            self.call.call_metrics.echo_loops_detected += 1
+            await self._send_metrics_snapshot()
             return
 
         if not self.call.first_message_sent:
@@ -454,6 +457,7 @@ class TextToVoicePipeline(BasePipeline):
 
     async def _on_turn_complete(self, role: str, text: str) -> None:
         self.context_manager.add_turn(role, text)
+        await self._send_metrics_snapshot()
 
     # --- Guardrail 콜백 ---
 

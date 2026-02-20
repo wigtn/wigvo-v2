@@ -4,8 +4,9 @@ AudioRouter가 CommunicationMode에 따라 적절한 Pipeline 구현체에 위�
 """
 
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Coroutine
 
-from src.types import ActiveCall
+from src.types import ActiveCall, WsMessage, WsMessageType
 
 
 class BasePipeline(ABC):
@@ -17,6 +18,15 @@ class BasePipeline(ABC):
 
     def __init__(self, call: ActiveCall):
         self.call = call
+        self._app_ws_send: Callable[[WsMessage], Coroutine[Any, Any, None]] | None = None
+
+    async def _send_metrics_snapshot(self) -> None:
+        """현재 CallMetrics 스냅샷을 App에 전송."""
+        if self._app_ws_send:
+            await self._app_ws_send(WsMessage(
+                type=WsMessageType.METRICS,
+                data=self.call.call_metrics.model_dump(),
+            ))
 
     @abstractmethod
     async def start(self) -> None:
