@@ -231,8 +231,15 @@ class TextToVoicePipeline(BasePipeline):
         logger.debug("TextToVoice: ignoring audio commit (text-only mode)")
 
     async def handle_typing_started(self) -> None:
-        """사용자 타이핑 시작 → 수신자에게 '잠시만 기다려주세요' TTS 전송."""
+        """사용자 타이핑 시작 → 수신자에게 '잠시만 기다려주세요' TTS 전송.
+
+        첫 턴(아직 사용자 텍스트가 없을 때)에는 greeting이 방금 재생되었으므로
+        typing filler를 생략한다.
+        """
         if self._typing_filler_sent:
+            return
+        # 첫 턴: greeting 직후이므로 filler 불필요 (이슈 3)
+        if not self.call.transcript_history:
             return
         self._typing_filler_sent = True
 
@@ -245,7 +252,9 @@ class TextToVoicePipeline(BasePipeline):
         async with self._text_send_lock:
             if self.session_a.is_generating:
                 await self.session_a.wait_for_done(timeout=3.0)
-            await self.dual_session.session_a.send_text_item(filler)
+            # send_text_item 없이 create_response만 사용 (이슈 1)
+            # send_text_item은 대화 히스토리에 user 메시지로 추가되어
+            # 번역기 system prompt가 이를 사용자 발화로 해석하는 문제 방지
             await self.dual_session.session_a.create_response(
                 instructions=f'Say exactly this sentence and nothing else: "{filler}"',
             )
@@ -296,19 +305,28 @@ class TextToVoicePipeline(BasePipeline):
     async def handle_twilio_audio(self, audio_bytes: bytes) -> None:
         """수신자 음성을 Session B에 전달한다.
 
-        TTS echo 방지 (Silence Injection):
+        TTS echo 방지 (Silence Injection + Energy-based Gate Breaking):
         - Echo window 중: Twilio 오디오를 무음으로 대체하여 Session B에 전송
-        - 완전 차단(return)하면 VAD가 speech_stopped을 감지할 데이터가 없어 stuck 됨
-        - 무음을 보내면: (1) 에코 오염 없음 (2) VAD가 무음으로 speech_stopped 정상 감지
+        - 단, 높은 에너지(수신자 직접 발화)를 감지하면 echo gate를 즉시 해제
+        - 에코(스피커→마이크 감쇠): RMS ~100-400 → 무음 처리
+        - 수신자 직접 발화(감쇠 없음): RMS ~500-2000+ → echo gate 해제
         """
         seq = self.ring_buffer_b.write(audio_bytes)
 
         if self.recovery_b.is_recovering or self.recovery_b.is_degraded:
             return
 
-        # Echo Gate: echo window 중에는 무음으로 대체
+        # Echo Gate: echo window 중 에너지 기반 필터링 (V2V와 동일 패턴)
+        # 높은 에너지(수신자 직접 발화)면 echo gate를 즉시 해제
         if self._in_echo_window:
-            effective_audio = bytes([0xFF] * len(audio_bytes))  # mu-law 무음
+            rms = _ulaw_rms(audio_bytes)
+            if rms > settings.echo_energy_threshold_rms:
+                logger.info("High energy (RMS=%.0f) during echo window — breaking echo gate", rms)
+                self.call.call_metrics.echo_gate_breakthroughs += 1
+                self._deactivate_echo_window()
+                effective_audio = audio_bytes
+            else:
+                effective_audio = bytes([0xFF] * len(audio_bytes))  # mu-law 무음
         else:
             effective_audio = audio_bytes
 
@@ -417,10 +435,9 @@ class TextToVoicePipeline(BasePipeline):
 
     async def _on_recipient_started(self) -> None:
         if self._in_echo_window:
-            logger.debug("Ignoring speech during echo window (likely TTS echo)")
-            self.call.call_metrics.echo_loops_detected += 1
-            await self._send_metrics_snapshot()
-            return
+            # V2V와 동일: 수신자 발화 감지 시 echo gate 즉시 해제
+            logger.info("Recipient speech during echo window — breaking echo gate")
+            self._deactivate_echo_window()
 
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
@@ -428,9 +445,6 @@ class TextToVoicePipeline(BasePipeline):
             await self.interrupt.on_recipient_speech_started()
 
     async def _on_recipient_stopped(self) -> None:
-        if self._in_echo_window:
-            logger.debug("Ignoring speech_stopped during echo window")
-            return
         await self.context_manager.inject_context(self.dual_session.session_b)
         await self.interrupt.on_recipient_speech_stopped()
 
@@ -454,6 +468,15 @@ class TextToVoicePipeline(BasePipeline):
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
             self._echo_cooldown_task = None
+
+    def _deactivate_echo_window(self) -> None:
+        """수신자 발화 감지 시 에코 윈도우 즉시 해제."""
+        self._in_echo_window = False
+        if self._echo_cooldown_task and not self._echo_cooldown_task.done():
+            self._echo_cooldown_task.cancel()
+            self._echo_cooldown_task = None
+        self._tts_first_chunk_at = 0.0
+        self._tts_total_bytes = 0
 
     def _start_echo_cooldown(self) -> None:
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
