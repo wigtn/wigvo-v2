@@ -3,10 +3,15 @@
 AudioRouter가 CommunicationMode에 따라 적절한 Pipeline 구현체에 위임한다.
 """
 
+import asyncio
+import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine
 
 from src.types import ActiveCall, WsMessage, WsMessageType
+
+logger = logging.getLogger(__name__)
 
 
 class BasePipeline(ABC):
@@ -16,17 +21,83 @@ class BasePipeline(ABC):
     AudioRouter가 모드에 상관없이 동일한 인터페이스로 호출할 수 있다.
     """
 
+    _DB_SAVE_DEBOUNCE_S: float = 5.0
+
     def __init__(self, call: ActiveCall):
         self.call = call
         self._app_ws_send: Callable[[WsMessage], Coroutine[Any, Any, None]] | None = None
+        # Incremental metrics persistence
+        self._last_db_save_at: float = 0.0
+        self._db_save_task: asyncio.Task | None = None
 
     async def _send_metrics_snapshot(self) -> None:
-        """현재 CallMetrics 스냅샷을 App에 전송."""
+        """현재 CallMetrics 스냅샷을 App에 전송 + DB에 incremental 저장."""
         if self._app_ws_send:
             await self._app_ws_send(WsMessage(
                 type=WsMessageType.METRICS,
                 data=self.call.call_metrics.model_dump(),
             ))
+        # DB incremental save (debounced, fire-and-forget)
+        await self._maybe_save_metrics_to_db()
+
+    async def _maybe_save_metrics_to_db(self) -> None:
+        """Debounce 판정 후 즉시 or 지연 DB 저장."""
+        now = time.time()
+        elapsed = now - self._last_db_save_at
+
+        if elapsed >= self._DB_SAVE_DEBOUNCE_S:
+            # 충분한 시간 경과 → 즉시 저장
+            self._last_db_save_at = now
+            # 대기 중인 deferred task 취소
+            if self._db_save_task and not self._db_save_task.done():
+                self._db_save_task.cancel()
+                self._db_save_task = None
+            asyncio.create_task(self._persist_metrics_snapshot())
+        else:
+            # debounce 구간 → 기존 deferred task 없으면 예약
+            if self._db_save_task is None or self._db_save_task.done():
+                delay = self._DB_SAVE_DEBOUNCE_S - elapsed
+                self._db_save_task = asyncio.create_task(self._deferred_persist(delay))
+
+    async def _deferred_persist(self, delay_s: float) -> None:
+        """지연 후 DB 저장 (CancelledError 안전)."""
+        try:
+            await asyncio.sleep(delay_s)
+            self._last_db_save_at = time.time()
+            await self._persist_metrics_snapshot()
+        except asyncio.CancelledError:
+            pass
+
+    async def _persist_metrics_snapshot(self) -> None:
+        """실제 DB write — cleanup_call과 동일 포맷. 에러 격리."""
+        call = self.call
+        if not call.call_id:
+            return
+        try:
+            from src.db.supabase_client import get_client
+
+            client = await get_client()
+            m = call.call_metrics
+            data = {
+                "call_result_data": {
+                    **call.call_result_data,
+                    "metrics": m.model_dump(),
+                    "cost_usd": round(call.cost_tokens.cost_usd, 6),
+                },
+                "transcript_bilingual": [t.model_dump() for t in call.transcript_bilingual],
+                "cost_tokens": call.cost_tokens.model_dump(),
+                "total_tokens": call.cost_tokens.total,
+            }
+            await client.table("calls").update(data).eq("id", call.call_id).execute()
+            logger.debug("Incremental metrics saved for call %s", call.call_id)
+        except Exception:
+            logger.warning("Failed to save incremental metrics for call %s", call.call_id, exc_info=True)
+
+    def _cancel_db_save_task(self) -> None:
+        """대기 중인 deferred DB save task를 취소한다."""
+        if self._db_save_task and not self._db_save_task.done():
+            self._db_save_task.cancel()
+            self._db_save_task = None
 
     @abstractmethod
     async def start(self) -> None:

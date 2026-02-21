@@ -223,6 +223,8 @@ class VoiceToVoicePipeline(BasePipeline):
             except asyncio.CancelledError:
                 pass
 
+        self._cancel_db_save_task()
+
         if self.local_vad:
             self.local_vad.reset()
 
