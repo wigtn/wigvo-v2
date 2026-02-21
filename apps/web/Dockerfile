@@ -13,12 +13,12 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # 빌드 시 필요한 환경변수 (NEXT_PUBLIC_* 은 빌드타임에 주입)
+# OPENAI_API_KEY는 런타임 전용 → Cloud Run env에서 주입
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_RELAY_WS_URL
 ARG NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
 ARG NEXT_PUBLIC_BASE_URL
-ARG OPENAI_API_KEY
 
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -36,8 +36,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

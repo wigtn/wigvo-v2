@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -34,6 +35,27 @@ class TranslationPair:
     hypothesis: str     # 실시간 번역 출력
     reference: str = "" # GPT-4o 오프라인 번역 (나중에 채움)
     direction: str = "" # e.g. "en→ko" or "ko→en"
+
+
+@dataclass
+class SystemMetrics:
+    """통화별 시스템 메트릭 집계."""
+    num_calls: int = 0
+    total_turns: int = 0
+    # Latency (ms)
+    session_a_latencies: list[float] = field(default_factory=list)
+    session_b_e2e_latencies: list[float] = field(default_factory=list)
+    first_message_latencies: list[float] = field(default_factory=list)
+    # Echo & VAD
+    echo_suppressions: int = 0
+    echo_gate_breakthroughs: int = 0
+    echo_loops_detected: int = 0
+    hallucinations_blocked: int = 0
+    vad_false_triggers: int = 0
+    # Interrupt & Guardrail
+    interrupt_count: int = 0
+    guardrail_level2_count: int = 0
+    guardrail_level3_count: int = 0
 
 
 @dataclass
@@ -62,11 +84,13 @@ def fetch_transcripts(call_id: str | None = None, limit: int = 10) -> list[dict]
 
     client = create_client(url, key)
 
-    query = client.table("calls").select("call_id, call_result_data, source_language, target_language")
+    query = client.table("calls").select(
+        "id, transcript_bilingual, source_language, target_language, call_result_data"
+    )
     if call_id:
-        query = query.eq("call_id", call_id)
+        query = query.eq("id", call_id)
     else:
-        query = query.not_.is_("call_result_data", "null").order("created_at", desc=True).limit(limit)
+        query = query.not_.is_("transcript_bilingual", "null").order("created_at", desc=True).limit(limit)
 
     result = query.execute()
     return result.data
@@ -84,15 +108,9 @@ def extract_pairs(calls: list[dict]) -> tuple[list[TranslationPair], list[Transl
     for call in calls:
         src_lang = call.get("source_language", "en")
         tgt_lang = call.get("target_language", "ko")
-        result_data = call.get("call_result_data", {})
-        if not result_data:
-            continue
 
-        # call_result_data에 저장된 transcript를 먼저 확인
-        # (persist_call에서 metrics와 함께 저장되므로)
-        transcripts = result_data.get("transcripts", [])
+        transcripts = call.get("transcript_bilingual", [])
         if not transcripts:
-            # fallback: call_result_data 내의 다른 구조 탐색
             continue
 
         for entry in transcripts:
@@ -120,6 +138,45 @@ def extract_pairs(calls: list[dict]) -> tuple[list[TranslationPair], list[Transl
                 ))
 
     return user_pairs, recipient_pairs
+
+
+def extract_system_metrics(calls: list[dict]) -> SystemMetrics:
+    """call_result_data.metrics에서 시스템 메트릭을 집계한다."""
+    sm = SystemMetrics()
+    for call in calls:
+        result_data = call.get("call_result_data") or {}
+        metrics = result_data.get("metrics")
+        if not metrics:
+            continue
+        sm.num_calls += 1
+        sm.total_turns += metrics.get("turn_count", 0)
+        sm.session_a_latencies.extend(metrics.get("session_a_latencies_ms", []))
+        sm.session_b_e2e_latencies.extend(metrics.get("session_b_e2e_latencies_ms", []))
+        fm = metrics.get("first_message_latency_ms", 0)
+        if fm > 0:
+            sm.first_message_latencies.append(fm)
+        sm.echo_suppressions += metrics.get("echo_suppressions", 0)
+        sm.echo_gate_breakthroughs += metrics.get("echo_gate_breakthroughs", 0)
+        sm.echo_loops_detected += metrics.get("echo_loops_detected", 0)
+        sm.hallucinations_blocked += metrics.get("hallucinations_blocked", 0)
+        sm.vad_false_triggers += metrics.get("vad_false_triggers", 0)
+        sm.interrupt_count += metrics.get("interrupt_count", 0)
+        sm.guardrail_level2_count += metrics.get("guardrail_level2_count", 0)
+        sm.guardrail_level3_count += metrics.get("guardrail_level3_count", 0)
+    return sm
+
+
+def _percentile(values: list[float], p: float) -> float:
+    """리스트에서 p-th 백분위수를 계산한다."""
+    if not values:
+        return 0.0
+    sorted_v = sorted(values)
+    k = (len(sorted_v) - 1) * (p / 100)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return sorted_v[int(k)]
+    return sorted_v[f] * (c - k) + sorted_v[c] * (k - f)
 
 
 def generate_references(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
@@ -183,21 +240,71 @@ def compute_scores(pairs: list[TranslationPair]) -> EvalResult:
     )
 
 
-def print_results(results: list[EvalResult]) -> None:
+def print_results(results: list[EvalResult], sys_metrics: SystemMetrics | None = None) -> None:
     """결과를 테이블 형식으로 출력한다."""
     print("\n" + "=" * 70)
-    print("WIGVO Translation Quality Evaluation")
+    print("WIGVO Evaluation Results")
     print("=" * 70)
 
+    # --- System Metrics ---
+    if sys_metrics and sys_metrics.num_calls > 0:
+        sm = sys_metrics
+        print(f"\n[System Metrics] {sm.num_calls} calls, {sm.total_turns} turns")
+
+        if sm.session_a_latencies:
+            print(f"  Session A Latency (User→Recipient):")
+            print(f"    P50={_percentile(sm.session_a_latencies, 50):.0f}ms  "
+                  f"P95={_percentile(sm.session_a_latencies, 95):.0f}ms  "
+                  f"Mean={sum(sm.session_a_latencies)/len(sm.session_a_latencies):.0f}ms  "
+                  f"N={len(sm.session_a_latencies)}")
+        if sm.session_b_e2e_latencies:
+            print(f"  Session B Latency (Recipient→User):")
+            print(f"    P50={_percentile(sm.session_b_e2e_latencies, 50):.0f}ms  "
+                  f"P95={_percentile(sm.session_b_e2e_latencies, 95):.0f}ms  "
+                  f"Mean={sum(sm.session_b_e2e_latencies)/len(sm.session_b_e2e_latencies):.0f}ms  "
+                  f"N={len(sm.session_b_e2e_latencies)}")
+        if sm.first_message_latencies:
+            print(f"  First Message Latency:")
+            print(f"    P50={_percentile(sm.first_message_latencies, 50):.0f}ms  "
+                  f"P95={_percentile(sm.first_message_latencies, 95):.0f}ms  "
+                  f"N={len(sm.first_message_latencies)}")
+
+        print(f"  Echo: suppressions={sm.echo_suppressions}  breakthroughs={sm.echo_gate_breakthroughs}  "
+              f"loops={sm.echo_loops_detected}")
+        print(f"  VAD: false_triggers={sm.vad_false_triggers}  hallucinations_blocked={sm.hallucinations_blocked}")
+        print(f"  Interrupt: {sm.interrupt_count}  Guardrail: L2={sm.guardrail_level2_count} L3={sm.guardrail_level3_count}")
+
+    # --- Translation Quality ---
     for r in results:
         if r.num_segments == 0:
             continue
-        print(f"\nDirection: {r.direction} ({r.num_segments} segments)")
+        print(f"\n[Translation Quality] {r.direction} ({r.num_segments} segments)")
         print(f"  BLEU:     {r.bleu:.1f}")
         print(f"  chrF2++:  {r.chrf:.1f}")
 
-    # LaTeX 테이블
-    print("\n--- LaTeX Table ---")
+    # --- LaTeX: System Metrics ---
+    if sys_metrics and sys_metrics.num_calls > 0:
+        sm = sys_metrics
+        print("\n--- LaTeX: System Performance (Table) ---")
+        print(r"\begin{tabular}{lrrrr}")
+        print(r"\hline")
+        print(r"Metric & P50 & P95 & Mean & N \\")
+        print(r"\hline")
+        if sm.session_a_latencies:
+            n = len(sm.session_a_latencies)
+            print(f"Session A Latency (ms) & {_percentile(sm.session_a_latencies, 50):.0f} & "
+                  f"{_percentile(sm.session_a_latencies, 95):.0f} & "
+                  f"{sum(sm.session_a_latencies)/n:.0f} & {n} \\\\")
+        if sm.session_b_e2e_latencies:
+            n = len(sm.session_b_e2e_latencies)
+            print(f"Session B Latency (ms) & {_percentile(sm.session_b_e2e_latencies, 50):.0f} & "
+                  f"{_percentile(sm.session_b_e2e_latencies, 95):.0f} & "
+                  f"{sum(sm.session_b_e2e_latencies)/n:.0f} & {n} \\\\")
+        print(r"\hline")
+        print(r"\end{tabular}")
+
+    # --- LaTeX: Translation Quality ---
+    print("\n--- LaTeX: Translation Quality (Table) ---")
     print(r"\begin{tabular}{lrrr}")
     print(r"\hline")
     print(r"Direction & Segments & BLEU & chrF2++ \\")
@@ -221,11 +328,43 @@ def print_results(results: list[EvalResult]) -> None:
             print()
 
 
-def save_results(results: list[EvalResult], output_path: str) -> None:
+def save_results(
+    results: list[EvalResult],
+    output_path: str,
+    sys_metrics: SystemMetrics | None = None,
+) -> None:
     """결과를 JSON으로 저장한다."""
-    data = []
+    output: dict = {}
+
+    # System metrics
+    if sys_metrics and sys_metrics.num_calls > 0:
+        sm = sys_metrics
+        output["system_metrics"] = {
+            "num_calls": sm.num_calls,
+            "total_turns": sm.total_turns,
+            "session_a_latency_ms": {
+                "p50": round(_percentile(sm.session_a_latencies, 50)),
+                "p95": round(_percentile(sm.session_a_latencies, 95)),
+                "mean": round(sum(sm.session_a_latencies) / len(sm.session_a_latencies)) if sm.session_a_latencies else 0,
+                "n": len(sm.session_a_latencies),
+            },
+            "session_b_latency_ms": {
+                "p50": round(_percentile(sm.session_b_e2e_latencies, 50)),
+                "p95": round(_percentile(sm.session_b_e2e_latencies, 95)),
+                "mean": round(sum(sm.session_b_e2e_latencies) / len(sm.session_b_e2e_latencies)) if sm.session_b_e2e_latencies else 0,
+                "n": len(sm.session_b_e2e_latencies),
+            },
+            "echo_suppressions": sm.echo_suppressions,
+            "echo_gate_breakthroughs": sm.echo_gate_breakthroughs,
+            "interrupt_count": sm.interrupt_count,
+            "guardrail_level2": sm.guardrail_level2_count,
+            "guardrail_level3": sm.guardrail_level3_count,
+        }
+
+    # Translation quality
+    output["translation_quality"] = []
     for r in results:
-        data.append({
+        output["translation_quality"].append({
             "direction": r.direction,
             "num_segments": r.num_segments,
             "bleu": round(r.bleu, 2),
@@ -239,14 +378,15 @@ def save_results(results: list[EvalResult], output_path: str) -> None:
                 for p in r.pairs
             ],
         })
+
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(output, f, ensure_ascii=False, indent=2)
     logger.info("Results saved to %s", output_path)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="WIGVO 번역 품질 평가")
-    parser.add_argument("--call-id", help="특정 통화 ID로 평가")
+    parser.add_argument("--call-id", help="특정 통화 ID로 평가 (Supabase calls.id)")
     parser.add_argument("--all", action="store_true", help="최근 N개 통화 전체 평가")
     parser.add_argument("--limit", type=int, default=10, help="--all 시 최대 통화 수")
     parser.add_argument("--output", default="eval_results.json", help="결과 저장 경로")
@@ -263,20 +403,31 @@ def main() -> None:
     logger.info("Fetching transcripts from Supabase...")
     calls = fetch_transcripts(call_id=args.call_id, limit=args.limit)
     if not calls:
-        logger.error("No calls found")
+        logger.error("No calls found with transcript_bilingual data")
         sys.exit(1)
-    logger.info("Found %d calls", len(calls))
+    logger.info("Found %d calls with transcript data", len(calls))
 
-    # 2. (원문 != 번역)인 쌍 추출
+    # 2. 시스템 메트릭 추출 (call_result_data.metrics)
+    sys_metrics = extract_system_metrics(calls)
+    logger.info("System metrics: %d calls, %d turns", sys_metrics.num_calls, sys_metrics.total_turns)
+
+    # 3. (원문 != 번역)인 쌍 추출
     user_pairs, recipient_pairs = extract_pairs(calls)
     logger.info("Extracted %d user pairs, %d recipient pairs", len(user_pairs), len(recipient_pairs))
 
     if not user_pairs and not recipient_pairs:
+        if sys_metrics.num_calls > 0:
+            # 시스템 메트릭만이라도 출력
+            logger.warning("No valid translation pairs (original_text == translated_text?)")
+            logger.warning("Showing system metrics only. Run new calls to accumulate translation data.")
+            print_results([], sys_metrics)
+            save_results([], args.output, sys_metrics)
+            return
         logger.error("No valid translation pairs found (original_text == translated_text?)")
         logger.info("Ensure transcript_bilingual has separate original/translated values.")
         sys.exit(1)
 
-    # 3. GPT-4o reference 번역 생성
+    # 4. GPT-4o reference 번역 생성
     if not args.skip_reference:
         if user_pairs:
             src = calls[0].get("source_language", "en")
@@ -290,16 +441,16 @@ def main() -> None:
             logger.info("Generating references for recipient pairs (%s→%s)...", tgt, src)
             generate_references(recipient_pairs, tgt, src)
 
-    # 4. BLEU/chrF2++ 계산
+    # 5. BLEU/chrF2++ 계산
     results = []
     if user_pairs:
         results.append(compute_scores(user_pairs))
     if recipient_pairs:
         results.append(compute_scores(recipient_pairs))
 
-    # 5. 결과 출력 + 저장
-    print_results(results)
-    save_results(results, args.output)
+    # 6. 결과 출력 + 저장
+    print_results(results, sys_metrics)
+    save_results(results, args.output, sys_metrics)
 
 
 if __name__ == "__main__":

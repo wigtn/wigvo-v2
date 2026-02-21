@@ -1,34 +1,31 @@
 # wigvo-web: push to main → auto build + deploy
 # 트리거 경로 필터: apps/web/**
 # NEXT_PUBLIC_* — 트리거 substitutions (공개 값, 브라우저 노출)
-# OPENAI_API_KEY — Secret Manager (민감 값)
+#
+# 최적화 (vs 이전 Docker 3-step):
+#   1. Kaniko: Docker daemon 불필요 → 시작 오버헤드 30-60s 제거
+#   2. build+push 1단계 통합 (이전: Docker build → Docker push → deploy)
+#   3. --cache=true: 의존성 레이어 캐시 → npm install 스킵 (변경 없을 때)
+#   4. OPENAI_API_KEY 빌드 제거: 런타임 전용 (Cloud Run env)
 
 steps:
-  # Docker 이미지 빌드
-  - name: gcr.io/cloud-builders/docker
-    entrypoint: bash
+  # Kaniko 이미지 빌드 + 푸시 (단일 단계)
+  - name: gcr.io/kaniko-project/executor:latest
     args:
-      - -c
-      - |
-        docker build \
-          --build-arg NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL} \
-          --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY} \
-          --build-arg NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL} \
-          --build-arg NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID} \
-          --build-arg NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL} \
-          --build-arg OPENAI_API_KEY=$$OPENAI_API_KEY \
-          -t asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA \
-          -t asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest \
-          -f apps/web/Dockerfile \
-          apps/web
-    secretEnv: ['OPENAI_API_KEY']
-
-  # 이미지 푸시
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - --all-tags
-      - asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web
+      - --destination=asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:$COMMIT_SHA
+      - --destination=asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web:latest
+      - --context=dir:///workspace/apps/web
+      - --dockerfile=Dockerfile
+      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - --build-arg=NEXT_PUBLIC_RELAY_WS_URL=${_NEXT_PUBLIC_RELAY_WS_URL}
+      - --build-arg=NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${_NEXT_PUBLIC_NAVER_MAP_CLIENT_ID}
+      - --build-arg=NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}
+      - --cache=true
+      - --cache-ttl=168h
+      - --cache-repo=asia-northeast3-docker.pkg.dev/$PROJECT_ID/wigvo-repo/wigvo-web/cache
+      - --snapshot-mode=redo
+      - --use-new-run
 
   # Cloud Run 배포
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -48,11 +45,6 @@ substitutions:
   _NEXT_PUBLIC_RELAY_WS_URL: ""
   _NEXT_PUBLIC_NAVER_MAP_CLIENT_ID: ""
   _NEXT_PUBLIC_BASE_URL: ""
-
-availableSecrets:
-  secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/OPENAI_API_KEY/versions/latest
-      env: OPENAI_API_KEY
 
 timeout: 1200s
 options:
