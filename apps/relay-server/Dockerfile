@@ -40,8 +40,8 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-# uvicorn 실행 — Cloud Run이 주입하는 PORT 사용
-CMD uv run uvicorn src.main:app \
+# uvicorn 실행 — venv 직접 호출 (uv run은 런타임에 dev deps를 재설치하므로 사용 금지)
+CMD .venv/bin/uvicorn src.main:app \
   --host 0.0.0.0 \
   --port ${PORT} \
   --workers 1 \
