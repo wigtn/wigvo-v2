@@ -138,6 +138,7 @@ class VoiceToVoicePipeline(BasePipeline):
             session_a=self.session_a,
             twilio_handler=twilio_handler,
             on_notify_app=self._notify_app,
+            call=call,
         )
 
         # Ring Buffers
@@ -300,6 +301,7 @@ class VoiceToVoicePipeline(BasePipeline):
             rms = _ulaw_rms(audio_bytes)
             if rms > settings.echo_energy_threshold_rms:
                 logger.info("High energy (RMS=%.0f) during echo window — breaking echo gate", rms)
+                self.call.call_metrics.echo_gate_breakthroughs += 1
                 self._deactivate_echo_window()
                 effective_audio = audio_bytes
             else:
@@ -584,6 +586,7 @@ class VoiceToVoicePipeline(BasePipeline):
         await self.dual_session.session_a.send_text(corrected_text)
 
     async def _on_guardrail_event(self, event_data: dict) -> None:
+        self.call.guardrail_events_log.append(event_data)
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.GUARDRAIL_TRIGGERED,

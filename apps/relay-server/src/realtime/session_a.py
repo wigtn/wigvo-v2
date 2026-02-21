@@ -87,6 +87,9 @@ class SessionAHandler:
         self._user_input_at: float = 0.0
         self._first_audio_received: bool = False
 
+        # 번역 품질 평가용: User STT 원문 임시 저장
+        self._last_user_stt: str = ""
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -225,16 +228,18 @@ class SessionAHandler:
         logger.info("[SessionA] Translation complete: %s", transcript[:80])
 
         # 양방향 transcript 저장 (Session A: user 발화 → 번역)
+        # original_text: User STT 원문 (source lang), translated_text: 번역 출력 (target lang)
         if self._call:
             self._call.transcript_bilingual.append(
                 TranscriptEntry(
                     role="user",
-                    original_text=transcript,
-                    translated_text=transcript,  # Session A output은 이미 번역된 텍스트
+                    original_text=self._last_user_stt or transcript,
+                    translated_text=transcript,
                     language=self._call.source_language,
                     timestamp=time.time(),
                 )
             )
+            self._last_user_stt = ""  # 사용 후 초기화
 
         # 대화 컨텍스트 콜백
         if self._on_transcript_complete:
@@ -297,10 +302,11 @@ class SessionAHandler:
         logger.debug("[SessionA] User speech stopped")
 
     async def _handle_user_transcription(self, event: dict[str, Any]) -> None:
-        """User 음성 STT 결과 (Whisper) → App에 원문 자막으로 전달."""
+        """User 음성 STT 결과 (Whisper) → App에 원문 자막으로 전달 + 원문 임시 저장."""
         transcript = event.get("transcript", "")
         if not transcript:
             return
+        self._last_user_stt = transcript  # 번역 품질 평가용 원문 저장
         logger.info("[SessionA] User STT: %s", transcript[:80])
         if self._on_user_transcription:
             await self._on_user_transcription(transcript)
@@ -370,6 +376,9 @@ class SessionAHandler:
         if not self._guardrail:
             return
 
+        if self._call:
+            self._call.call_metrics.guardrail_level2_count += 1
+
         await self._guardrail.correct_async(transcript)
 
         # App에 guardrail 이벤트 알림 (디버그용)
@@ -383,6 +392,9 @@ class SessionAHandler:
         """Level 3 동기 교정 (차단 후 교정된 텍스트로 재TTS)."""
         if not self._guardrail:
             return
+
+        if self._call:
+            self._call.call_metrics.guardrail_level3_count += 1
 
         result = await self._guardrail.correct_text(transcript)
 

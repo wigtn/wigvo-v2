@@ -191,7 +191,8 @@ class CallManager:
                     "  duration=%.1fs  turns=%d  cost=$%.4f\n"
                     "  session_a: avg=%.0fms  samples=%d  %s\n"
                     "  session_b: avg_e2e=%.0fms  samples=%d  %s\n"
-                    "  first_msg=%.0fms  echo=%d  tokens=%d",
+                    "  first_msg=%.0fms  echo=%d  echo_breakthroughs=%d  interrupts=%d\n"
+                    "  guardrail: level2=%d  level3=%d  tokens=%d",
                     call.call_id, call.mode.value, call.communication_mode.value,
                     duration_s, m.turn_count, call.cost_tokens.cost_usd,
                     avg_a, len(m.session_a_latencies_ms),
@@ -199,6 +200,8 @@ class CallManager:
                     avg_b, len(m.session_b_e2e_latencies_ms),
                     [round(x) for x in m.session_b_e2e_latencies_ms],
                     m.first_message_latency_ms, m.echo_suppressions,
+                    m.echo_gate_breakthroughs, m.interrupt_count,
+                    m.guardrail_level2_count, m.guardrail_level3_count,
                     call.cost_tokens.total,
                 )
 

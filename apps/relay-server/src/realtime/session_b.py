@@ -90,6 +90,9 @@ class SessionBHandler:
         self._response_done_event = asyncio.Event()
         self._response_done_event.set()  # 초기 상태: 응답 없음
 
+        # 번역 품질 평가용: Recipient STT 원문 임시 저장
+        self._last_recipient_stt: str = ""
+
         # Debounced response creation (create_response=False 모드)
         # VAD speech_stopped 후 일정 시간 대기, 새 speech_started가 없으면 수동 response.create
         self._response_debounce_task: asyncio.Task | None = None
@@ -329,16 +332,18 @@ class SessionBHandler:
             logger.info("[SessionB] Translation complete: %s", transcript[:80])
 
         # 양방향 transcript 저장 — 억제 상태와 무관하게 항상 저장
+        # original_text: Recipient STT 원문 (target lang), translated_text: 번역 출력 (source lang)
         if self._call:
             self._call.transcript_bilingual.append(
                 TranscriptEntry(
                     role="recipient",
-                    original_text=transcript,
-                    translated_text=transcript,  # Session B output은 이미 번역된 텍스트
+                    original_text=self._last_recipient_stt or transcript,
+                    translated_text=transcript,
                     language=self._call.target_language,
                     timestamp=time.time(),
                 )
             )
+            self._last_recipient_stt = ""  # 사용 후 초기화
 
         # 대화 컨텍스트 콜백
         if self._on_transcript_complete:
@@ -535,6 +540,7 @@ class SessionBHandler:
         transcript = event.get("transcript", "")
         if not transcript:
             return
+        self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장
         # Whisper STT 할루시네이션 필터링
         if transcript.strip() in _STT_HALLUCINATION_BLOCKLIST:
             logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])

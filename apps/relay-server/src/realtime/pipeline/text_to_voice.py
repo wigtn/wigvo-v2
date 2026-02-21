@@ -149,6 +149,7 @@ class TextToVoicePipeline(BasePipeline):
             session_a=self.session_a,
             twilio_handler=twilio_handler,
             on_notify_app=self._notify_app,
+            call=call,
         )
 
         # Dynamic Energy Threshold: echo window 중 높은 임계값(400)으로 에코 필터링
@@ -505,6 +506,7 @@ class TextToVoicePipeline(BasePipeline):
         await self.dual_session.session_a.send_text(corrected_text)
 
     async def _on_guardrail_event(self, event_data: dict) -> None:
+        self.call.guardrail_events_log.append(event_data)
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.GUARDRAIL_TRIGGERED,

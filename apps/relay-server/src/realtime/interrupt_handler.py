@@ -22,7 +22,7 @@ from typing import Callable, Coroutine
 
 from src.realtime.session_a import SessionAHandler
 from src.twilio.media_stream import TwilioMediaStreamHandler
-from src.types import WsMessage, WsMessageType
+from src.types import ActiveCall, WsMessage, WsMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +39,12 @@ class InterruptHandler:
         session_a: SessionAHandler,
         twilio_handler: TwilioMediaStreamHandler,
         on_notify_app: Callable[[WsMessage], Coroutine],
+        call: ActiveCall | None = None,
     ):
         self.session_a = session_a
         self.twilio_handler = twilio_handler
         self._on_notify_app = on_notify_app
+        self._call = call
         self._recipient_speaking = False
         self._last_speech_stopped_at: float = 0.0
         self._recipient_done_event = asyncio.Event()
@@ -60,6 +62,8 @@ class InterruptHandler:
 
         if self.session_a.is_generating:
             logger.info("Interrupt: recipient speech while Session A generating — cancelling")
+            if self._call:
+                self._call.call_metrics.interrupt_count += 1
             await self.session_a.cancel()
 
         # 항상 Twilio 버퍼 클리어 (이미 전송된 TTS가 재생 중일 수 있음)
