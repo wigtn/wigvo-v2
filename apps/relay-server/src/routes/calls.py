@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException
 from src.call_manager import call_manager
 from src.config import settings
 from src.prompt.generator_v3 import generate_session_a_prompt, generate_session_b_prompt
-from src.realtime.session_manager import DualSessionManager
+from src.realtime.sessions.session_manager import DualSessionManager
 from src.tools.definitions import get_tools_for_mode
 from src.twilio.outbound import make_call_async
 from src.types import (

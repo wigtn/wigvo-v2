@@ -55,9 +55,6 @@ class Settings(BaseSettings):
     max_call_duration_ms: int = 600_000
     call_warning_ms: int = 480_000  # 8분 경고
 
-    # Feature flag (DEPRECATED: elevenlabs mode removed in v3, only "realtime" supported)
-    call_mode: str = "realtime"
-
     # First message timeouts (C-3)
     recipient_answer_timeout_s: int = 45
 
@@ -76,14 +73,6 @@ class Settings(BaseSettings):
 
     # Echo Gate (에코 피드백 루프 차단)
     echo_gate_cooldown_s: float = 2.5  # TTS 완료 후 에코 소멸 대기 (레거시 폴백용)
-
-    # Echo Detector (에너지 핑거프린트 기반 에코 감지) — 현재 비활성화, Echo Gate + Silence Injection 사용
-    echo_detector_enabled: bool = False
-    echo_detector_threshold: float = 0.6
-    echo_detector_safety_cooldown_s: float = 0.15
-    echo_detector_min_delay_chunks: int = 4
-    echo_detector_max_delay_chunks: int = 20
-    echo_detector_correlation_window: int = 8
 
     # Session B VAD 설정 (수신자 음성 감지 민감도)
     session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (전화 오디오 권장 0.8~0.85)

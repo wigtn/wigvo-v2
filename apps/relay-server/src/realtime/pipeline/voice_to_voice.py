@@ -29,9 +29,9 @@ from src.realtime.local_vad import LocalVAD
 from src.realtime.pipeline.base import BasePipeline
 from src.realtime.recovery import SessionRecoveryManager
 from src.realtime.ring_buffer import AudioRingBuffer
-from src.realtime.session_a import SessionAHandler
-from src.realtime.session_b import SessionBHandler
-from src.realtime.session_manager import DualSessionManager
+from src.realtime.sessions.session_a import SessionAHandler
+from src.realtime.sessions.session_b import SessionBHandler
+from src.realtime.sessions.session_manager import DualSessionManager
 from src.tools.definitions import get_tools_for_mode
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import (

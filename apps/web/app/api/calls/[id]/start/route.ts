@@ -12,16 +12,6 @@ import { startRelayCall, formatPhoneToE164 } from "@/lib/relay-client";
 import type { CallMode, CommunicationMode } from "@/shared/call-types";
 import type { CollectedData } from "@/shared/types";
 
-// --- ElevenLabs imports (주석 처리 — 레거시 fallback) ---
-// import {
-//   isMockMode,
-//   startOutboundCall,
-//   formatPhoneToE164,
-//   determineCallResult,
-//   generateMockSummary,
-//   startPolling,
-// } from "@/lib/elevenlabs";
-
 // --- Types for Supabase query result ---
 
 interface CallWithConversation {
@@ -140,10 +130,6 @@ export async function POST(
     if (callMode === "agent") {
       const { systemPrompt } = generateDynamicPrompt(collectedData);
       systemPromptOverride = systemPrompt;
-      console.log(
-        "[Start] Agent mode: system_prompt_override generated for scenario:",
-        collectedData.scenario_type,
-      );
     }
 
     // ── 7. 전화번호 E.164 포맷 변환 ──
@@ -198,13 +184,6 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq("id", callId);
-
-    console.log(
-      "[Start] Call started via Relay Server:",
-      callId,
-      "call_sid:",
-      relayResult.call_sid,
-    );
 
     // ── 10. 응답 반환 ──
     return NextResponse.json({

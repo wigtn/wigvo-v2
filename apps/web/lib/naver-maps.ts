@@ -56,7 +56,6 @@ export async function searchNaverPlaces(
     try {
       const cachedResults = await getCachedSearchResults(query);
       if (cachedResults && cachedResults.length > 0) {
-        console.log(`[Naver Maps] Cache hit for query: "${query}"`);
         return cachedResults;
       }
     } catch (cacheError) {
@@ -118,7 +117,6 @@ export async function searchNaverPlaces(
     if (useCache && !location && results.length > 0) {
       try {
         await saveSearchResultsToCache(query, results);
-        console.log(`[Naver Maps] Cached ${results.length} results for query: "${query}"`);
       } catch (cacheError) {
         // 캐싱 실패해도 결과는 반환
         console.warn('[Naver Maps] Failed to cache results:', cacheError);
@@ -313,14 +311,12 @@ export async function resolveLocationToCoordinates(
   // 1. 오프라인 캐시에서 먼저 확인 (API 호출 절약)
   const knownLocation = KNOWN_LOCATIONS[keyword];
   if (knownLocation) {
-    console.log(`[Location] Cache hit for "${keyword}"`);
     return knownLocation;
   }
   
   // 2. 부분 매칭 시도 (예: "강남역 근처" → "강남역")
   for (const [name, coords] of Object.entries(KNOWN_LOCATIONS)) {
     if (keyword.includes(name)) {
-      console.log(`[Location] Partial match: "${keyword}" → "${name}"`);
       return coords;
     }
   }
@@ -330,7 +326,6 @@ export async function resolveLocationToCoordinates(
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
   
   if (!clientId || !clientSecret) {
-    console.log(`[Location] No API key, skipping search for "${keyword}"`);
     return null;
   }
   
@@ -368,7 +363,6 @@ export async function resolveLocationToCoordinates(
         lng = lng / 10000000;
       }
       
-      console.log(`[Location] API resolved "${keyword}" → (${lat}, ${lng})`);
       return { lat, lng, zoom: 16 };
     }
   } catch (error) {

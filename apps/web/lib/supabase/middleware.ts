@@ -44,15 +44,8 @@ export async function updateSession(request: NextRequest) {
   // NOTE: /api routes are excluded by middleware matcher — no need to check here
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
-  const isTestPage = request.nextUrl.pathname.startsWith('/test-map');
-
   // 인증 콜백은 통과
   if (isAuthCallback) {
-    return supabaseResponse;
-  }
-
-  // 테스트 페이지는 인증 없이 접근 허용
-  if (isTestPage) {
     return supabaseResponse;
   }
 

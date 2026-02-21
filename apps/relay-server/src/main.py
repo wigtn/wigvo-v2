@@ -34,7 +34,6 @@ async def lifespan(app: FastAPI):
         settings.relay_server_host,
         settings.relay_server_port,
     )
-    logger.info("Call mode: %s", settings.call_mode)
     yield
     # Graceful shutdown: 모든 활성 통화 정리
     await call_manager.shutdown_all()

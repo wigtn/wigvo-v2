@@ -20,7 +20,7 @@ import logging
 import time
 from typing import Callable, Coroutine
 
-from src.realtime.session_a import SessionAHandler
+from src.realtime.sessions.session_a import SessionAHandler
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import ActiveCall, WsMessage, WsMessageType
 

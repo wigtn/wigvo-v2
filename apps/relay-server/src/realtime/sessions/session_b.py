@@ -14,7 +14,7 @@ import time
 from typing import Any, Callable, Coroutine
 
 from src.config import settings
-from src.realtime.session_manager import RealtimeSession
+from src.realtime.sessions.session_manager import RealtimeSession
 from src.types import ActiveCall, CostTokens, TranscriptEntry
 
 logger = logging.getLogger(__name__)

@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 사용자 메시지 저장
-    console.log(`[Chat] 👤 User: ${message}`);
     await saveMessage(conversationId, 'user', message);
 
     // 5. 대화 기록 조회
@@ -126,15 +125,7 @@ export async function POST(request: NextRequest) {
     const newStatus = ready ? 'READY' : 'COLLECTING';
     const effectiveComplete = chatResult.is_complete || forceReady;
 
-    if (forceReady) {
-      console.log(`[Chat] 📋 서버 보정: 전화 가능 데이터 충족 → READY (카드 노출)`);
-    }
-
     await updateCollectedData(conversationId, mergedData, newStatus);
-    console.log(
-      `[Chat] 📋 Status: ${newStatus} | Collected:`,
-      JSON.stringify(mergedData, null, 0)
-    );
 
     // 12. 위치 컨텍스트 추출 (검색 결과가 없을 때만)
     let locationContext: LocationContext | null = null;
@@ -147,11 +138,6 @@ export async function POST(request: NextRequest) {
           },
           message
         );
-        if (locationContext) {
-          console.log(
-            `[Location] Detected: ${locationContext.region} → (${locationContext.coordinates?.lat}, ${locationContext.coordinates?.lng})`
-          );
-        }
       } catch (error) {
         console.warn('[Location] Failed to extract location context:', error);
       }
@@ -159,9 +145,6 @@ export async function POST(request: NextRequest) {
 
     // 13. 응답 반환
     const searchResults = chatResult.searchResults;
-    if (searchResults.length > 0) {
-      console.log(`[Chat] 🗺️ Returning ${searchResults.length} search results to client`);
-    }
     return NextResponse.json({
       message: chatResult.message,
       collected: mergedData,

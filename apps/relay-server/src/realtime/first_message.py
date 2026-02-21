@@ -14,7 +14,7 @@ import logging
 from typing import Callable, Coroutine
 
 from src.prompt.templates import FIRST_MESSAGE_TEMPLATES
-from src.realtime.session_a import SessionAHandler
+from src.realtime.sessions.session_a import SessionAHandler
 from src.types import ActiveCall, CallMode, CallStatus, WsMessage, WsMessageType
 
 logger = logging.getLogger(__name__)

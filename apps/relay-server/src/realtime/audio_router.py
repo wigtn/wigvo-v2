@@ -20,7 +20,7 @@ from src.realtime.pipeline.base import BasePipeline
 from src.realtime.pipeline.full_agent import FullAgentPipeline
 from src.realtime.pipeline.text_to_voice import TextToVoicePipeline
 from src.realtime.pipeline.voice_to_voice import VoiceToVoicePipeline
-from src.realtime.session_manager import DualSessionManager
+from src.realtime.sessions.session_manager import DualSessionManager
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import ActiveCall, CommunicationMode, WsMessage
 
@@ -145,7 +145,7 @@ class AudioRouter:
     def __getattr__(self, name: str) -> Any:
         """Pipeline의 내부 속성을 읽는다.
 
-        기존 테스트에서 router._echo_detector, router.session_b 등
+        기존 테스트에서 router.session_b 등
         내부 속성에 직접 접근하므로 호환성을 위해 프록시한다.
         """
         if name.startswith("__"):

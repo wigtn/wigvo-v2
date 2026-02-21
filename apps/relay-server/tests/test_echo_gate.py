@@ -23,7 +23,7 @@ import pytest
 
 from src.realtime.audio_router import AudioRouter
 from src.realtime.audio_utils import _ULAW_TO_LINEAR, ulaw_rms as _ulaw_rms
-from src.realtime.session_b import SessionBHandler
+from src.realtime.sessions.session_b import SessionBHandler
 from src.types import ActiveCall, CallMode
 
 

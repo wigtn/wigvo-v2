@@ -1,7 +1,6 @@
 """G.711 mu-law 오디오 유틸리티.
 
-audio_router와 echo_detector가 공유하는 mu-law 디코딩/에너지 계산 함수.
-circular import 방지를 위해 별도 모듈로 분리.
+pipeline과 audio_router가 공유하는 mu-law 디코딩/에너지 계산 함수.
 """
 
 import numpy as np

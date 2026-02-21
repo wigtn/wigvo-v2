@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.realtime.session_manager import RealtimeSession
+    from src.realtime.sessions.session_manager import RealtimeSession
 
 logger = logging.getLogger(__name__)
 

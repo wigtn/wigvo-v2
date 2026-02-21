@@ -330,7 +330,6 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
         let formatted: string;
         try {
           const args = JSON.parse(tc.function.arguments);
-          console.log(`[Chat] 🔍 AI가 검색 요청: "${args.query}"`);
           const results = await searchNaverPlaces(args.query, location);
           placeSearchResults = results;
           formatted = formatSearchResultsForTool(results);
@@ -387,9 +386,6 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
       if (matched.telephone) {
         parsed.collected.target_phone = matched.telephone;
       }
-      console.log(
-        `[Chat] 🔧 ${matchType === 'number' ? '번호 선택' : '이름 매칭'}: target_name="${matched.name}"`
-      );
     }
   }
 

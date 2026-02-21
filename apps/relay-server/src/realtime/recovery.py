@@ -25,7 +25,7 @@ import openai
 
 from src.config import settings
 from src.realtime.ring_buffer import AudioRingBuffer
-from src.realtime.session_manager import RealtimeSession
+from src.realtime.sessions.session_manager import RealtimeSession
 from src.types import (
     ActiveCall,
     RecoveryEvent,

@@ -14,7 +14,7 @@ import time
 from typing import Any, Callable, Coroutine
 
 from src.guardrail.checker import GuardrailChecker, GuardrailLevel
-from src.realtime.session_manager import RealtimeSession
+from src.realtime.sessions.session_manager import RealtimeSession
 from src.tools.executor import FunctionExecutor
 from src.types import ActiveCall, CallMode, CostTokens, TranscriptEntry
 

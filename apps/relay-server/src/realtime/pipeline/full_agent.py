@@ -17,7 +17,7 @@ import logging
 from typing import Any, Callable, Coroutine
 
 from src.realtime.pipeline.text_to_voice import TextToVoicePipeline
-from src.realtime.session_manager import DualSessionManager
+from src.realtime.sessions.session_manager import DualSessionManager
 from src.twilio.media_stream import TwilioMediaStreamHandler
 from src.types import ActiveCall, WsMessage
 

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from fastapi import WebSocket
 
     from src.realtime.audio_router import AudioRouter
-    from src.realtime.session_manager import DualSessionManager
+    from src.realtime.sessions.session_manager import DualSessionManager
 
 logger = logging.getLogger(__name__)
 

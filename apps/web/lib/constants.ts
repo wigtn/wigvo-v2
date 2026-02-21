@@ -31,31 +31,6 @@ export const MAX_TOOL_CALL_LOOPS = 3;
 export const NAVER_SEARCH_DISPLAY_COUNT = 5;
 
 // -----------------------------------------------------------------------------
-// ElevenLabs
-// -----------------------------------------------------------------------------
-
-/** 폴링 간격 (밀리초) */
-export const ELEVENLABS_POLL_INTERVAL_MS = 3000;
-
-/** 최대 폴링 횟수 (60 * 3초 = 3분) */
-export const ELEVENLABS_MAX_POLL_COUNT = 60;
-
-/** 연속 에러 허용 횟수 */
-export const ELEVENLABS_MAX_CONSECUTIVE_ERRORS = 5;
-
-/** Mock 모드 자동 완료 대기 시간 (밀리초) */
-export const ELEVENLABS_MOCK_COMPLETION_DELAY_MS = 5000;
-
-/** 통화 종료 상태 목록 */
-export const ELEVENLABS_TERMINAL_STATUSES = [
-  'done',
-  'completed',
-  'failed',
-  'ended',
-  'terminated',
-] as const;
-
-// -----------------------------------------------------------------------------
 // Relay Server
 // -----------------------------------------------------------------------------
 
