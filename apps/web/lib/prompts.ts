@@ -74,25 +74,11 @@ const BASE_SYSTEM_PROMPT = `당신은 WIGVO의 AI 비서입니다. 사용자를 
 ## ⚠️ 절대 규칙
 - **절대로 정보를 지어내지 마세요.** 가게 이름, 전화번호, 주소 등을 임의로 만들면 안 됩니다.
 - 수집되지 않은 값은 반드시 null로 유지하세요.
-- 검색 결과에서 확인된 정보만 collected에 넣으세요.
-
-## 🔍 장소 검색 기능
-당신은 search_place 도구를 사용해 가게/장소를 직접 검색할 수 있습니다.
-- 사용자가 다음 중 하나라도 언급하면, **반드시 search_place 도구로 검색하세요:**
-  • 상호명 또는 가게 이름 (예: "수담한정식", "올리브영", "삼성서비스센터")
-  • 지역 또는 동네 이름 (예: "강남", "홍대", "판교", "역삼동")
-  • 장소나 랜드마크 (예: "코엑스 근처", "강남역 앞")
-  • 업종이나 카테고리 (예: "미용실", "치과", "이탈리안 레스토랑")
-- 상호명을 정확히 모르더라도 지역+업종 조합으로 검색하세요 (예: "강남 미용실").
-- 검색어는 "지역 + 가게명" 또는 "지역 + 업종" 형태가 좋습니다.
-- 사용자가 지역을 안 말했으면 먼저 지역을 물어본 다음 검색하세요.
-- 검색 결과가 여러 개면 "혹시 이 중에 어떤 곳인가요?"라고 물어보세요.
-- 검색 결과에서 전화번호와 정확한 가게명을 가져오세요. **사용자에게 전화번호를 물어볼 필요 없습니다.**
-- 검색 결과가 없으면 그때만 사용자에게 가게 이름과 전화번호를 직접 알려달라고 하세요.
+- 사용자가 직접 알려준 정보만 collected에 넣으세요.
 
 ## 필수 수집 정보
 - target_name: 실제 전화할 곳 이름
-- target_phone: 실제 전화번호 (검색 결과에서 가져오거나 사용자가 알려준 것)
+- target_phone: 실제 전화번호 (사용자가 알려준 것)
 - scenario_type: 용건 유형
   - RESERVATION: 예약 (미용실, 식당, 병원 등)
   - INQUIRY: 문의 (매물 확인, 영업시간, 가격 등)
@@ -117,11 +103,10 @@ const BASE_SYSTEM_PROMPT = `당신은 WIGVO의 AI 비서입니다. 사용자를 
 2. 해요체로 친근하게 대화합니다
 3. 모호한 답변은 재확인합니다 (예: "강남역 근처 어떤 가게인가요?")
 4. 사용자가 장소명만 말하고 지역/지점을 안 말하면 반드시 확인합니다
-5. 전화번호는 search_place 검색으로 확보하세요. 검색 불가 시에만 사용자에게 물어봅니다.
-6. 정보가 충분히 모이면 요약 후 확인을 요청합니다
-7. 이모지를 적절히 사용해 친근함을 더합니다
-8. **중요**: 이미 수집된 정보는 null로 덮어쓰지 마세요. 새로 수집된 정보만 업데이트하세요.
-9. 사용자가 "그 전에 말한...", "아까 말한..." 같은 참조를 하면 이전 대화에서 수집한 정보를 활용하세요.
+5. 정보가 충분히 모이면 요약 후 확인을 요청합니다
+6. 이모지를 적절히 사용해 친근함을 더합니다
+7. **중요**: 이미 수집된 정보는 null로 덮어쓰지 마세요. 새로 수집된 정보만 업데이트하세요.
+8. 사용자가 "그 전에 말한...", "아까 말한..." 같은 참조를 하면 이전 대화에서 수집한 정보를 활용하세요.
 
 ## 출력 형식
 매 응답마다 반드시 아래 JSON 블록을 포함하세요:
@@ -190,22 +175,20 @@ ${FEW_SHOT_EXAMPLES}
 `;
 
 /**
- * 동적 System Prompt 생성 (기존 수집 정보 + 장소 검색 결과 포함)
- * 
+ * 동적 System Prompt 생성 (기존 수집 정보 포함)
+ *
  * @param existingData - 현재까지 수집된 정보
  * @param detectedScenario - 감지된 시나리오 (선택적)
- * @param placeSearchResults - 네이버지도 검색 결과 (선택적)
  */
 export function buildSystemPromptWithContext(
   existingData?: CollectedData,
   detectedScenario?: ScenarioType,
-  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>
 ): string {
   let contextSection = '';
-  
+
   if (existingData) {
     const collectedItems: string[] = [];
-    
+
     if (existingData.target_name) {
       collectedItems.push(`- target_name: "${existingData.target_name}"`);
     }
@@ -230,7 +213,7 @@ export function buildSystemPromptWithContext(
     if (existingData.special_request) {
       collectedItems.push(`- special_request: "${existingData.special_request}"`);
     }
-    
+
     if (collectedItems.length > 0) {
       contextSection = `
 ## 🔴 현재까지 수집된 정보 (반드시 JSON에 포함!)
@@ -244,28 +227,14 @@ ${collectedItems.join('\n')}
 `;
     }
   }
-  
-  // 장소 검색 결과가 있으면 추가
-  let placeSearchSection = '';
-  if (placeSearchResults && placeSearchResults.length > 0) {
-    placeSearchSection = `
-## 장소 검색 결과
-${placeSearchResults.map((p, i) => 
-  `${i + 1}. ${p.name} (${p.telephone}) - ${p.address}`
-).join('\n')}
 
-**중요**: 사용자가 위 결과에서 번호를 선택하면 (예: "1번", "첫 번째", "${placeSearchResults[0]?.name}"), 
-해당 장소의 이름(target_name)과 전화번호(target_phone)를 collected 객체에 저장하세요.
-`;
-  }
-  
   // 시나리오별 예제 선택 (향후 확장 가능)
   let examples = FEW_SHOT_EXAMPLES;
   if (detectedScenario === 'RESERVATION') {
     // 예약 관련 예제만 필터링 가능 (현재는 전체 사용)
   }
-  
-  return `${BASE_SYSTEM_PROMPT}${contextSection}${placeSearchSection}
+
+  return `${BASE_SYSTEM_PROMPT}${contextSection}
 
 ${examples}`;
 }
@@ -298,14 +267,12 @@ export const SCENARIO_OPTIONS = [
  * @param scenarioType - 메인 시나리오 타입
  * @param subType - 서브 시나리오 타입
  * @param existingData - 현재까지 수집된 정보
- * @param placeSearchResults - 네이버지도 검색 결과 (선택적)
  * @param communicationMode - 통화 모드 (선택적, v5: 모드별 수집 깊이 조절)
  */
 export function buildScenarioPrompt(
   scenarioType: ScenarioType,
   subType: ScenarioSubType,
   existingData?: CollectedData,
-  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>,
   communicationMode?: CommunicationMode
 ): string {
   // 1. 시나리오별 기본 프롬프트 로드
@@ -317,17 +284,14 @@ export function buildScenarioPrompt(
   // 3. 기존 수집 정보 컨텍스트 추가
   const contextSection = buildContextSection(existingData, scenarioType, subType);
 
-  // 4. 장소 검색 결과 섹션 추가
-  const placeSearchSection = buildPlaceSearchSection(placeSearchResults);
-
-  // 5. Few-shot 예시 추가
+  // 4. Few-shot 예시 추가
   const fewShotExamples = getScenarioFewShotExamples(scenarioType, subType);
   const fewShotSection = buildFewShotSection(fewShotExamples);
 
-  // 6. 출력 형식 규칙 추가
+  // 5. 출력 형식 규칙 추가
   const outputRules = buildOutputRulesSection(scenarioType, subType);
 
-  // 7. v5: 모드별 수집 지침 추가
+  // 6. v5: 모드별 수집 지침 추가
   const modeSection = buildModeSection(communicationMode, scenarioType, subType);
 
   return `${basePrompt}
@@ -341,8 +305,6 @@ ${PHONE_CALL_INSTRUCTION}
 ${responseHandling}
 
 ${contextSection}
-
-${placeSearchSection}
 
 ${fewShotSection}`.trim();
 }
@@ -398,23 +360,6 @@ ${collectedItems.join('\n')}
 2. 사용자가 새 정보를 말하지 않아도 위 값들을 **null로 바꾸지 마세요**.
 3. 중복 질문을 피하세요 - 위에 있는 정보는 다시 물어보지 마세요.
 4. 사용자가 "그 전에 말한...", "아까 말한..." 같은 참조를 하면 위 정보를 활용하세요.${remainingFields}`;
-}
-
-/**
- * 장소 검색 결과 섹션 빌드
- */
-function buildPlaceSearchSection(
-  placeSearchResults?: Array<{ name: string; telephone: string; address: string }>
-): string {
-  if (!placeSearchResults || placeSearchResults.length === 0) return '';
-  
-  return `## 장소 검색 결과
-${placeSearchResults.map((p, i) => 
-  `${i + 1}. ${p.name} (${p.telephone}) - ${p.address}`
-).join('\n')}
-
-**중요**: 사용자가 위 결과에서 번호를 선택하면 (예: "1번", "첫 번째", "${placeSearchResults[0]?.name}"), 
-해당 장소의 이름(target_name)과 전화번호(target_phone)를 collected 객체에 저장하세요.`;
 }
 
 /**

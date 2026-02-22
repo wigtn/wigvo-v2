@@ -20,16 +20,6 @@ export const CONVERSATION_LIST_LIMIT = 20;
 /** 사용자 메시지 최대 길이 */
 export const MAX_MESSAGE_LENGTH = 1000;
 
-/** Function Calling 최대 반복 횟수 */
-export const MAX_TOOL_CALL_LOOPS = 3;
-
-// -----------------------------------------------------------------------------
-// Naver Maps
-// -----------------------------------------------------------------------------
-
-/** 장소 검색 최대 결과 수 */
-export const NAVER_SEARCH_DISPLAY_COUNT = 5;
-
 // -----------------------------------------------------------------------------
 // Relay Server
 // -----------------------------------------------------------------------------
@@ -77,8 +67,3 @@ export const PHONE_NUMBER_REGEX = /^(0[0-9]{1,2})[0-9]{3,4}[0-9]{4}$/;
 /** UUID v4 정규식 */
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** 위도 범위 (한국) */
-export const LAT_RANGE = { min: 33, max: 43 } as const;
-
-/** 경도 범위 (한국) */
-export const LNG_RANGE = { min: 124, max: 132 } as const;

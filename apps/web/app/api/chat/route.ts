@@ -16,7 +16,6 @@ import {
 import { extractAndSaveEntities } from '@/lib/supabase/entities';
 import { ChatRequestSchema, validateRequest } from '@/lib/validation';
 import { processChat, isReadyForCall } from '@/lib/services/chat-service';
-import { extractLocationContext, type LocationContext } from '@/lib/naver-maps';
 import { CollectedData, mergeCollectedData } from '@/shared/types';
 
 export async function POST(request: NextRequest) {
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { conversationId, message, location, previousSearchResults, communicationMode, locale } =
+    const { conversationId, message, communicationMode, locale } =
       validation.data;
 
     // 3. 대화 세션 확인
@@ -75,8 +74,6 @@ export async function POST(request: NextRequest) {
         existingData,
         history,
         userMessage: message,
-        location,
-        previousSearchResults,
         communicationMode,
         locale,
       });
@@ -127,44 +124,12 @@ export async function POST(request: NextRequest) {
 
     await updateCollectedData(conversationId, mergedData, newStatus);
 
-    // 12. 위치 컨텍스트 추출 (검색 결과가 없을 때만)
-    let locationContext: LocationContext | null = null;
-    if (chatResult.searchResults.length === 0) {
-      try {
-        locationContext = await extractLocationContext(
-          {
-            target_name: mergedData.target_name,
-            special_request: mergedData.special_request,
-          },
-          message
-        );
-      } catch (error) {
-        console.warn('[Location] Failed to extract location context:', error);
-      }
-    }
-
-    // 13. 응답 반환
-    const searchResults = chatResult.searchResults;
+    // 12. 응답 반환
     return NextResponse.json({
       message: chatResult.message,
       collected: mergedData,
       is_complete: effectiveComplete,
       conversation_status: newStatus,
-      search_results: searchResults.length > 0 ? searchResults : undefined,
-      map_center:
-        searchResults.length > 0 && searchResults[0].mapy && searchResults[0].mapx
-          ? {
-              lat:
-                searchResults[0].mapy > 1000000
-                  ? searchResults[0].mapy / 10000000
-                  : searchResults[0].mapy,
-              lng:
-                searchResults[0].mapx > 1000000
-                  ? searchResults[0].mapx / 10000000
-                  : searchResults[0].mapx,
-            }
-          : locationContext?.coordinates || undefined,
-      location_context: locationContext || undefined,
     });
   } catch (error) {
     console.error('Failed to process chat:', error);

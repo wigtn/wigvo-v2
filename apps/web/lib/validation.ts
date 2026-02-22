@@ -8,21 +8,8 @@ import { z } from 'zod';
 import {
   MAX_MESSAGE_LENGTH,
   UUID_REGEX,
-  LAT_RANGE,
-  LNG_RANGE,
   PHONE_NUMBER_REGEX,
 } from './constants';
-
-// -----------------------------------------------------------------------------
-// Location Schema
-// -----------------------------------------------------------------------------
-
-export const LocationSchema = z.object({
-  lat: z.number().min(LAT_RANGE.min).max(LAT_RANGE.max),
-  lng: z.number().min(LNG_RANGE.min).max(LNG_RANGE.max),
-});
-
-export type LocationInput = z.infer<typeof LocationSchema>;
 
 // -----------------------------------------------------------------------------
 // Chat Request Schema
@@ -42,20 +29,6 @@ export const ChatRequestSchema = z.object({
     .enum(['voice_to_voice', 'text_to_voice', 'voice_to_text', 'full_agent'])
     .optional(),
   locale: z.enum(['en', 'ko']).optional(),
-  location: LocationSchema.optional(),
-  previousSearchResults: z
-    .array(
-      z.object({
-        name: z.string(),
-        address: z.string(),
-        roadAddress: z.string(),
-        telephone: z.string(),
-        category: z.string(),
-        mapx: z.number(),
-        mapy: z.number(),
-      })
-    )
-    .optional(),
 });
 
 export type ChatRequestInput = z.infer<typeof ChatRequestSchema>;

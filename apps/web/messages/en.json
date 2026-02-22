@@ -306,7 +306,6 @@
   "dashboard": {
     "tabChat": "Chat",
     "tabCalling": "Call",
-    "tabMap": "Map",
     "tabEffect": "Effect"
   },
   "oauth": {
@@ -346,18 +345,6 @@
     "cancelMessage": "Your payment was cancelled. You can try again anytime.",
     "viewPlans": "View Plans",
     "backToHome": "Back to Home"
-  },
-  "place": {
-    "searching": "Searching for places...",
-    "emptyHint1": "Mention a place in the chat",
-    "emptyHint2": "and info will appear here",
-    "searchResults": "Search Results",
-    "resultCount": "({count})",
-    "colName": "Name",
-    "colAddress": "Address",
-    "colPhone": "Phone",
-    "colCategory": "Category",
-    "naverMap": "Naver Map"
   },
   "language": {
     "ko": "한국어",

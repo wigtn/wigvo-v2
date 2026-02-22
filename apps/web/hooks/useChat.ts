@@ -60,7 +60,7 @@ export function useChat(): UseChatReturn {
   const t = useTranslations('chat');
 
   // ── Dashboard State ─────────────────────────────────────────
-  const { searchResults, setSearchResults, setSelectedPlace, setMapCenter, setMapZoom, setIsSearching, scenarioSelected, setScenarioSelected, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
+  const { scenarioSelected, setScenarioSelected, setCallingCallId, setCallingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
 
   // ── State ───────────────────────────────────────────────────
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -300,17 +300,13 @@ export function useChat(): UseChatReturn {
       setIsLoading(true);
 
       try {
-        // 2. API 호출 (이전 검색 결과 + 통화 모드 함께 전달)
-        setIsSearching(true);
-        const currentSearchResults = useDashboard.getState().searchResults;
+        // 2. API 호출
         const data = await sendChatMessage(
           conversationId,
           content.trim(),
-          currentSearchResults.length > 0 ? currentSearchResults : undefined,
           communicationMode || undefined,
           getStoredLocale()
         );
-        setIsSearching(false);
 
         // 3. 성공: assistant 메시지 추가 + collected 데이터 업데이트
         const assistantMsg: Message = {
@@ -326,80 +322,8 @@ export function useChat(): UseChatReturn {
         const ready = data.is_complete || data.conversation_status === 'READY';
         setIsComplete(ready);
         setConversationStatus(data.conversation_status);
-
-        // 4. 대시보드 상태 업데이트 (검색 결과가 있으면)
-        const newSearchResults = data.search_results ?? [];
-        const isNewSearch = newSearchResults.length > 0;
-        const prevResults = useDashboard.getState().searchResults;
-        if (isNewSearch) {
-          setSearchResults(newSearchResults);
-          // 새 검색이면 이전 선택 초기화
-          setSelectedPlace(null);
-        }
-        if (data.map_center) {
-          setMapCenter(data.map_center);
-        }
-
-        // 4-1. 선택된 장소 자동 매칭
-        const latestResults = isNewSearch ? newSearchResults : prevResults;
-        if (latestResults.length > 0) {
-          let matched = null;
-
-          // 새 검색 결과가 1건이면 바로 선택 (사용자가 특정 장소를 지정한 경우)
-          if (isNewSearch && newSearchResults.length === 1) {
-            matched = newSearchResults[0];
-          }
-
-          if (!matched) {
-            const targetName = data.collected?.target_name;
-            if (targetName) {
-              // 1순위: collected에 target_name이 있으면 직접 매칭
-              matched = latestResults.find((r: { name: string }) =>
-                r.name.includes(targetName) || targetName.includes(r.name)
-              );
-            }
-          }
-
-          if (!matched && !isNewSearch) {
-            // 2순위: 사용자 메시지에서 번호 선택 감지 ("1번", "2번" 등) - 기존 결과에서만
-            const userMsg = content.trim();
-            const numMatch = userMsg.match(/^(\d)(?:번|$)/);
-            if (numMatch) {
-              const idx = parseInt(numMatch[1], 10) - 1;
-              if (idx >= 0 && idx < latestResults.length) {
-                matched = latestResults[idx];
-              }
-            }
-          }
-
-          if (!matched) {
-            // 3순위: 사용자 메시지에서 가게명 매칭
-            matched = latestResults.find((r: { name: string }) =>
-              content.includes(r.name) || r.name.includes(content.replace(/으로|에|로|할게|예약|선택|갈게|해줘/g, '').trim())
-            );
-          }
-
-          if (!matched) {
-            // 4순위: AI 응답 메시지에서 가게명 매칭
-            matched = latestResults.find((r: { name: string }) => data.message.includes(r.name));
-          }
-
-          if (matched) {
-            setSelectedPlace(matched);
-          }
-        }
-        
-        // 5. 위치 컨텍스트 업데이트 (검색 결과 없을 때 위치 감지)
-        if (data.location_context?.coordinates) {
-          setMapCenter(data.location_context.coordinates);
-          // 줌 레벨도 업데이트 (상세해질수록 확대)
-          if (data.location_context.zoom_level) {
-            setMapZoom(data.location_context.zoom_level);
-          }
-        }
       } catch (err) {
-        setIsSearching(false);
-        // 4. 실패: rollback — optimistic 메시지 제거
+        // 실패: rollback — optimistic 메시지 제거
         setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
 
         if (err instanceof Error && err.message === 'Unauthorized') {

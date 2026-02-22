@@ -68,15 +68,11 @@ export async function getConversation(id: string): Promise<Conversation> {
 export async function sendChatMessage(
   conversationId: string,
   message: string,
-  previousSearchResults?: Array<{ name: string; address: string; roadAddress: string; telephone: string; category: string; mapx: number; mapy: number }>,
   communicationMode?: CommunicationMode,
   locale?: string
 ): Promise<ChatResponse> {
-  if (isDemoMode()) return mockSendChatMessage(conversationId, message, previousSearchResults, communicationMode, locale);
+  if (isDemoMode()) return mockSendChatMessage(conversationId, message, communicationMode, locale);
   const body: Record<string, unknown> = { conversationId, message };
-  if (previousSearchResults && previousSearchResults.length > 0) {
-    body.previousSearchResults = previousSearchResults;
-  }
   if (communicationMode) {
     body.communicationMode = communicationMode;
   }

@@ -3,7 +3,7 @@
 // =============================================================================
 // 외국인 사용자가 한국 레스토랑 예약하는 시나리오
 // en → ko 양방향 번역 데모
-// 지도 검색 2회 + 장소 선택 + 예약 확인 → 통화
+// 채팅 대화 + 장소 선택 + 예약 확인 → 통화
 // =============================================================================
 
 import type {
@@ -47,7 +47,7 @@ export const DEMO_CONVERSATION: CreateConversationResponse = {
 };
 
 // =============================================================================
-// Chat Step 1: 첫 검색 — 강남 맛집 3곳
+// Chat Step 1: 첫 추천 — 강남 맛집 3곳
 // 사용자: "I want to find a good sushi place in Gangnam"
 // =============================================================================
 const CHAT_STEP_1: ChatResponse = {
@@ -56,40 +56,10 @@ const CHAT_STEP_1: ChatResponse = {
   collected: { ...BASE_COLLECTED },
   is_complete: false,
   conversation_status: 'COLLECTING',
-  search_results: [
-    {
-      name: '스시 오마카세 강남점',
-      address: '서울특별시 강남구 역삼동 123-45',
-      roadAddress: '서울특별시 강남구 테헤란로 152',
-      telephone: '02-555-1234',
-      category: '일식>초밥,롤',
-      mapx: 1270282700,
-      mapy: 375044900,
-    },
-    {
-      name: '스시 사이토 서울',
-      address: '서울특별시 강남구 논현동 67-8',
-      roadAddress: '서울특별시 강남구 학동로 234',
-      telephone: '02-555-5678',
-      category: '일식>초밥,롤',
-      mapx: 1270380000,
-      mapy: 375120000,
-    },
-    {
-      name: '하루 스시',
-      address: '서울특별시 강남구 삼성동 45-12',
-      roadAddress: '서울특별시 강남구 봉은사로 108',
-      telephone: '02-555-9012',
-      category: '일식>초밥,롤',
-      mapx: 1270560000,
-      mapy: 375090000,
-    },
-  ],
-  map_center: { lat: 37.5045, lng: 127.0283 },
 };
 
 // =============================================================================
-// Chat Step 2: 재검색 — 한식으로 변경
+// Chat Step 2: 재추천 — 한식으로 변경
 // 사용자: "Actually, let me try Korean BBQ instead"
 // =============================================================================
 const CHAT_STEP_2: ChatResponse = {
@@ -98,36 +68,6 @@ const CHAT_STEP_2: ChatResponse = {
   collected: { ...BASE_COLLECTED },
   is_complete: false,
   conversation_status: 'COLLECTING',
-  search_results: [
-    {
-      name: '마포갈매기 강남점',
-      address: '서울특별시 강남구 역삼동 789-12',
-      roadAddress: '서울특별시 강남구 역삼로 65',
-      telephone: '02-666-1234',
-      category: '한식>고기,구이',
-      mapx: 1270300000,
-      mapy: 375060000,
-    },
-    {
-      name: '본가 강남본점',
-      address: '서울특별시 강남구 삼성동 156-3',
-      roadAddress: '서울특별시 강남구 테헤란로 412',
-      telephone: '02-666-5678',
-      category: '한식>고기,구이',
-      mapx: 1270520000,
-      mapy: 375080000,
-    },
-    {
-      name: '고기리 막국수 & 갈비',
-      address: '서울특별시 강남구 대치동 34-7',
-      roadAddress: '서울특별시 강남구 선릉로 93길 12',
-      telephone: '02-666-9012',
-      category: '한식>고기,구이',
-      mapx: 1270460000,
-      mapy: 375110000,
-    },
-  ],
-  map_center: { lat: 37.508, lng: 127.042 },
 };
 
 // =============================================================================

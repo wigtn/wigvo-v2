@@ -56,7 +56,6 @@ export async function mockGetConversation(id: string): Promise<Conversation> {
 export async function mockSendChatMessage(
   _conversationId: string,
   _message: string,
-  _previousSearchResults?: unknown[],
   _communicationMode?: CommunicationMode,
   _locale?: string,
 ): Promise<ChatResponse> {

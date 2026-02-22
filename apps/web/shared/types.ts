@@ -293,11 +293,6 @@ export interface ChatRequest {
   conversationId: string;
   message: string;
   communicationMode?: 'voice_to_voice' | 'text_to_voice' | 'voice_to_text' | 'full_agent';
-  location?: {
-    lat: number;
-    lng: number;
-  };
-  previousSearchResults?: NaverPlaceResultBasic[];
 }
 
 export interface ChatResponse {
@@ -305,38 +300,6 @@ export interface ChatResponse {
   collected: CollectedData;
   is_complete: boolean;
   conversation_status: ConversationStatus;
-  // 대시보드용 추가 필드
-  search_results?: NaverPlaceResultBasic[];
-  map_center?: {
-    lat: number;
-    lng: number;
-  };
-  // 위치 컨텍스트 (Phase 4: 실시간 위치 감지)
-  location_context?: LocationContextBasic;
-}
-
-// 네이버 장소 검색 결과 (기본 필드)
-export interface NaverPlaceResultBasic {
-  name: string;
-  address: string;
-  roadAddress: string;
-  telephone: string;
-  category: string;
-  mapx: number;
-  mapy: number;
-}
-
-// 위치 컨텍스트 (대화 중 감지된 위치 정보)
-export interface LocationContextBasic {
-  region: string | null;
-  place_name: string | null;
-  address: string | null;
-  coordinates: {
-    lat: number;
-    lng: number;
-  } | null;
-  zoom_level: number;
-  confidence: 'low' | 'medium' | 'high';
 }
 
 // POST /api/calls

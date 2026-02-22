@@ -2,13 +2,10 @@
 
 import { useCallback, useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Menu, Map, MessageSquare, Phone } from "lucide-react";
-import LanguageSwitcher from "@/components/common/LanguageSwitcher";
+import { Menu, MessageSquare, Phone } from "lucide-react";
 import Sidebar from "./Sidebar";
 import MobileDrawer from "./MobileDrawer";
 import ChatContainer from "@/components/chat/ChatContainer";
-import NaverMapContainer from "@/components/map/NaverMapContainer";
-import PlaceInfoPanel from "@/components/place/PlaceInfoPanel";
 import RelayCallProvider from "@/components/call/RelayCallProvider";
 import CallEffectPanel from "@/components/call/CallEffectPanel";
 import ConversationHistoryPanel from "@/components/chat/ConversationHistoryPanel";
@@ -20,12 +17,6 @@ import { cn } from "@/lib/utils";
 export default function DashboardLayout() {
   const {
     activeMenu,
-    mapCenter,
-    mapZoom,
-    searchResults,
-    selectedPlace,
-    setSelectedPlace,
-    isSearching,
     scenarioSelected,
     setActiveConversationId,
     setSidebarOpen,
@@ -37,7 +28,7 @@ export default function DashboardLayout() {
   const { handleNewConversation } = useChat();
   const t = useTranslations("dashboard");
 
-  const [mobileTab, setMobileTab] = useState<"chat" | "map" | "calling">(
+  const [mobileTab, setMobileTab] = useState<"chat" | "calling">(
     "chat",
   );
   const isCalling = !!callingCallId;
@@ -120,10 +111,13 @@ export default function DashboardLayout() {
           </div>
         </div>
       ) : (
-        /* 채팅 + 지도 2-column 레이아웃 */
+        /* 채팅 + 통화 2-column 레이아웃 */
         <div className="flex-1 flex flex-col lg:flex-row gap-0 lg:gap-4 p-0 lg:p-4 overflow-hidden">
-          {/* 모바일 헤더 (시나리오 선택 전: 메뉴+언어만 / 선택 후: 탭 전환) */}
-          <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-[#E2E8F0]">
+          {/* 모바일 헤더 (시나리오 선택 전: 메뉴만 / 선택 후: 메뉴+탭 전환) */}
+          <div className={cn(
+            "lg:hidden flex items-center px-4 py-2 bg-white border-b border-[#E2E8F0]",
+            scenarioSelected ? "justify-between" : "justify-start",
+          )}>
             <button
               onClick={() => setSidebarOpen(true)}
               className="p-2 hover:bg-[#F1F5F9] rounded-lg transition-colors"
@@ -131,7 +125,7 @@ export default function DashboardLayout() {
               <Menu className="size-5 text-[#64748B]" />
             </button>
 
-            {scenarioSelected && (
+            {scenarioSelected && isCalling && (
               <div className="flex bg-[#F1F5F9] rounded-xl p-1">
                 <button
                   onClick={() => setMobileTab("chat")}
@@ -145,44 +139,27 @@ export default function DashboardLayout() {
                   <MessageSquare className="size-4" />
                   {t("tabChat")}
                 </button>
-                {isCalling ? (
-                  <button
-                    onClick={() => setMobileTab("calling")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                      mobileTab === "calling"
-                        ? "bg-white text-[#0F172A] shadow-sm"
-                        : "text-[#94A3B8]",
-                    )}
-                  >
-                    <Phone className="size-4" />
-                    {t("tabCalling")}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setMobileTab("map")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                      mobileTab === "map"
-                        ? "bg-white text-[#0F172A] shadow-sm"
-                        : "text-[#94A3B8]",
-                    )}
-                  >
-                    <Map className="size-4" />
-                    {t("tabMap")}
-                  </button>
-                )}
+                <button
+                  onClick={() => setMobileTab("calling")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                    mobileTab === "calling"
+                      ? "bg-white text-[#0F172A] shadow-sm"
+                      : "text-[#94A3B8]",
+                  )}
+                >
+                  <Phone className="size-4" />
+                  {t("tabCalling")}
+                </button>
               </div>
             )}
-
-            <LanguageSwitcher />
           </div>
 
-          {/* 좌측: 채팅 카드 (시나리오 미선택 시 전체 너비) */}
+          {/* 좌측: 채팅 카드 */}
           <div
             className={cn(
               "h-full transition-all duration-500 ease-in-out",
-              !scenarioSelected && !isCalling && searchResults.length === 0 ? "lg:w-full" : "lg:w-1/2",
+              isCalling ? "lg:w-1/2" : "lg:w-full",
               mobileTab === "chat" ? "flex-1" : "hidden lg:block",
             )}
           >
@@ -214,37 +191,6 @@ export default function DashboardLayout() {
                 </div>
               </RelayCallProvider>
             )}
-          </div>
-          {/* 우측: 지도 + 장소 정보 카드 (시나리오 선택 후에만 표시) */}
-          <div
-            className={cn(
-              "h-full flex flex-col gap-2 lg:gap-4 p-2 lg:p-0 transition-all duration-500 ease-in-out overflow-hidden",
-              isCalling || (!scenarioSelected && searchResults.length === 0)
-                ? "lg:w-0 lg:opacity-0 hidden"
-                : cn(
-                    "lg:w-1/2",
-                    mobileTab === "map" ? "flex-1" : "hidden lg:flex",
-                  ),
-            )}
-          >
-            <div className="min-h-0" style={{ flex: '2 1 0%' }}>
-              <NaverMapContainer
-                center={mapCenter}
-                zoom={mapZoom}
-                markers={searchResults}
-                selectedPlace={selectedPlace}
-                onMarkerClick={setSelectedPlace}
-              />
-            </div>
-
-            <div className="min-h-0" style={{ flex: '3 1 0%' }}>
-              <PlaceInfoPanel
-                results={searchResults}
-                selected={selectedPlace}
-                onSelect={setSelectedPlace}
-                isSearching={isSearching}
-              />
-            </div>
           </div>
         </div>
       )}
