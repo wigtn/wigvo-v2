@@ -124,6 +124,7 @@ total_interrupts = 0
 total_guardrail_l2 = 0
 total_guardrail_l3 = 0
 total_cost_usd = 0.0
+n_estimated = 0
 total_tokens_sum = 0
 total_duration = 0.0
 
@@ -164,6 +165,8 @@ for c, m in instrumented:
         ct = c.get("cost_tokens") or {}
         cost = (ct.get("audio_input", 0) * 0.06 + ct.get("audio_output", 0) * 0.24
                 + ct.get("text_input", 0) * 0.005 + ct.get("text_output", 0) * 0.02) / 1000
+        if cost > 0:
+            n_estimated += 1
     total_cost_usd += cost
     total_tokens_sum += c.get("total_tokens") or 0
     dur = c.get("duration_s")
@@ -274,10 +277,9 @@ if stt_st["n"]:
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
 if all_paired_e2e:
-    paired_e2e_mean = sum(all_paired_e2e) / len(all_paired_e2e)
-    paired_stt_mean = sum(all_paired_stt) / len(all_paired_stt)
-    stt_pct = paired_stt_mean / paired_e2e_mean * 100 if paired_e2e_mean > 0 else 0
-    print(f"  STT % of E2E mean: {stt_pct:.1f}%  (N={len(all_paired_e2e)} paired turns)")
+    ratios = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
+    stt_pct = sum(ratios) / len(ratios) * 100 if ratios else 0
+    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(ratios)} paired turns)")
 
 # ── Utterance Analysis ──
 print()
@@ -290,13 +292,13 @@ if all_scatter:
     r = pearson_r(xs, ys)
     print(f"  Pearson r (char_len vs SB latency): {r:.3f}")
     print()
-    print(f"  {'Range':>8s}   {'N':>3s}   {'Mean':>8s}")
+    print(f"  {'Range':>8s}  {'N':>4s}  {'P50':>8s}  {'P95':>8s}  {'Mean':>8s}")
     for label, vals in buckets.items():
         if vals:
-            mean = sum(vals) / len(vals)
-            print(f"  {label:>8s}   {len(vals):3d}   {mean:7.0f}ms")
+            st = fmt_stats(vals)
+            print(f"  {label:>8s}  {st['n']:4d}  {st['p50']:7.0f}ms  {st['p95']:7.0f}ms  {st['mean']:7.0f}ms")
         else:
-            print(f"  {label:>8s}     0        -")
+            print(f"  {label:>8s}     0         -         -         -")
 else:
     print("  (no scatter data)")
 
@@ -308,7 +310,7 @@ print("-" * 64)
 echo_per = total_echo_supp / n_instrumented if n_instrumented else 0
 vad_per = total_vad_false / n_instrumented if n_instrumented else 0
 print(f"  Echo gate activations:   {total_echo_supp:>4d} total  ({echo_per:.1f}/call)")
-print(f"  Echo gate breakthroughs: {total_echo_breakthroughs:>4d}")
+print(f"  Echo gate breakthroughs: {total_echo_breakthroughs:>4d}  (callee interrupted during TTS — expected)")
 print(f"  Echo-induced loops:      {total_echo_loops:>4d} / {n_instrumented} calls")
 print(f"  VAD false triggers:      {total_vad_false:>4d} total  ({vad_per:.1f}/call)")
 print(f"  Hallucinations blocked:  {total_hallucinations:>4d}")
@@ -321,7 +323,8 @@ print("-" * 64)
 print("  [Cost]")
 print("-" * 64)
 print(f"  Total tokens:    {total_tokens_sum:>10,d}")
-print(f"  Total cost:      ${total_cost_usd:.4f}")
+est_tag = f"  ({n_estimated} est.)" if n_estimated else ""
+print(f"  Total cost:      ${total_cost_usd:.4f}{est_tag}")
 print(f"  Total duration:  {total_duration:.0f}s ({total_duration/60:.1f}min)")
 if total_duration > 0:
     cpm = total_cost_usd / (total_duration / 60)
@@ -346,7 +349,7 @@ for c in data:
     tok = c.get("total_tokens") or 0
     crd = c.get("call_result_data") or {}
     cost = crd.get("cost_usd", 0) or 0
-    cost_s = f"${cost:.4f}" if cost else "-"
+    cost_s = f"${cost:.4f}" if cost else "- (missing)"
     created = (c.get("created_at") or "?")[:16]
     print(f"  {cid:>8s}  {st:>12s}  {res:>8s}  {mode:>6s}  {dur_s:>6s}  {tok:>7,d}  {cost_s:>8s}  {created}")
 

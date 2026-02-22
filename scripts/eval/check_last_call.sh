@@ -166,10 +166,9 @@ if stt_st["n"]:
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
 if paired_e2e:
-    paired_e2e_mean = sum(paired_e2e) / len(paired_e2e)
-    paired_stt_mean = sum(paired_stt) / len(paired_stt)
-    stt_pct = paired_stt_mean / paired_e2e_mean * 100 if paired_e2e_mean > 0 else 0
-    print(f"  STT % of E2E mean: {stt_pct:.1f}%  (N={len(paired_e2e)} paired turns)")
+    ratios = [stt / e2e for stt, e2e in zip(paired_stt, paired_e2e) if e2e > 0]
+    stt_pct = sum(ratios) / len(ratios) * 100 if ratios else 0
+    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(ratios)} paired turns)")
 
 # ── [Utterance Analysis] ─────────────────────────────────────────────────────
 
@@ -221,7 +220,7 @@ print("-" * 64)
 print("  [Echo & VAD]")
 print("-" * 64)
 print(f"  Echo gate activations:  {metrics.get('echo_suppressions', 0)}")
-print(f"  Echo gate breakthroughs:{metrics.get('echo_gate_breakthroughs', 0)}")
+print(f"  Echo gate breakthroughs:{metrics.get('echo_gate_breakthroughs', 0)}  (callee interrupted during TTS — expected)")
 print(f"  Echo-induced loops:     {metrics.get('echo_loops_detected', 0)}")
 print(f"  VAD false triggers:     {metrics.get('vad_false_triggers', 0)}")
 print(f"  Hallucinations blocked: {metrics.get('hallucinations_blocked', 0)}")
@@ -232,6 +231,7 @@ print(f"  Guardrail L2/L3:        {metrics.get('guardrail_level2_count', 0)}/{me
 
 crd = call.get("call_result_data") or {}
 cost_usd = crd.get("cost_usd", 0) or 0
+cost_estimated = False
 # fallback: compute from cost_tokens
 if not cost_usd and cost_tokens:
     cost_usd = (
@@ -240,6 +240,7 @@ if not cost_usd and cost_tokens:
         + cost_tokens.get("text_input", 0) * 0.005
         + cost_tokens.get("text_output", 0) * 0.02
     ) / 1000
+    cost_estimated = True
 
 total_tok = call.get("total_tokens") or 0
 
@@ -248,10 +249,11 @@ print("-" * 64)
 print("  [Cost]")
 print("-" * 64)
 print(f"  Total tokens:   {total_tok:,}")
-print(f"  Cost:           ${cost_usd:.4f}")
+cost_tag = " (est.)" if cost_estimated else ""
+print(f"  Cost:           ${cost_usd:.4f}{cost_tag}")
 if dur and dur > 0:
     cpm = cost_usd / (dur / 60)
-    print(f"  Cost per minute: ${cpm:.4f}")
+    print(f"  Cost per minute: ${cpm:.4f}{cost_tag}")
 if cost_tokens:
     print(f"  Breakdown:  audio_in={cost_tokens.get('audio_input',0):,}  audio_out={cost_tokens.get('audio_output',0):,}  text_in={cost_tokens.get('text_input',0):,}  text_out={cost_tokens.get('text_output',0):,}")
 

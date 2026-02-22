@@ -122,9 +122,15 @@ total_interrupts = 0
 total_guardrail_l2 = 0
 total_guardrail_l3 = 0
 total_cost_usd = 0.0
+n_estimated = 0
 total_tokens_sum = 0
 total_duration = 0.0
 n_with_duration = 0
+
+# Per-mode latency collection
+mode_sa = {}   # mode_label -> list of SA latencies
+mode_sb = {}   # mode_label -> list of SB E2E latencies
+mode_calls = Counter()  # mode_label -> count of instrumented calls
 
 for c, m in instrumented:
     sa = m.get("session_a_latencies_ms", [])
@@ -134,6 +140,12 @@ for c, m in instrumented:
     all_sa.extend(sa)
     all_sb_e2e.extend(sb_e2e)
     all_sb_stt.extend(sb_stt)
+
+    raw_mode = c.get("communication_mode") or "unknown"
+    mlabel = MODE_LABELS.get(raw_mode, raw_mode)
+    mode_sa.setdefault(mlabel, []).extend(sa)
+    mode_sb.setdefault(mlabel, []).extend(sb_e2e)
+    mode_calls[mlabel] += 1
 
     # Translation = E2E - STT (paired by turn index)
     paired_n = min(len(sb_e2e), len(sb_stt))
@@ -168,6 +180,8 @@ for c, m in instrumented:
         ct = c.get("cost_tokens") or {}
         cost = (ct.get("audio_input", 0) * 0.06 + ct.get("audio_output", 0) * 0.24
                 + ct.get("text_input", 0) * 0.005 + ct.get("text_output", 0) * 0.02) / 1000
+        if cost > 0:
+            n_estimated += 1
     total_cost_usd += cost
 
     tok = c.get("total_tokens") or 0
@@ -262,10 +276,9 @@ if stt_st["n"]:
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
 if all_paired_e2e:
-    paired_e2e_mean = sum(all_paired_e2e) / len(all_paired_e2e)
-    paired_stt_mean = sum(all_paired_stt) / len(all_paired_stt)
-    stt_pct = paired_stt_mean / paired_e2e_mean * 100 if paired_e2e_mean > 0 else 0
-    print(f"  STT % of E2E mean: {stt_pct:.1f}%  (N={len(all_paired_e2e)} paired turns)")
+    ratios = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
+    stt_pct = sum(ratios) / len(ratios) * 100 if ratios else 0
+    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(ratios)} paired turns)")
 
 # ── Utterance Analysis ──
 print()
@@ -296,7 +309,7 @@ print("-" * 64)
 echo_per = total_echo_supp / n_instrumented if n_instrumented else 0
 vad_per = total_vad_false / n_instrumented if n_instrumented else 0
 print(f"  Echo gate activations:   {total_echo_supp:>4d} total  ({echo_per:.1f}/call)")
-print(f"  Echo gate breakthroughs: {total_echo_breakthroughs:>4d}")
+print(f"  Echo gate breakthroughs: {total_echo_breakthroughs:>4d}  (callee interrupted during TTS — expected)")
 print(f"  Echo-induced loops:      {total_echo_loops:>4d} / {n_instrumented} calls")
 print(f"  VAD false triggers:      {total_vad_false:>4d} total  ({vad_per:.1f}/call)")
 print(f"  Hallucinations blocked:  {total_hallucinations:>4d}")
@@ -309,7 +322,8 @@ print("-" * 64)
 print("  [Cost]")
 print("-" * 64)
 print(f"  Total tokens:    {total_tokens_sum:>10,d}")
-print(f"  Total cost:      ${total_cost_usd:.4f}")
+est_tag = f"  ({n_estimated} est.)" if n_estimated else ""
+print(f"  Total cost:      ${total_cost_usd:.4f}{est_tag}")
 print(f"  Total duration:  {total_duration:.0f}s ({total_duration/60:.1f}min)")
 if total_duration > 0:
     cpm = total_cost_usd / (total_duration / 60)
@@ -335,6 +349,71 @@ if sa_st["n"]:
 if e2e_st["n"]:
     print(f"  SB  P50: {e2e_st['p50']:.0f}ms  P95: {e2e_st['p95']:.0f}ms  (N={e2e_st['n']} turns)")
 print(f"  Overall echo loops: {total_echo_loops} / {n_instrumented} calls")
+print()
+print("-" * 64)
+print("  [Mode-Level Latency]")
+print("-" * 64)
+print(f"  {'Mode':<8s} {'Calls':>5s}  {'SA_P50':>8s}  {'SB_P50':>8s}  {'SA_turns':>8s}  {'SB_turns':>8s}")
+for mlabel in ["V2V", "T2V", "Agent", "V2T"]:
+    if mlabel not in mode_calls:
+        continue
+    sa_vals = mode_sa.get(mlabel, [])
+    sb_vals = mode_sb.get(mlabel, [])
+    sa_p50 = f"{pct(sa_vals, 50):.0f}ms" if sa_vals else "-"
+    sb_p50 = f"{pct(sb_vals, 50):.0f}ms" if sb_vals else "-"
+    print(f"  {mlabel:<8s} {mode_calls[mlabel]:5d}  {sa_p50:>8s}  {sb_p50:>8s}  {len(sa_vals):>8d}  {len(sb_vals):>8d}")
+
+# ── Paper-Ready Summary ──
+print()
+print("=" * 64)
+print("  === Paper-Ready Numbers ===")
+print(f"  Instrumented calls : {n_instrumented}")
+print(f"  Connected calls    : {n_connected}")
+if sa_st["n"]:
+    print(f"  SA P50 / P95       : {sa_st['p50']:.0f}ms / {sa_st['p95']:.0f}ms  (N={sa_st['n']} turns)")
+if e2e_st["n"]:
+    print(f"  SB P50 / P95       : {e2e_st['p50']:.0f}ms / {e2e_st['p95']:.0f}ms  (N={e2e_st['n']} turns)")
+if all_paired_e2e:
+    ratios_paper = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
+    stt_pct_paper = sum(ratios_paper) / len(ratios_paper) * 100 if ratios_paper else 0
+    print(f"  STT % of E2E       : {stt_pct_paper:.1f}%  (N={len(ratios_paper)} paired turns)")
+if all_scatter:
+    xs_p = [s["char_len"] for s in all_scatter]
+    ys_p = [s["latency_ms"] for s in all_scatter]
+    r_p = pearson_r(xs_p, ys_p)
+    print(f"  Pearson r          : {r_p:.3f}  (N={len(all_scatter)} turns)")
+print(f"  Echo loops         : {total_echo_loops} / {n_instrumented} calls")
+print(f"  VAD false triggers : {total_vad_false} ({vad_per:.1f}/call)")
+print(f"  Echo breakthroughs : {total_echo_breakthroughs} (callee interrupts)")
+print(f"  Hallucinations     : {total_hallucinations} blocked")
+
+# Per-mode cost/min
+for mlabel in ["V2V", "T2V", "Agent"]:
+    mode_dur = 0.0
+    mode_cost = 0.0
+    mode_n = 0
+    for c, m in instrumented:
+        raw = c.get("communication_mode") or "unknown"
+        if MODE_LABELS.get(raw, raw) != mlabel:
+            continue
+        dur = c.get("duration_s")
+        if dur and dur > 0:
+            mode_dur += dur
+        crd_m = c.get("call_result_data") or {}
+        mc = crd_m.get("cost_usd", 0) or 0
+        if not mc:
+            ct_m = c.get("cost_tokens") or {}
+            mc = (ct_m.get("audio_input", 0) * 0.06 + ct_m.get("audio_output", 0) * 0.24
+                  + ct_m.get("text_input", 0) * 0.005 + ct_m.get("text_output", 0) * 0.02) / 1000
+        mode_cost += mc
+        mode_n += 1
+    if mode_dur > 0 and mode_n > 0:
+        cpm_mode = mode_cost / (mode_dur / 60)
+        print(f"  Cost/min ({mlabel:<5s})  : ${cpm_mode:.4f}  (N={mode_n} calls)")
+
+if fml_st["n"]:
+    print(f"  First msg latency  : P50 {fml_st['p50']:.0f}ms / P95 {fml_st['p95']:.0f}ms  (N={fml_st['n']})")
+print("  ===========================")
 print()
 print("=" * 64)
 PYEOF
