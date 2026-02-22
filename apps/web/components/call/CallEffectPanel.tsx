@@ -80,6 +80,17 @@ export default function CallEffectPanel() {
   const BadgeIcon = modeBadgeIcon[communicationMode];
   const badgeLabel = t(`modeBadge.${COMM_MODE_KEYS[communicationMode]}`);
 
+  // 통화 완료 → 새 대화 시작 (useChat() 없이 직접 리셋)
+  // NOTE: useCallback은 반드시 조건부 return 전에 호출 (React Rules of Hooks)
+  const handleNewChat = useCallback(() => {
+    localStorage.removeItem('currentConversationId');
+    localStorage.removeItem('currentCommunicationMode');
+    localStorage.removeItem('currentSourceLang');
+    localStorage.removeItem('currentTargetLang');
+    resetDashboard();
+    window.location.href = '/';
+  }, [resetDashboard]);
+
   // Relay/Agent 모드 판별
   const isRealtimeMode = call?.callMode === 'agent' || call?.callMode === 'relay';
   const hasRelayWsUrl = !!call?.relayWsUrl;
@@ -124,21 +135,7 @@ export default function CallEffectPanel() {
 
   const handleEndCall = () => {
     endCall?.();
-    // resetCalling은 결과 확인 후 사용자가 직접 호출
   };
-
-  // 통화 완료 → 새 대화 시작 (useChat() 없이 직접 리셋)
-  const handleNewChat = useCallback(() => {
-    // localStorage 대화 데이터 정리
-    localStorage.removeItem('currentConversationId');
-    localStorage.removeItem('currentCommunicationMode');
-    localStorage.removeItem('currentSourceLang');
-    localStorage.removeItem('currentTargetLang');
-    // 대시보드 전체 초기화 (calling + 지도 + 시나리오)
-    resetDashboard();
-    // 페이지 새로고침으로 useChat 깨끗한 초기화 보장
-    window.location.href = '/';
-  }, [resetDashboard]);
 
   if (isEnded && call) {
     return <CallSummaryPanel call={call} onNewChat={handleNewChat} />;
