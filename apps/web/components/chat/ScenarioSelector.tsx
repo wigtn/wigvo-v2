@@ -22,6 +22,7 @@ import type { ScenarioType, ScenarioSubType } from '@/shared/types';
 import type { CommunicationMode, CallCategory } from '@/shared/call-types';
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE_PAIR, resolveDirectMode } from '@/shared/call-types';
 import type { DirectCallOptions } from '@/shared/call-types';
+import LanguageDropdown from '@/components/common/LanguageDropdown';
 
 // ── Quick Action (AI Auto only) ────────────────────────────────
 interface QuickAction {
@@ -87,77 +88,6 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
   const sourceLangObj = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLang);
   const targetLangObj = SUPPORTED_LANGUAGES.find((l) => l.code === targetLang);
 
-  const renderLanguagePair = () => (
-    <div className="mb-5 max-w-xs mx-auto w-full">
-      <div className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
-        {/* My language */}
-        <div className="px-4 py-3">
-          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
-            {tLang('myLang')}
-          </p>
-          <select
-            value={sourceLang}
-            onChange={(e) => setSourceLang(e.target.value)}
-            disabled={disabled}
-            className="w-full px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-          >
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.flag} {lang.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Divider with swap button */}
-        <div className="relative flex items-center px-4">
-          <div className="flex-1 h-px bg-[#E2E8F0]" />
-          <button
-            type="button"
-            onClick={handleSwapLanguages}
-            disabled={disabled}
-            className="mx-3 shrink-0 w-8 h-8 rounded-full bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors disabled:opacity-50"
-            aria-label="Swap languages"
-          >
-            <ArrowDownUp className="size-3.5" />
-          </button>
-          <div className="flex-1 h-px bg-[#E2E8F0]" />
-        </div>
-
-        {/* Their language */}
-        <div className="px-4 py-3">
-          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
-            {tLang('theirLang')}
-          </p>
-          <select
-            value={targetLang}
-            onChange={(e) => setTargetLang(e.target.value)}
-            disabled={disabled}
-            className="w-full px-3 py-2 text-sm rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] focus:outline-none focus:border-[#CBD5E1] transition-colors disabled:opacity-50"
-          >
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.flag} {lang.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Translation flow preview */}
-      <div className="mt-2.5 px-1 space-y-0.5">
-        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
-          <span>{sourceLangObj?.flag}</span>
-          <span>{tLang('flowSend', { source: sourceLangObj?.label ?? '', target: targetLangObj?.label ?? '' })}</span>
-        </p>
-        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
-          <span>{targetLangObj?.flag}</span>
-          <span>{tLang('flowReceive', { source: sourceLangObj?.label ?? '' })}</span>
-        </p>
-      </div>
-    </div>
-  );
-
   // ── Category selection ──────────────────────────────────────
   const handleCategorySelect = useCallback((category: CallCategory) => {
     if (disabled) return;
@@ -180,7 +110,6 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
       inputMethod,
     };
     const mode = resolveDirectMode(options);
-    // Direct calls use INQUIRY/OTHER as placeholder scenario (no AI chat needed)
     onSelect('INQUIRY', 'OTHER', mode, sourceLang, targetLang);
   }, [disabled, inputMethod, sourceLang, targetLang, onSelect]);
 
@@ -210,240 +139,274 @@ export function ScenarioSelector({ onSelect, disabled = false }: ScenarioSelecto
     [handleFreeTextSubmit],
   );
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // Step 1: Category selection (Direct vs AI Auto)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (step === 'category') {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto styled-scrollbar">
-          <div className="min-h-full flex flex-col justify-center px-5 py-6">
-            {renderLanguagePair()}
+  // ── Language pair section ───────────────────────────────────
+  const renderLanguagePair = () => (
+    <div className="mb-5 max-w-xs mx-auto w-full">
+      <div className="rounded-2xl border border-[#E2E8F0] bg-white">
+        {/* My language */}
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
+            {tLang('myLang')}
+          </p>
+          <LanguageDropdown value={sourceLang} onChange={setSourceLang} disabled={disabled} />
+        </div>
 
-            {/* Header */}
-            <div className="text-center mb-8">
-              <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1">
-                {t.rich('title', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
-              </h2>
-              <p className="text-sm text-[#94A3B8]">{t('subtitle')}</p>
-            </div>
+        {/* Divider with swap button */}
+        <div className="relative flex items-center px-4">
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+          <button
+            type="button"
+            onClick={handleSwapLanguages}
+            disabled={disabled}
+            className="mx-3 shrink-0 w-8 h-8 rounded-full bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors disabled:opacity-50"
+            aria-label="Swap languages"
+          >
+            <ArrowDownUp className="size-3.5" />
+          </button>
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+        </div>
 
-            {/* Category cards */}
-            <div className="flex flex-col gap-3 max-w-xs mx-auto w-full">
-              {/* Direct Call */}
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => handleCategorySelect('direct')}
-                className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
-              >
-                <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
-                  <Phone className="size-5 text-[#0F172A]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-[#0F172A]">{tCat('directTitle')}</p>
-                  <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">{tCat('directSubtitle')}</p>
-                  <p className="text-xs text-[#64748B] mt-0.5 leading-snug">{tCat('directDesc')}</p>
-                </div>
-              </button>
-
-              {/* AI Auto Call */}
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => handleCategorySelect('ai_auto')}
-                className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
-              >
-                <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
-                  <Bot className="size-5 text-[#0F172A]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-[#0F172A]">{tCat('aiAutoTitle')}</p>
-                  <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">{tCat('aiAutoSubtitle')}</p>
-                  <p className="text-xs text-[#64748B] mt-0.5 leading-snug">{tCat('aiAutoDesc')}</p>
-                </div>
-              </button>
-            </div>
-          </div>
+        {/* Their language */}
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-1.5">
+            {tLang('theirLang')}
+          </p>
+          <LanguageDropdown value={targetLang} onChange={setTargetLang} disabled={disabled} />
         </div>
       </div>
-    );
-  }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // Step 2a: Direct Call options
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (step === 'direct') {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto styled-scrollbar">
-          <div className="min-h-full flex flex-col justify-center px-5 py-6">
-            {/* Back button */}
+      {/* Translation flow preview */}
+      <div className="mt-2.5 px-1 space-y-0.5">
+        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
+          <span>{sourceLangObj?.flag}</span>
+          <span>{tLang('flowSend', { source: sourceLangObj?.label ?? '', target: targetLangObj?.label ?? '' })}</span>
+        </p>
+        <p className="text-[10px] text-[#94A3B8] flex items-center gap-1">
+          <span>{targetLangObj?.flag}</span>
+          <span>{tLang('flowReceive', { source: sourceLangObj?.label ?? '' })}</span>
+        </p>
+      </div>
+    </div>
+  );
+
+  // ── Step-specific content helpers ───────────────────────────
+  const renderCategoryContent = () => (
+    <>
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h2 className="text-xl font-bold text-[#0F172A] tracking-tight mb-1">
+          {t.rich('title', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
+        </h2>
+        <p className="text-sm text-[#94A3B8]">{t('subtitle')}</p>
+      </div>
+
+      {/* Category cards */}
+      <div className="flex flex-col gap-3 max-w-xs mx-auto w-full">
+        {/* Direct Call */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => handleCategorySelect('direct')}
+          className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
+        >
+          <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
+            <Phone className="size-5 text-[#0F172A]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-[#0F172A]">{tCat('directTitle')}</p>
+            <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">{tCat('directSubtitle')}</p>
+            <p className="text-xs text-[#64748B] mt-0.5 leading-snug">{tCat('directDesc')}</p>
+          </div>
+        </button>
+
+        {/* AI Auto Call */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => handleCategorySelect('ai_auto')}
+          className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-left"
+        >
+          <div className="shrink-0 w-12 h-12 rounded-2xl bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center">
+            <Bot className="size-5 text-[#0F172A]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-[#0F172A]">{tCat('aiAutoTitle')}</p>
+            <p className="text-[10px] text-[#94A3B8] font-medium uppercase tracking-wider">{tCat('aiAutoSubtitle')}</p>
+            <p className="text-xs text-[#64748B] mt-0.5 leading-snug">{tCat('aiAutoDesc')}</p>
+          </div>
+        </button>
+      </div>
+    </>
+  );
+
+  const renderDirectContent = () => (
+    <>
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h2 className="text-lg font-bold text-[#0F172A] tracking-tight mb-1">
+          {tDirect('title')}
+        </h2>
+        <p className="text-sm text-[#94A3B8]">{tDirect('subtitle')}</p>
+      </div>
+
+      <div className="max-w-xs mx-auto w-full space-y-5">
+        {/* Input method */}
+        <div>
+          <p className="text-xs font-semibold text-[#64748B] mb-2 uppercase tracking-wider">
+            {tDirect('inputLabel')}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={handleBack}
               disabled={disabled}
-              className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors mb-4 self-start"
+              onClick={() => setInputMethod('voice')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
+                inputMethod === 'voice'
+                  ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
+                  : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
+              } disabled:opacity-50`}
             >
-              <ChevronLeft className="size-3.5" />
-              {tCat('directTitle')}
-            </button>
-
-            {renderLanguagePair()}
-
-            {/* Header */}
-            <div className="text-center mb-6">
-              <h2 className="text-lg font-bold text-[#0F172A] tracking-tight mb-1">
-                {tDirect('title')}
-              </h2>
-              <p className="text-sm text-[#94A3B8]">{tDirect('subtitle')}</p>
-            </div>
-
-            <div className="max-w-xs mx-auto w-full space-y-5">
-              {/* Input method */}
-              <div>
-                <p className="text-xs font-semibold text-[#64748B] mb-2 uppercase tracking-wider">
-                  {tDirect('inputLabel')}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setInputMethod('voice')}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                      inputMethod === 'voice'
-                        ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                        : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
-                    } disabled:opacity-50`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      inputMethod === 'voice' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
-                    }`}>
-                      <Mic className="size-5" />
-                    </div>
-                    <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputVoice')}</span>
-                    <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputVoiceDesc')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setInputMethod('text')}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                      inputMethod === 'text'
-                        ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
-                        : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
-                    } disabled:opacity-50`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      inputMethod === 'text' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
-                    }`}>
-                      <MessageSquare className="size-5" />
-                    </div>
-                    <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputText')}</span>
-                    <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputTextDesc')}</span>
-                  </button>
-                </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                inputMethod === 'voice' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+              }`}>
+                <Mic className="size-5" />
               </div>
-
-              {/* Start call button */}
-              <button
-                type="button"
-                onClick={handleDirectStart}
-                disabled={disabled}
-                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#0F172A] text-white px-4 py-3 text-sm font-medium transition-colors hover:bg-[#1E293B] disabled:opacity-40"
-              >
-                <Phone className="size-4" />
-                {tDirect('startCall')}
-              </button>
-            </div>
+              <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputVoice')}</span>
+              <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputVoiceDesc')}</span>
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setInputMethod('text')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
+                inputMethod === 'text'
+                  ? 'border-[#0F172A] bg-[#F8FAFC] ring-1 ring-[#0F172A]'
+                  : 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
+              } disabled:opacity-50`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                inputMethod === 'text' ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+              }`}>
+                <MessageSquare className="size-5" />
+              </div>
+              <span className="text-xs font-semibold text-[#0F172A]">{tDirect('inputText')}</span>
+              <span className="text-[9px] text-[#94A3B8] text-center leading-tight">{tDirect('inputTextDesc')}</span>
+            </button>
           </div>
         </div>
+
+        {/* Start call button */}
+        <button
+          type="button"
+          onClick={handleDirectStart}
+          disabled={disabled}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#0F172A] text-white px-4 py-3 text-sm font-medium transition-colors hover:bg-[#1E293B] disabled:opacity-40"
+        >
+          <Phone className="size-4" />
+          {tDirect('startCall')}
+        </button>
       </div>
-    );
-  }
+    </>
+  );
+
+  const renderAiAutoContent = () => (
+    <>
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h2 className="text-lg font-bold text-[#0F172A] tracking-tight mb-1">
+          {tAiAuto.rich('title', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
+        </h2>
+        <p className="text-sm text-[#94A3B8]">{tAiAuto('subtitle')}</p>
+      </div>
+
+      {/* Quick action grid */}
+      <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto w-full mb-5">
+        {QUICK_ACTIONS.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={`${action.scenarioType}-${action.subType}`}
+              type="button"
+              disabled={disabled}
+              onClick={() => handleQuickAction(action)}
+              className="group flex flex-col items-center gap-2 p-3 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.97] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#F1F5F9] flex items-center justify-center group-hover:bg-[#E2E8F0] transition-colors">
+                <Icon className="size-5 text-[#0F172A]" />
+              </div>
+              <span className="text-[11px] font-semibold text-[#0F172A] leading-tight text-center">
+                {tQuick(action.labelKey)}
+              </span>
+              <span className="text-[9px] text-[#94A3B8] leading-tight text-center hidden sm:block">
+                {tQuick(action.descKey)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Divider + free text */}
+      <div className="max-w-xs mx-auto w-full">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+          <span className="text-[10px] text-[#CBD5E1] font-medium uppercase tracking-wider">
+            {t('orFreeInput')}
+          </span>
+          <div className="flex-1 h-px bg-[#E2E8F0]" />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            placeholder={t('freeInputPlaceholder')}
+            className="flex-1 rounded-2xl border border-[#E2E8F0] px-4 py-2.5 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A] disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={handleFreeTextSubmit}
+            disabled={!freeText.trim() || disabled}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B] disabled:opacity-30"
+          >
+            <Send className="size-4" />
+          </button>
+        </div>
+      </div>
+    </>
+  );
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // Step 2b: AI Auto Call (scenario selection)
+  // Single unified return — fixed slot layout prevents Y-jump
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto styled-scrollbar">
-        <div className="min-h-full flex flex-col justify-center px-5 py-6">
-          {/* Back button */}
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={disabled}
-            className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors mb-4 self-start"
-          >
-            <ChevronLeft className="size-3.5" />
-            {tCat('aiAutoTitle')}
-          </button>
-
-          {/* Header */}
-          <div className="text-center mb-6">
-            <h2 className="text-lg font-bold text-[#0F172A] tracking-tight mb-1">
-              {tAiAuto.rich('title', { accent: (chunks) => <span className="text-gradient">{chunks}</span> })}
-            </h2>
-            <p className="text-sm text-[#94A3B8]">{tAiAuto('subtitle')}</p>
-          </div>
-
-          {/* Quick action grid */}
-          <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto w-full mb-5">
-            {QUICK_ACTIONS.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={`${action.scenarioType}-${action.subType}`}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => handleQuickAction(action)}
-                  className="group flex flex-col items-center gap-2 p-3 rounded-2xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.97] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#F1F5F9] flex items-center justify-center group-hover:bg-[#E2E8F0] transition-colors">
-                    <Icon className="size-5 text-[#0F172A]" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-[#0F172A] leading-tight text-center">
-                    {tQuick(action.labelKey)}
-                  </span>
-                  <span className="text-[9px] text-[#94A3B8] leading-tight text-center hidden sm:block">
-                    {tQuick(action.descKey)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Divider + free text */}
-          <div className="max-w-xs mx-auto w-full">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="flex-1 h-px bg-[#E2E8F0]" />
-              <span className="text-[10px] text-[#CBD5E1] font-medium uppercase tracking-wider">
-                {t('orFreeInput')}
-              </span>
-              <div className="flex-1 h-px bg-[#E2E8F0]" />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={freeText}
-                onChange={(e) => setFreeText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={disabled}
-                placeholder={t('freeInputPlaceholder')}
-                className="flex-1 rounded-2xl border border-[#E2E8F0] px-4 py-2.5 text-sm text-[#334155] placeholder:text-[#CBD5E1] focus:outline-none focus:ring-1 focus:ring-[#0F172A] disabled:opacity-50"
-              />
+        <div className="px-5 pt-6 pb-6 flex flex-col items-center">
+          {/* Back button slot — always h-7 to prevent layout shift */}
+          <div className="w-full max-w-xs h-7 mb-1">
+            {step !== 'category' && (
               <button
                 type="button"
-                onClick={handleFreeTextSubmit}
-                disabled={!freeText.trim() || disabled}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B] disabled:opacity-30"
+                onClick={handleBack}
+                disabled={disabled}
+                className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors"
               >
-                <Send className="size-4" />
+                <ChevronLeft className="size-3.5" />
+                {step === 'direct' ? tCat('directTitle') : tCat('aiAutoTitle')}
               </button>
-            </div>
+            )}
           </div>
+
+          {/* Language pair — same Y position on all steps */}
+          {renderLanguagePair()}
+
+          {/* Step-specific content — only below changes */}
+          {step === 'category' && renderCategoryContent()}
+          {step === 'direct' && renderDirectContent()}
+          {step === 'ai_auto' && renderAiAutoContent()}
         </div>
       </div>
     </div>
