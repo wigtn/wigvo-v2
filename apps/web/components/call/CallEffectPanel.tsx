@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl';
 import { useRelayCallStore } from '@/hooks/useRelayCallStore';
 import { useCallPolling } from '@/hooks/useCallPolling';
 import { useDashboard } from '@/hooks/useDashboard';
-import { useChat } from '@/hooks/useChat';
 import CallingStatus from './CallingStatus';
 import CallStatusBar from './CallStatusBar';
 import CallSummaryPanel from './CallSummaryPanel';
@@ -50,8 +49,7 @@ function getOrbHue(isRecording: boolean, isPlaying: boolean, isMuted: boolean): 
 export default function CallEffectPanel() {
   const t = useTranslations('call');
   const tc = useTranslations('common');
-  const { callingCallId, callingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
-  const { handleNewConversation } = useChat();
+  const { callingCallId, callingCommunicationMode, resetDashboard } = useDashboard();
   const { call, loading, error: pollError, refetch } = useCallPolling(callingCallId ?? '');
 
   const {
@@ -129,11 +127,18 @@ export default function CallEffectPanel() {
     // resetCalling은 결과 확인 후 사용자가 직접 호출
   };
 
-  // 통화 완료 → 요약 대시보드
-  const handleNewChat = useCallback(async () => {
+  // 통화 완료 → 새 대화 시작 (useChat() 없이 직접 리셋)
+  const handleNewChat = useCallback(() => {
+    // localStorage 대화 데이터 정리
+    localStorage.removeItem('currentConversationId');
+    localStorage.removeItem('currentCommunicationMode');
+    localStorage.removeItem('currentSourceLang');
+    localStorage.removeItem('currentTargetLang');
+    // 대시보드 전체 초기화 (calling + 지도 + 시나리오)
     resetDashboard();
-    await handleNewConversation();
-  }, [resetDashboard, handleNewConversation]);
+    // 페이지 새로고침으로 useChat 깨끗한 초기화 보장
+    window.location.href = '/';
+  }, [resetDashboard]);
 
   if (isEnded && call) {
     return <CallSummaryPanel call={call} onNewChat={handleNewChat} />;

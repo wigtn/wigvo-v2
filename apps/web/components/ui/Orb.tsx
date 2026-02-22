@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mesh, Program, Renderer, Triangle, Vec3 } from 'ogl';
 
 interface OrbProps {
@@ -205,37 +205,57 @@ export default function Orb({
     }
   `;
 
+  const [webglFailed, setWebglFailed] = useState(false);
+
   useEffect(() => {
     const container = ctnDom.current;
     if (!container) return;
 
-    const renderer = new Renderer({ alpha: true, premultipliedAlpha: false });
+    let renderer: Renderer;
+    try {
+      renderer = new Renderer({ alpha: true, premultipliedAlpha: false });
+    } catch (err) {
+      console.warn('[Orb] WebGL initialization failed:', err);
+      setWebglFailed(true);
+      return;
+    }
+
     const gl = renderer.gl;
     gl.clearColor(0, 0, 0, 0);
     container.appendChild(gl.canvas);
 
-    const geometry = new Triangle(gl);
-    const program = new Program(gl, {
-      vertex: vert,
-      fragment: frag,
-      uniforms: {
-        iTime: { value: 0 },
-        iResolution: {
-          value: new Vec3(
-            gl.canvas.width,
-            gl.canvas.height,
-            gl.canvas.width / gl.canvas.height
-          ),
+    let program: Program;
+    try {
+      const geometry = new Triangle(gl);
+      program = new Program(gl, {
+        vertex: vert,
+        fragment: frag,
+        uniforms: {
+          iTime: { value: 0 },
+          iResolution: {
+            value: new Vec3(
+              gl.canvas.width,
+              gl.canvas.height,
+              gl.canvas.width / gl.canvas.height
+            ),
+          },
+          hue: { value: hue },
+          hover: { value: 0 },
+          rot: { value: 0 },
+          hoverIntensity: { value: hoverIntensity },
+          backgroundColor: { value: hexToVec3(backgroundColor) },
         },
-        hue: { value: hue },
-        hover: { value: 0 },
-        rot: { value: 0 },
-        hoverIntensity: { value: hoverIntensity },
-        backgroundColor: { value: hexToVec3(backgroundColor) },
-      },
-    });
+      });
 
-    const mesh = new Mesh(gl, { geometry, program });
+      var mesh = new Mesh(gl, { geometry, program });
+    } catch (err) {
+      console.warn('[Orb] WebGL program setup failed:', err);
+      setWebglFailed(true);
+      if (gl.canvas.parentNode === container) {
+        container.removeChild(gl.canvas);
+      }
+      return;
+    }
 
     function resize() {
       if (!container) return;
@@ -324,6 +344,14 @@ export default function Orb({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hue, hoverIntensity, rotateOnHover, forceHoverState, backgroundColor]);
+
+  if (webglFailed) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 to-cyan-400 opacity-60 animate-pulse" />
+      </div>
+    );
+  }
 
   return <div ref={ctnDom} className="w-full h-full" />;
 }
