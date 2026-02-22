@@ -122,10 +122,14 @@ else:
 sb_e2e = metrics.get("session_b_e2e_latencies_ms", [])
 sb_stt = metrics.get("session_b_stt_latencies_ms", [])
 
-# Translation = E2E - STT (paired)
+# Translation = E2E - STT (paired by turn index)
 sb_trans = []
-paired = min(len(sb_e2e), len(sb_stt))
-for i in range(paired):
+paired_e2e = []
+paired_stt = []
+paired_n = min(len(sb_e2e), len(sb_stt))
+for i in range(paired_n):
+    paired_e2e.append(sb_e2e[i])
+    paired_stt.append(sb_stt[i])
     t = sb_e2e[i] - sb_stt[i]
     if t >= 0:
         sb_trans.append(t)
@@ -145,9 +149,11 @@ if stt_st["n"]:
     print(f"  STT        P50: {stt_st['p50']:.0f}ms  P95: {stt_st['p95']:.0f}ms  Mean: {stt_st['mean']:.0f}ms")
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
-if stt_st["n"] and e2e_st["mean"] > 0:
-    stt_pct = stt_st["mean"] / e2e_st["mean"] * 100
-    print(f"  STT % of E2E mean: {stt_pct:.1f}%")
+if paired_e2e:
+    paired_e2e_mean = sum(paired_e2e) / len(paired_e2e)
+    paired_stt_mean = sum(paired_stt) / len(paired_stt)
+    stt_pct = paired_stt_mean / paired_e2e_mean * 100 if paired_e2e_mean > 0 else 0
+    print(f"  STT % of E2E mean: {stt_pct:.1f}%  (N={len(paired_e2e)} paired turns)")
 
 # ── [Utterance Analysis] ─────────────────────────────────────────────────────
 

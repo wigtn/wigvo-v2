@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useRelayCallStore } from '@/hooks/useRelayCallStore';
 import { useCallPolling } from '@/hooks/useCallPolling';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useChat } from '@/hooks/useChat';
 import CallingStatus from './CallingStatus';
 import CallStatusBar from './CallStatusBar';
 import CallSummaryPanel from './CallSummaryPanel';
@@ -49,7 +50,8 @@ function getOrbHue(isRecording: boolean, isPlaying: boolean, isMuted: boolean): 
 export default function CallEffectPanel() {
   const t = useTranslations('call');
   const tc = useTranslations('common');
-  const { callingCallId, callingCommunicationMode, resetCalling } = useDashboard();
+  const { callingCallId, callingCommunicationMode, resetCalling, resetDashboard } = useDashboard();
+  const { handleNewConversation } = useChat();
   const { call, loading, error: pollError, refetch } = useCallPolling(callingCallId ?? '');
 
   const {
@@ -128,8 +130,13 @@ export default function CallEffectPanel() {
   };
 
   // 통화 완료 → 요약 대시보드
+  const handleNewChat = useCallback(async () => {
+    resetDashboard();
+    await handleNewConversation();
+  }, [resetDashboard, handleNewConversation]);
+
   if (isEnded && call) {
-    return <CallSummaryPanel call={call} onNewChat={resetCalling} />;
+    return <CallSummaryPanel call={call} onNewChat={handleNewChat} />;
   }
 
   return (

@@ -111,6 +111,7 @@ for c in data:
 # ── Latency aggregation (instrumented calls only) ────────────────────────────
 
 all_sa, all_sb_e2e, all_sb_stt, all_sb_trans = [], [], [], []
+all_paired_e2e, all_paired_stt = [], []
 all_scatter = []
 total_echo_supp = 0
 total_echo_loops = 0
@@ -134,9 +135,11 @@ for c, m in instrumented:
     all_sb_e2e.extend(sb_e2e)
     all_sb_stt.extend(sb_stt)
 
-    # Translation = E2E - STT
-    paired = min(len(sb_e2e), len(sb_stt))
-    for i in range(paired):
+    # Translation = E2E - STT (paired by turn index)
+    paired_n = min(len(sb_e2e), len(sb_stt))
+    for i in range(paired_n):
+        all_paired_e2e.append(sb_e2e[i])
+        all_paired_stt.append(sb_stt[i])
         t = sb_e2e[i] - sb_stt[i]
         if t >= 0:
             all_sb_trans.append(t)
@@ -236,9 +239,11 @@ if stt_st["n"]:
     print(f"  STT        P50: {stt_st['p50']:.0f}ms  P95: {stt_st['p95']:.0f}ms  Mean: {stt_st['mean']:.0f}ms")
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
-if stt_st["n"] and e2e_st["mean"] > 0:
-    stt_pct = stt_st["mean"] / e2e_st["mean"] * 100
-    print(f"  STT % of E2E mean: {stt_pct:.1f}%")
+if all_paired_e2e:
+    paired_e2e_mean = sum(all_paired_e2e) / len(all_paired_e2e)
+    paired_stt_mean = sum(all_paired_stt) / len(all_paired_stt)
+    stt_pct = paired_stt_mean / paired_e2e_mean * 100 if paired_e2e_mean > 0 else 0
+    print(f"  STT % of E2E mean: {stt_pct:.1f}%  (N={len(all_paired_e2e)} paired turns)")
 
 # ── Utterance Analysis ──
 print()

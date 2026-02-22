@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type Call } from '@/shared/types';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useChat } from '@/hooks/useChat';
 import { PhoneOff, MapPin, Calendar, Clock, Scissors, FileText, List, Home } from 'lucide-react';
 
 interface ResultCardProps {
@@ -51,7 +52,8 @@ export default function ResultCard({ call }: ResultCardProps) {
   const router = useRouter();
   const t = useTranslations('result');
   const tc = useTranslations('common');
-  const { resetCalling, callingCallId } = useDashboard();
+  const { resetCalling, resetDashboard, callingCallId } = useDashboard();
+  const { handleNewConversation } = useChat();
   const isInline = !!callingCallId;
 
   return (
@@ -114,8 +116,9 @@ export default function ResultCard({ call }: ResultCardProps) {
           {t('viewHistory')}
         </button>
         <button
-          onClick={() => {
-            if (isInline) { resetCalling(); } else { router.push('/'); }
+          onClick={async () => {
+            resetDashboard();
+            await handleNewConversation();
           }}
           className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-[#94A3B8] hover:text-[#64748B] hover:bg-[#F8FAFC] transition-all"
         >
