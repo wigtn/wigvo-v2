@@ -1,11 +1,11 @@
 // =============================================================================
-// WIGVO LLM Response Parser (v3)
+// WIGVO LLM Response Parser (v5 - JSON Mode)
 // =============================================================================
 // BE1 소유 - GPT 응답에서 메시지와 JSON 데이터 분리
-// v3 개선: undefined 보존으로 기존 값 유지 (null과 undefined 구분)
+// v5 개선: JSON Mode 대응 (전체 응답이 JSON), fallback으로 ```json 블록 파싱 보존
 // =============================================================================
 
-import { CollectedData } from '@/shared/types';
+import { CollectedData, DetectedIntent } from '@/shared/types';
 
 /**
  * 파싱된 LLM 응답
@@ -18,96 +18,130 @@ export interface ParsedLLMResponse {
   collected: Partial<CollectedData>;
   is_complete: boolean;
   next_question?: string;
+  detected_intent?: DetectedIntent;
 }
 
 /**
- * GPT 응답에서 메시지와 JSON 데이터를 분리
- * 
- * v3 개선사항:
- * - LLM이 JSON에서 필드를 생략하거나 null로 보내면 undefined로 처리
- * - 실제 값이 있을 때만 해당 필드를 포함
- * - 이렇게 하면 mergeCollectedData에서 기존 값이 보존됨
- *
- * @param content - GPT 응답 전체 텍스트
- * @returns 파싱된 응답 (실패 시 fallback 반환)
+ * collected 객체에서 null이 아닌 값만 추출 (null → undefined 변환으로 기존 값 보존)
  */
-export function parseAssistantResponse(content: string): ParsedLLMResponse {
-  // JSON 블록 추출 정규식: ```json ... ```
+function filterCollected(rawCollected: Record<string, unknown>): Partial<CollectedData> {
+  const collected: Partial<CollectedData> = {};
+
+  const stringFields = [
+    'target_name', 'target_phone', 'scenario_type', 'scenario_sub_type',
+    'primary_datetime', 'service', 'fallback_action', 'customer_name', 'special_request',
+  ] as const;
+
+  for (const field of stringFields) {
+    const value = rawCollected[field];
+    if (value !== null && value !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (collected as any)[field] = value;
+    }
+  }
+
+  if (rawCollected.party_size !== null && rawCollected.party_size !== undefined) {
+    collected.party_size = rawCollected.party_size as number;
+  }
+
+  if (
+    rawCollected.fallback_datetimes &&
+    Array.isArray(rawCollected.fallback_datetimes) &&
+    rawCollected.fallback_datetimes.length > 0
+  ) {
+    collected.fallback_datetimes = rawCollected.fallback_datetimes;
+  }
+
+  return collected;
+}
+
+/**
+ * 파싱된 JSON 객체에서 ParsedLLMResponse 추출
+ */
+function extractFromParsed(parsed: Record<string, unknown>): ParsedLLMResponse {
+  const rawCollected = (parsed.collected || {}) as Record<string, unknown>;
+  const collected = filterCollected(rawCollected);
+
+  // detected_intent 추출
+  let detected_intent: DetectedIntent | undefined;
+  if (parsed.detected_intent && typeof parsed.detected_intent === 'object') {
+    const di = parsed.detected_intent as Record<string, unknown>;
+    if (di.scenario_type && di.scenario_sub_type && typeof di.confidence === 'number') {
+      detected_intent = {
+        scenario_type: di.scenario_type as DetectedIntent['scenario_type'],
+        scenario_sub_type: di.scenario_sub_type as DetectedIntent['scenario_sub_type'],
+        confidence: di.confidence,
+      };
+    }
+  }
+
+  return {
+    message: (parsed.message as string) || '알겠습니다!',
+    collected,
+    is_complete: (parsed.is_complete as boolean) ?? false,
+    next_question: parsed.next_question as string | undefined,
+    detected_intent,
+  };
+}
+
+/**
+ * 기존 ```json 블록 파싱 (fallback safety net)
+ */
+function fallbackParse(content: string): ParsedLLMResponse {
   const jsonBlockRegex = /```json\s*([\s\S]*?)\s*```/;
   const match = content.match(jsonBlockRegex);
 
   if (!match) {
-    // JSON 블록이 없으면 전체를 메시지로 반환
     return {
       message: content.trim(),
-      collected: {}, // 빈 객체 = 아무것도 수집 안 됨 = 기존 값 유지
+      collected: {},
       is_complete: false,
     };
   }
 
   try {
-    const jsonStr = match[1];
-    const parsed = JSON.parse(jsonStr);
-
-    // JSON 블록 제거한 나머지를 메시지로
+    const parsed = JSON.parse(match[1]);
     const message = content.replace(jsonBlockRegex, '').trim();
-
-    // collected 객체 추출 - null이 아닌 값만 포함 (핵심 변경!)
-    // LLM이 null을 보내면 "모름/수집 안 됨"으로 해석 → undefined로 처리하여 기존 값 유지
-    const rawCollected = parsed.collected || {};
-    const collected: Partial<CollectedData> = {};
-    
-    // 각 필드를 검사하여 실제 값이 있을 때만 포함
-    if (rawCollected.target_name !== null && rawCollected.target_name !== undefined) {
-      collected.target_name = rawCollected.target_name;
-    }
-    if (rawCollected.target_phone !== null && rawCollected.target_phone !== undefined) {
-      collected.target_phone = rawCollected.target_phone;
-    }
-    if (rawCollected.scenario_type !== null && rawCollected.scenario_type !== undefined) {
-      collected.scenario_type = rawCollected.scenario_type;
-    }
-    // v4: scenario_sub_type 추가
-    if (rawCollected.scenario_sub_type !== null && rawCollected.scenario_sub_type !== undefined) {
-      collected.scenario_sub_type = rawCollected.scenario_sub_type;
-    }
-    if (rawCollected.primary_datetime !== null && rawCollected.primary_datetime !== undefined) {
-      collected.primary_datetime = rawCollected.primary_datetime;
-    }
-    if (rawCollected.service !== null && rawCollected.service !== undefined) {
-      collected.service = rawCollected.service;
-    }
-    if (rawCollected.fallback_datetimes && Array.isArray(rawCollected.fallback_datetimes) && rawCollected.fallback_datetimes.length > 0) {
-      collected.fallback_datetimes = rawCollected.fallback_datetimes;
-    }
-    if (rawCollected.fallback_action !== null && rawCollected.fallback_action !== undefined) {
-      collected.fallback_action = rawCollected.fallback_action;
-    }
-    if (rawCollected.customer_name !== null && rawCollected.customer_name !== undefined) {
-      collected.customer_name = rawCollected.customer_name;
-    }
-    if (rawCollected.party_size !== null && rawCollected.party_size !== undefined) {
-      collected.party_size = rawCollected.party_size;
-    }
-    if (rawCollected.special_request !== null && rawCollected.special_request !== undefined) {
-      collected.special_request = rawCollected.special_request;
-    }
+    const rawCollected = (parsed.collected || {}) as Record<string, unknown>;
 
     return {
       message: message || '알겠습니다!',
-      collected,
+      collected: filterCollected(rawCollected),
       is_complete: parsed.is_complete ?? false,
       next_question: parsed.next_question,
     };
   } catch {
-    // JSON 파싱 실패 시 fallback
-    // JSON 블록 제거 시도
     const message = content.replace(jsonBlockRegex, '').trim();
-
     return {
       message: message || content.trim(),
-      collected: {}, // 빈 객체 = 기존 값 유지
+      collected: {},
       is_complete: false,
     };
   }
+}
+
+/**
+ * GPT 응답에서 메시지와 JSON 데이터를 분리
+ *
+ * v5: JSON Mode 대응
+ * - 1차: 전체 응답을 JSON.parse (JSON mode 응답)
+ * - 2차: ```json 블록 추출 (fallback, 기존 호환)
+ */
+export function parseAssistantResponse(content: string): ParsedLLMResponse {
+  // 1차: 전체 JSON 파싱 (JSON mode)
+  const trimmed = content.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      // JSON mode 응답: message 필드가 있으면 유효한 구조
+      if (parsed.message !== undefined || parsed.collected !== undefined) {
+        return extractFromParsed(parsed);
+      }
+    } catch {
+      // JSON 파싱 실패 → fallback으로 진행
+    }
+  }
+
+  // 2차: 기존 ```json 블록 추출 (fallback safety net)
+  return fallbackParse(content);
 }

@@ -236,104 +236,25 @@ export const HOME_APPLIANCE_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `냉장고 AS요! ❄️
-
-어떤 문제가 있나요?
-1️⃣ 안 켜져요 / 작동 안 해요
-2️⃣ 냉기가 약해요 / 안 시원해요
-3️⃣ 소음이 나요
-4️⃣ 물이 새요 / 성에가 껴요
-5️⃣ 기타 (직접 설명)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "냉장고",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
+    content: `{"message":"냉장고 AS요! ❄️\\n\\n어떤 문제가 있나요?\\n1️⃣ 안 켜져요 / 작동 안 해요\\n2️⃣ 냉기가 약해요 / 안 시원해요\\n3️⃣ 소음이 나요\\n4️⃣ 물이 새요 / 성에가 껴요\\n5️⃣ 기타 (직접 설명)","collected":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"냉장고"},"is_complete":false,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "증상"
-}
-\`\`\``,
-  },
-  // 예시 2: 번호로 선택
+  // 예시 2: 증상 선택 → 브랜드
   {
     role: 'user' as const,
     content: '2번',
   },
   {
     role: 'assistant' as const,
-    content: `냉기가 약한 거군요! 🥶
-
-어떤 브랜드 제품인가요?
-1️⃣ 삼성
-2️⃣ LG
-3️⃣ 대우/위니아
-4️⃣ 기타 (직접 입력)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "냉장고",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "냉각 성능 저하"
+    content: `{"message":"냉기가 약한 거군요! 🥶\\n\\n어떤 브랜드 제품인가요?\\n1️⃣ 삼성\\n2️⃣ LG\\n3️⃣ 대우/위니아\\n4️⃣ 기타 (직접 입력)","collected":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"냉장고","special_request":"냉각 성능 저하"},"is_complete":false,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "브랜드"
-}
-\`\`\``,
-  },
-  // 예시 3: 브랜드 선택
+  // 예시 3: 브랜드 → 전화번호 확인
   {
     role: 'user' as const,
     content: '삼성',
   },
   {
     role: 'assistant' as const,
-    content: `삼성 냉장고요! 📞
-
-삼성전자 서비스센터 대표번호는 **1588-3366**이에요!
-
-이 번호로 전화할까요?
-1️⃣ 네, 이 번호로 해줘
-2️⃣ 다른 번호 있어요 (직접 입력)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "삼성전자 서비스센터",
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "냉장고",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "냉각 성능 저하"
-  },
-  "is_complete": false,
-  "next_question": "전화번호 확인"
-}
-\`\`\``,
+    content: `{"message":"삼성 냉장고요! 📞\\n\\n삼성전자 서비스센터 대표번호는 **1588-3366**이에요!\\n\\n이 번호로 전화할까요?\\n1️⃣ 네, 이 번호로 해줘\\n2️⃣ 다른 번호 있어요 (직접 입력)","collected":{"target_name":"삼성전자 서비스센터","scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"냉장고","special_request":"냉각 성능 저하"},"is_complete":false,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
   // 예시 4: 전화번호 확인 → 완료
   {
@@ -342,35 +263,7 @@ export const HOME_APPLIANCE_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `완벽해요! 정리해볼게요 📋
-
-📍 **삼성전자 서비스센터**
-📞 1588-3366
-🔧 제품: 냉장고
-💬 증상: 냉각 성능 저하
-
-✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!
-✏️ 수정할 게 있으면 말씀해주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "삼성전자 서비스센터",
-    "target_phone": "1588-3366",
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "냉장고",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "냉각 성능 저하"
-  },
-  "is_complete": true,
-  "next_question": null
-}
-\`\`\``,
+    content: `{"message":"완벽해요! 정리해볼게요 📋\\n\\n📍 **삼성전자 서비스센터**\\n📞 1588-3366\\n🔧 제품: 냉장고\\n💬 증상: 냉각 성능 저하\\n\\n✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!\\n✏️ 수정할 게 있으면 말씀해주세요!","collected":{"target_name":"삼성전자 서비스센터","target_phone":"1588-3366","scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"냉장고","special_request":"냉각 성능 저하"},"is_complete":true,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
   // 예시 5: 한 번에 여러 정보
   {
@@ -379,98 +272,15 @@ export const HOME_APPLIANCE_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `LG 세탁기 배수 불량이요! 🧺
-
-전화번호를 알려주시거나:
-1️⃣ 검색해줘 (LG전자 AS 번호 찾기)
-2️⃣ 직접 입력할게
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "LG전자 서비스센터",
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "세탁기",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "배수 불량"
+    content: `{"message":"LG 세탁기 배수 불량이요! 🧺\\n\\n전화번호를 알려주시거나:\\n1️⃣ 검색해줘 (LG전자 AS 번호 찾기)\\n2️⃣ 직접 입력할게","collected":{"target_name":"LG전자 서비스센터","scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"세탁기","special_request":"배수 불량"},"is_complete":false,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "전화번호"
-}
-\`\`\``,
-  },
-  // 예시 6: 검색 요청
-  {
-    role: 'user' as const,
-    content: '1번',
-  },
-  {
-    role: 'assistant' as const,
-    content: `LG전자 서비스센터 대표번호는 **1588-7777**이에요! 📞
-
-이 번호로 전화할까요?
-1️⃣ 네, 이 번호로 해줘
-2️⃣ 다른 번호 있어요 (직접 입력)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "LG전자 서비스센터",
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "세탁기",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "배수 불량"
-  },
-  "is_complete": false,
-  "next_question": "전화번호 확인"
-}
-\`\`\``,
-  },
-  // 예시 7: 긴급 AS
+  // 예시 6: 긴급 AS
   {
     role: 'user' as const,
     content: '급해요, 냉장고가 안 돼서 음식이 다 상할 것 같아',
   },
   {
     role: 'assistant' as const,
-    content: `급하시군요! 빠른 AS 요청으로 메모해둘게요 🏃
-
-어떤 브랜드 냉장고인가요?
-1️⃣ 삼성
-2️⃣ LG
-3️⃣ 대우/위니아
-4️⃣ 기타 (직접 입력)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": null,
-    "scenario_type": "AS_REQUEST",
-    "scenario_sub_type": "HOME_APPLIANCE",
-    "primary_datetime": null,
-    "service": "냉장고",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "작동 불량 (긴급 AS 요청)"
-  },
-  "is_complete": false,
-  "next_question": "브랜드"
-}
-\`\`\``,
+    content: `{"message":"급하시군요! 빠른 AS 요청으로 메모해둘게요 🏃\\n\\n어떤 브랜드 냉장고인가요?\\n1️⃣ 삼성\\n2️⃣ LG\\n3️⃣ 대우/위니아\\n4️⃣ 기타 (직접 입력)","collected":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","service":"냉장고","special_request":"작동 불량 (긴급 AS 요청)"},"is_complete":false,"detected_intent":{"scenario_type":"AS_REQUEST","scenario_sub_type":"HOME_APPLIANCE","confidence":1.0}}`,
   },
 ];

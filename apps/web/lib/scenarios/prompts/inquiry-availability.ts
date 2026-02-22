@@ -58,8 +58,7 @@ export const AVAILABILITY_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `그로브나인 다산에서 두쫀쿠 재고 여부 문의해 드릴게요! 📞
-전화번호를 알려주시면 바로 전화 걸어드릴 수 있어요. 번호를 아시나요?`,
+    content: `{"message":"그로브나인 다산에서 두쫀쿠 재고 여부 문의해 드릴게요! 📞\\n전화번호를 알려주시면 바로 전화 걸어드릴 수 있어요. 번호를 아시나요?","collected":{"target_name":"그로브나인 다산","scenario_type":"INQUIRY","scenario_sub_type":"AVAILABILITY","special_request":"두쫀쿠 남았는지"},"is_complete":false,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"AVAILABILITY","confidence":1.0}}`,
   },
   {
     role: 'user' as const,
@@ -67,12 +66,6 @@ export const AVAILABILITY_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `전화번호 저장했어요! 📋
-
-📍 **그로브나인 다산**
-📞 010-9265-9103
-💬 문의 내용: 두쫀쿠 남았는지
-
-맞으면 **전화 걸기** 버튼을 눌러주세요!`,
+    content: `{"message":"전화번호 저장했어요! 📋\\n\\n📍 **그로브나인 다산**\\n📞 010-9265-9103\\n💬 문의 내용: 두쫀쿠 남았는지\\n\\n맞으면 **전화 걸기** 버튼을 눌러주세요!","collected":{"target_name":"그로브나인 다산","target_phone":"010-9265-9103","scenario_type":"INQUIRY","scenario_sub_type":"AVAILABILITY","special_request":"두쫀쿠 남았는지"},"is_complete":true,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"AVAILABILITY","confidence":1.0}}`,
   },
 ];

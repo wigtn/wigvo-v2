@@ -215,208 +215,43 @@ export const SALON_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `준오헤어 예약 도와드릴게요! ✂️
-
-어떤 시술을 받으실 건가요?
-1️⃣ 커트
-2️⃣ 펌 (파마)
-3️⃣ 염색
-4️⃣ 커트 + 염색
-5️⃣ 기타
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
+    content: `{"message":"준오헤어 예약 도와드릴게요! ✂️\\n\\n어떤 시술을 받으실 건가요?\\n1️⃣ 커트\\n2️⃣ 펌 (파마)\\n3️⃣ 염색\\n4️⃣ 커트 + 염색\\n5️⃣ 기타","collected":{"target_name":"준오헤어","scenario_type":"RESERVATION","scenario_sub_type":"SALON"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "시술"
-}
-\`\`\``,
-  },
-  // 예시 2: 번호로 선택
+  // 예시 2: 커트 선택 → 날짜
   {
     role: 'user' as const,
     content: '1번',
   },
   {
     role: 'assistant' as const,
-    content: `커트요! 💇
-
-언제 예약할까요? 📅
-1️⃣ 오늘
-2️⃣ 내일
-3️⃣ 이번 주말
-4️⃣ 직접 입력
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": null,
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
+    content: `{"message":"커트요! 💇\\n\\n언제 예약할까요? 📅\\n1️⃣ 오늘\\n2️⃣ 내일\\n3️⃣ 이번 주말\\n4️⃣ 직접 입력","collected":{"target_name":"준오헤어","scenario_type":"RESERVATION","scenario_sub_type":"SALON","service":"커트"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "날짜"
-}
-\`\`\``,
-  },
-  // 예시 3: 날짜 선택 후 시간 선택지
+  // 예시 3: 시간 → 전화번호
   {
     role: 'user' as const,
-    content: '내일',
+    content: '내일 오후 3시',
   },
   {
     role: 'assistant' as const,
-    content: `내일이요! 👍
-
-어느 시간대가 좋으세요?
-🌅 오전 (10:00~12:00)
-🌆 오후 (13:00~17:00)
-🌙 저녁 (17:00~20:00)
-
-원하는 시간을 말씀해주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": "내일",
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
+    content: `{"message":"내일 오후 3시로 할게요! 🕒\\n\\n준오헤어 전화번호를 알려주시거나:\\n1️⃣ 검색해줘 (지점명/주소 알려주기)\\n2️⃣ 직접 입력할게","collected":{"target_name":"준오헤어","scenario_type":"RESERVATION","scenario_sub_type":"SALON","primary_datetime":"내일 오후 3시","service":"커트"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "시간"
-}
-\`\`\``,
-  },
-  // 예시 4: 시간 선택 → 전화번호
-  {
-    role: 'user' as const,
-    content: '오후 3시',
-  },
-  {
-    role: 'assistant' as const,
-    content: `내일 오후 3시로 할게요! 🕒
-
-준오헤어 전화번호를 알려주시거나:
-1️⃣ 검색해줘 (지점명/주소 알려주기)
-2️⃣ 직접 입력할게
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": "내일 오후 3시",
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
-  },
-  "is_complete": false,
-  "next_question": "전화번호"
-}
-\`\`\``,
-  },
-  // 예시 5: 전화번호 입력 → 예약자 이름 물어봄 (아직 완료 아님!)
+  // 예시 4: 전화번호 → 예약자 이름
   {
     role: 'user' as const,
     content: '02-555-1234',
   },
   {
     role: 'assistant' as const,
-    content: `좋아요! 거의 다 됐어요 👍
-
-마지막으로, 예약자 성함을 알려주세요! 👤
-전화할 때 예약자 이름이 꼭 필요해요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": "02-555-1234",
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": "내일 오후 3시",
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
+    content: `{"message":"좋아요! 거의 다 됐어요 👍\\n\\n마지막으로, 예약자 성함을 알려주세요! 👤\\n전화할 때 예약자 이름이 꼭 필요해요!","collected":{"target_name":"준오헤어","target_phone":"02-555-1234","scenario_type":"RESERVATION","scenario_sub_type":"SALON","primary_datetime":"내일 오후 3시","service":"커트"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "예약자 이름"
-}
-\`\`\``,
-  },
-  // 예시 5-1: 예약자 이름 입력 → 완료!
+  // 예시 5: 예약자 이름 → 완료
   {
     role: 'user' as const,
     content: '김민수',
   },
   {
     role: 'assistant' as const,
-    content: `완벽해요! 정리해볼게요 📋
-
-📍 **준오헤어**
-📞 02-555-1234
-📅 내일 오후 3시
-✂️ 커트
-👤 예약자: 김민수
-
-✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!
-✏️ 수정할 게 있으면 말씀해주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": "02-555-1234",
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": "내일 오후 3시",
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": "김민수",
-    "party_size": null,
-    "special_request": null
-  },
-  "is_complete": true,
-  "next_question": null
-}
-\`\`\``,
+    content: `{"message":"완벽해요! 정리해볼게요 📋\\n\\n📍 **준오헤어**\\n📞 02-555-1234\\n📅 내일 오후 3시\\n✂️ 커트\\n👤 예약자: 김민수\\n\\n✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!\\n✏️ 수정할 게 있으면 말씀해주세요!","collected":{"target_name":"준오헤어","target_phone":"02-555-1234","scenario_type":"RESERVATION","scenario_sub_type":"SALON","primary_datetime":"내일 오후 3시","service":"커트","customer_name":"김민수"},"is_complete":true,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
   // 예시 6: 복합 시술 요청
   {
@@ -425,57 +260,6 @@ export const SALON_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `펌+염색이요! 시간이 좀 걸릴 수 있어요 (보통 3~4시간) ⏰
-
-어느 미용실에 예약할까요? 미용실 이름을 알려주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": null,
-    "service": "펌+염색",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
-  },
-  "is_complete": false,
-  "next_question": "미용실 이름"
-}
-\`\`\``,
-  },
-  // 예시 7: 디자이너 지정
-  {
-    role: 'user' as const,
-    content: '민수 디자이너님한테 받고 싶어',
-  },
-  {
-    role: 'assistant' as const,
-    content: `민수 디자이너님으로 메모해뒀어요! ✍️
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "준오헤어",
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "SALON",
-    "primary_datetime": null,
-    "service": "커트",
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "민수 디자이너 지정"
-  },
-  "is_complete": false,
-  "next_question": "날짜"
-}
-\`\`\``,
+    content: `{"message":"펌+염색이요! 시간이 좀 걸릴 수 있어요 (보통 3~4시간) ⏰\\n\\n어느 미용실에 예약할까요? 미용실 이름을 알려주세요!","collected":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","service":"펌+염색"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"SALON","confidence":1.0}}`,
   },
 ];

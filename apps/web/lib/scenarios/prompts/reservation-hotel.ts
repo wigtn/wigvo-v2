@@ -106,8 +106,7 @@ export const HOTEL_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `잠실 호텔 예약 도와드릴게요! 📅
-어느 호텔로 예약할까요? 이름을 알려주시거나, 제가 검색해 드릴게요!`,
+    content: `{"message":"잠실 호텔 예약 도와드릴게요! 📅\\n어느 호텔로 예약할까요? 이름을 알려주시거나, 제가 검색해 드릴게요!","collected":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL","confidence":1.0}}`,
   },
   {
     role: 'user' as const,
@@ -115,32 +114,7 @@ export const HOTEL_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `내일부터 목요일까지로 정리할게요! 📅
-
-숙박 인원은 몇 명이세요? 👥
-1️⃣ 1명
-2️⃣ 2명
-3️⃣ 4명 이상
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": null,
-    "scenario_type": "RESERVATION",
-    "scenario_sub_type": "HOTEL",
-    "primary_datetime": "내일부터 목요일까지",
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": null
-  },
-  "is_complete": false,
-  "next_question": "인원"
-}
-\`\`\``,
+    content: `{"message":"내일부터 목요일까지로 정리할게요! 📅\\n\\n숙박 인원은 몇 명이세요? 👥\\n1️⃣ 1명\\n2️⃣ 2명\\n3️⃣ 4명 이상","collected":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL","primary_datetime":"내일부터 목요일까지"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL","confidence":1.0}}`,
   },
   {
     role: 'user' as const,
@@ -148,11 +122,6 @@ export const HOTEL_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `네, 숙박은 날짜만 있으면 돼요! 😊
-
-그럼 숙박 인원은 몇 명이세요? 👥
-1️⃣ 1명
-2️⃣ 2명
-3️⃣ 4명 이상`,
+    content: `{"message":"네, 숙박은 날짜만 있으면 돼요! 😊\\n\\n그럼 숙박 인원은 몇 명이세요? 👥\\n1️⃣ 1명\\n2️⃣ 2명\\n3️⃣ 4명 이상","collected":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL","primary_datetime":"내일부터 목요일까지"},"is_complete":false,"detected_intent":{"scenario_type":"RESERVATION","scenario_sub_type":"HOTEL","confidence":1.0}}`,
   },
 ];

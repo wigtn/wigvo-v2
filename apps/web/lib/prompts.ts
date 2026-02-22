@@ -17,50 +17,36 @@ import { getSubTypeConfig, getFieldLabel, getRequiredFieldsForMode } from '@/lib
 const FEW_SHOT_EXAMPLES = `
 ## 예시 대화 1: 미용실 예약 (RESERVATION)
 사용자: "내일 오후 3시에 강남역 OO미용실 커트 예약해줘"
-AI: "OO미용실에 전화할 전화번호를 알려주세요!"
+AI 응답 JSON:
+{ "message": "OO미용실에 전화할 전화번호를 알려주세요! 📞", "collected": { "target_name": "OO미용실", "target_phone": null, "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": "커트" }, "is_complete": false, "detected_intent": { "scenario_type": "RESERVATION", "scenario_sub_type": "SALON", "confidence": 1.0 } }
+
 사용자: "02-1234-5678"
-AI: "좋아요! 예약자 성함을 알려주세요! 😊"
-JSON: { "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": "커트", "fallback_datetimes": [], "fallback_action": null, "customer_name": null, "party_size": null, "special_request": null }, "is_complete": false }
+AI 응답 JSON:
+{ "message": "좋아요! 예약자 성함을 알려주세요! 😊", "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": "커트" }, "is_complete": false, "detected_intent": { "scenario_type": "RESERVATION", "scenario_sub_type": "SALON", "confidence": 1.0 } }
+
 사용자: "홍길동"
-AI: "좋아요! 정리해볼게요:\n\n📍 OO미용실 (02-1234-5678)\n📅 내일 오후 3시\n✂️ 커트\n👤 예약자: 홍길동\n\n맞으시면 전화 걸어볼게요!"
-JSON: { "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": "커트", "fallback_datetimes": [], "fallback_action": null, "customer_name": "홍길동", "party_size": null, "special_request": null }, "is_complete": true }
+AI 응답 JSON:
+{ "message": "좋아요! 정리해볼게요:\\n\\n📍 OO미용실 (02-1234-5678)\\n📅 내일 오후 3시\\n✂️ 커트\\n👤 예약자: 홍길동\\n\\n맞으시면 전화 걸어볼게요!", "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": "커트", "customer_name": "홍길동" }, "is_complete": true, "detected_intent": { "scenario_type": "RESERVATION", "scenario_sub_type": "SALON", "confidence": 1.0 } }
 
 ## 예시 대화 2: 매물 문의 (INQUIRY)
 사용자: "직방에서 본 강남역 근처 빌라 201호 확인해줘"
-AI: "해당 매물의 중개사 전화번호를 알려주세요."
+AI 응답 JSON:
+{ "message": "해당 매물의 중개사 전화번호를 알려주세요.", "collected": { "target_name": "직방 매물", "scenario_type": "INQUIRY", "special_request": "강남역 근처 빌라 201호" }, "is_complete": false, "detected_intent": { "scenario_type": "INQUIRY", "scenario_sub_type": "PROPERTY", "confidence": 0.95 } }
+
 사용자: "010-9876-5432"
-AI: "알겠습니다! 매물 정보를 확인해볼게요."
-JSON: { "collected": { "target_name": "중개사", "target_phone": "010-9876-5432", "scenario_type": "INQUIRY", "primary_datetime": null, "service": "매물 확인", "fallback_datetimes": [], "fallback_action": null, "customer_name": null, "party_size": null, "special_request": "강남역 근처 빌라 201호" }, "is_complete": true }
+AI 응답 JSON:
+{ "message": "알겠습니다! 매물 정보를 확인해볼게요.", "collected": { "target_name": "직방 매물", "target_phone": "010-9876-5432", "scenario_type": "INQUIRY", "special_request": "강남역 근처 빌라 201호 매물 존재 여부 확인" }, "is_complete": true, "detected_intent": { "scenario_type": "INQUIRY", "scenario_sub_type": "PROPERTY", "confidence": 0.95 } }
 
-## 예시 대화 3: AS 요청 (AS_REQUEST)
-사용자: "에어컨 고장났는데 수리 접수해줘"
-AI: "어느 업체에 수리 요청하시나요?"
-사용자: "삼성서비스센터 강남점"
-AI: "전화번호를 알려주세요."
-사용자: "1588-3366"
-AI: "방문 가능한 날짜와 시간을 알려주세요."
-사용자: "내일 오전 10시"
-AI: "알겠습니다! 수리 접수해볼게요."
-JSON: { "collected": { "target_name": "삼성서비스센터 강남점", "target_phone": "1588-3366", "scenario_type": "AS_REQUEST", "primary_datetime": "내일 오전 10시", "service": "에어컨 수리", "fallback_datetimes": [], "fallback_action": null, "customer_name": null, "party_size": null, "special_request": "고장" }, "is_complete": true }
-
-## 예시 대화 4: 참조 처리 (이전 정보 활용)
-사용자: "그 전에 말한 미용실로 예약해줘"
-AI: "알겠습니다! 이전에 말씀하신 OO미용실로 예약 진행할게요. 시간은 언제가 좋으세요?"
-사용자: "내일 오후 3시"
-AI: "좋아요! 예약자 성함을 알려주세요!"
-JSON: { "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": null, "fallback_datetimes": [], "fallback_action": null, "customer_name": null, "party_size": null, "special_request": null }, "is_complete": false }
-사용자: "김철수"
-AI: "좋아요! OO미용실에 내일 오후 3시 예약해볼게요.\n\n📍 OO미용실 (02-1234-5678)\n📅 내일 오후 3시\n👤 예약자: 김철수\n\n맞으시면 전화 걸어볼게요!"
-JSON: { "collected": { "target_name": "OO미용실", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "primary_datetime": "내일 오후 3시", "service": null, "fallback_datetimes": [], "fallback_action": null, "customer_name": "김철수", "party_size": null, "special_request": null }, "is_complete": true }
+## 예시 대화 3: 시나리오 전환 (RESTAURANT → INQUIRY/AVAILABILITY)
+사용자: "Heaven Bread에 소금빵 있는지 물어봐줘"
+AI 응답 JSON:
+{ "message": "Heaven Bread에 소금빵 재고를 확인해드릴게요! 📞\\n전화번호를 알려주세요!", "collected": { "target_name": "Heaven Bread", "special_request": "소금빵 있는지" }, "is_complete": false, "detected_intent": { "scenario_type": "INQUIRY", "scenario_sub_type": "AVAILABILITY", "confidence": 0.95 } }
 
 ## 예시: 사용자가 "전화해"라고 할 때 (정보 이미 수집 완료)
 사용자: "전화해"
-AI: "아래 **전화 걸기** 버튼을 눌러주시면 제가 대신 전화 걸어드릴게요! 📞"
-→ 이때는 JSON에 현재까지 수집된 정보를 그대로 넣고 is_complete: true 로 반환하세요. "직접 전화해주세요"라고 말하지 마세요.
-
-사용자: "너가 전화 걸어줘"
-AI: "전화 걸기 버튼을 누르시면 바로 연결해 드릴게요! 화면에 보이는 **전화 걸기** 버튼을 눌러주세요."
-→ 역시 JSON은 기존 수집 정보 유지, is_complete: true. "전화는 직접 걸어주셔야 해요"라고 말하지 마세요.
+AI 응답 JSON:
+{ "message": "아래 **전화 걸기** 버튼을 눌러주시면 제가 대신 전화 걸어드릴게요! 📞", "collected": { "target_name": "강남면옥", "target_phone": "02-1234-5678", "scenario_type": "RESERVATION", "scenario_sub_type": "RESTAURANT", "primary_datetime": "내일 저녁 7시", "customer_name": "홍길동", "party_size": 4 }, "is_complete": true, "detected_intent": { "scenario_type": "RESERVATION", "scenario_sub_type": "RESTAURANT", "confidence": 1.0 } }
+→ "직접 전화해주세요"라고 절대 말하지 마세요. 전화는 앱이 대신 걸어줍니다.
 `;
 
 /**
@@ -109,10 +95,10 @@ const BASE_SYSTEM_PROMPT = `당신은 WIGVO의 AI 비서입니다. 사용자를 
 8. 사용자가 "그 전에 말한...", "아까 말한..." 같은 참조를 하면 이전 대화에서 수집한 정보를 활용하세요.
 
 ## 출력 형식
-매 응답마다 반드시 아래 JSON 블록을 포함하세요:
+응답은 반드시 아래 구조의 JSON 객체**만** 반환하세요. JSON 외 다른 텍스트는 포함하지 마세요.
 
-\`\`\`json
 {
+  "message": "사용자에게 보여줄 자연어 메시지 (이모지, 마크다운, 줄바꿈 OK)",
   "collected": {
     "target_name": "이미 수집된 값 유지 또는 새 값",
     "target_phone": "이미 수집된 값 유지 또는 새 값",
@@ -126,9 +112,12 @@ const BASE_SYSTEM_PROMPT = `당신은 WIGVO의 AI 비서입니다. 사용자를 
     "special_request": "이미 수집된 값 유지 또는 새 값"
   },
   "is_complete": false,
-  "next_question": "다음에 물어볼 내용"
+  "detected_intent": {
+    "scenario_type": "RESERVATION",
+    "scenario_sub_type": "RESTAURANT",
+    "confidence": 0.95
+  }
 }
-\`\`\`
 
 ## ⚠️ 매우 중요한 규칙 (반드시 준수)
 
@@ -387,10 +376,10 @@ function buildOutputRulesSection(
   subType: ScenarioSubType
 ): string {
   return `## 출력 형식
-매 응답마다 반드시 아래 JSON 블록을 포함하세요:
+응답은 반드시 아래 구조의 JSON 객체**만** 반환하세요. JSON 외 다른 텍스트는 포함하지 마세요.
 
-\`\`\`json
 {
+  "message": "사용자에게 보여줄 자연어 메시지 (이모지, 마크다운, 줄바꿈 OK)",
   "collected": {
     "target_name": "이미 수집된 값 유지 또는 새 값",
     "target_phone": "이미 수집된 값 유지 또는 새 값",
@@ -405,9 +394,25 @@ function buildOutputRulesSection(
     "special_request": "이미 수집된 값 유지 또는 새 값"
   },
   "is_complete": false,
-  "next_question": "다음에 물어볼 내용"
+  "detected_intent": {
+    "scenario_type": "${scenarioType}",
+    "scenario_sub_type": "${subType}",
+    "confidence": 1.0
+  }
 }
-\`\`\`
+
+## 의도 감지 (detected_intent)
+사용자의 **실제 의도**를 분석하여 detected_intent에 정확한 시나리오를 넣으세요:
+- 현재 시나리오와 사용자 발화가 일치하면 → 현재 시나리오 유지
+- 다르면 → 실제 의도에 맞는 시나리오로 변경
+
+예시:
+| 사용자 발화 | detected_intent |
+|------------|-----------------|
+| "예약해줘", "자리 있어?" | RESERVATION / RESTAURANT |
+| "빵 있냐고", "재고 물어봐" | INQUIRY / AVAILABILITY |
+| "영업시간 알려줘" | INQUIRY / BUSINESS_HOURS |
+| "에어컨 고장났어" | AS_REQUEST / HOME_APPLIANCE |
 
 ## ⚠️ 매우 중요한 규칙 (반드시 준수)
 

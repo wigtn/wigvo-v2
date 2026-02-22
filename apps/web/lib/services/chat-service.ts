@@ -9,6 +9,7 @@ import { buildSystemPromptWithContext, buildScenarioPrompt } from '@/lib/prompts
 import { parseAssistantResponse } from '@/lib/response-parser';
 import {
   CollectedData,
+  DetectedIntent,
 } from '@/shared/types';
 import type { CommunicationMode } from '@/shared/call-types';
 import {
@@ -37,6 +38,7 @@ interface ChatResult {
   message: string;
   collected: Partial<CollectedData>;
   is_complete: boolean;
+  detected_intent?: DetectedIntent;
 }
 
 // -----------------------------------------------------------------------------
@@ -82,10 +84,10 @@ function buildDirectCallPrompt(
 3. 이모지를 적절히 사용하세요.
 ${contextSection}
 ## 출력 형식
-매 응답마다 아래 JSON 블록을 포함하세요:
+응답은 반드시 아래 구조의 JSON 객체**만** 반환하세요. JSON 외 다른 텍스트는 포함하지 마세요.
 
-\`\`\`json
 {
+  "message": "사용자에게 보여줄 자연어 메시지",
   "collected": {
     "target_name": "전화할 곳 이름",
     "target_phone": "전화번호",
@@ -94,7 +96,6 @@ ${contextSection}
   },
   "is_complete": false
 }
-\`\`\`
 
 ## 📞 전화 걸기 안내
 - WIGVO는 사용자 대신 전화를 걸어주는 서비스입니다.
@@ -181,11 +182,12 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
     })),
   ];
 
-  // 3. OpenAI 호출 (simple completion, no function calling)
+  // 3. OpenAI 호출 (JSON mode for reliable structured output)
   const completion = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: llmMessages,
     temperature: 0.7,
+    response_format: { type: 'json_object' },
   });
 
   const assistantContent =
@@ -194,7 +196,19 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
   // 4. 응답 파싱
   const parsed = parseAssistantResponse(assistantContent);
 
-  // 5. 사용자 메시지에서 추가 데이터 추출 (fallback)
+  // 5. 의도 감지 기반 시나리오 전환
+  if (parsed.detected_intent && parsed.detected_intent.confidence >= 0.8) {
+    const { scenario_type, scenario_sub_type } = parsed.detected_intent;
+    if (
+      scenario_type !== existingData.scenario_type ||
+      scenario_sub_type !== existingData.scenario_sub_type
+    ) {
+      parsed.collected.scenario_type = scenario_type;
+      parsed.collected.scenario_sub_type = scenario_sub_type;
+    }
+  }
+
+  // 6. 사용자 메시지에서 추가 데이터 추출 (fallback)
   if (parsed.collected) {
     const extracted = extractDataFromMessage(
       userMessage,
@@ -214,6 +228,9 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
     if (!parsed.collected.target_phone && extracted.target_phone) {
       parsed.collected.target_phone = extracted.target_phone;
     }
+    if (!parsed.collected.target_name && extracted.target_name) {
+      parsed.collected.target_name = extracted.target_name;
+    }
     if (!parsed.collected.special_request && extracted.special_request) {
       parsed.collected.special_request = extracted.special_request;
     }
@@ -223,6 +240,7 @@ export async function processChat(context: ChatContext): Promise<ChatResult> {
     message: parsed.message,
     collected: parsed.collected || {},
     is_complete: parsed.is_complete,
+    detected_intent: parsed.detected_intent,
   };
 }
 

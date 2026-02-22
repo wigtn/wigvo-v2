@@ -45,6 +45,15 @@ export type AsRequestSubType =
 export type ScenarioSubType = ReservationSubType | InquirySubType | AsRequestSubType;
 
 // -----------------------------------------------------------------------------
+// Detected Intent (v5 - 의도 감지 + 시나리오 자동 전환)
+// -----------------------------------------------------------------------------
+export interface DetectedIntent {
+  scenario_type: ScenarioType;
+  scenario_sub_type: ScenarioSubType;
+  confidence: number; // 0-1
+}
+
+// -----------------------------------------------------------------------------
 // Fallback Action
 // -----------------------------------------------------------------------------
 export type FallbackAction = 'ASK_AVAILABLE' | 'NEXT_DAY' | 'CANCEL';

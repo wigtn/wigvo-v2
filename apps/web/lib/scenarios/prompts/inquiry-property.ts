@@ -214,104 +214,25 @@ export const PROPERTY_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `강남역 OO빌라 201호요! 🏠
-
-이 매물에 대해 뭘 확인해드릴까요?
-1️⃣ 아직 있는지 (계약 가능 여부)
-2️⃣ 가격/조건 확인
-3️⃣ 방문 가능 일정
-4️⃣ 전부 다 물어봐줘
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "직방 매물",
-    "target_phone": null,
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "강남역 OO빌라 201호"
+    content: `{"message":"강남역 OO빌라 201호요! 🏠\\n\\n이 매물에 대해 뭘 확인해드릴까요?\\n1️⃣ 아직 있는지 (계약 가능 여부)\\n2️⃣ 가격/조건 확인\\n3️⃣ 방문 가능 일정\\n4️⃣ 전부 다 물어봐줘","collected":{"target_name":"직방 매물","scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","special_request":"강남역 OO빌라 201호"},"is_complete":false,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "확인 내용"
-}
-\`\`\``,
-  },
-  // 예시 2: 번호로 선택
+  // 예시 2: 번호로 선택 → 전화번호 요청
   {
     role: 'user' as const,
     content: '1번',
   },
   {
     role: 'assistant' as const,
-    content: `매물 존재 여부 확인이요! 👍
-
-부동산 전화번호를 알려주시거나:
-1️⃣ 매물 링크/캡처에 있어요 (정보 알려주기)
-2️⃣ 검색해줘
-3️⃣ 직접 입력할게
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "직방 매물",
-    "target_phone": null,
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "강남역 OO빌라 201호 매물 존재 여부 확인"
+    content: `{"message":"매물 존재 여부 확인이요! 👍\\n\\n부동산 전화번호를 알려주시거나:\\n1️⃣ 매물 링크/캡처에 있어요\\n2️⃣ 검색해줘\\n3️⃣ 직접 입력할게","collected":{"target_name":"직방 매물","scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","special_request":"강남역 OO빌라 201호 매물 존재 여부 확인"},"is_complete":false,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "전화번호"
-}
-\`\`\``,
-  },
-  // 예시 3: 전화번호 입력 → 완료
+  // 예시 3: 전화번호 → 완료
   {
     role: 'user' as const,
     content: '02-1234-5678',
   },
   {
     role: 'assistant' as const,
-    content: `완벽해요! 정리해볼게요 📋
-
-📍 **직방 매물**
-📞 02-1234-5678
-🏠 매물: 강남역 OO빌라 201호
-❓ 확인: 매물 존재 여부
-
-✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!
-✏️ 수정할 게 있으면 말씀해주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "직방 매물",
-    "target_phone": "02-1234-5678",
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "강남역 OO빌라 201호 매물 존재 여부 확인"
-  },
-  "is_complete": true,
-  "next_question": null
-}
-\`\`\``,
+    content: `{"message":"완벽해요! 정리해볼게요 📋\\n\\n📍 **직방 매물**\\n📞 02-1234-5678\\n🏠 매물: 강남역 OO빌라 201호\\n❓ 확인: 매물 존재 여부\\n\\n✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!\\n✏️ 수정할 게 있으면 말씀해주세요!","collected":{"target_name":"직방 매물","target_phone":"02-1234-5678","scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","special_request":"강남역 OO빌라 201호 매물 존재 여부 확인"},"is_complete":true,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","confidence":1.0}}`,
   },
   // 예시 4: 한 번에 모든 정보
   {
@@ -320,104 +241,15 @@ export const PROPERTY_FEW_SHOT_EXAMPLES = [
   },
   {
     role: 'assistant' as const,
-    content: `거의 다 됐어요! 👍
-
-부동산 이름을 알려주시거나:
-1️⃣ 직방 매물이에요
-2️⃣ 다방 매물이에요
-3️⃣ 네이버 부동산이에요
-4️⃣ 모르겠어요 (그냥 '부동산'으로 할게요)
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": null,
-    "target_phone": "02-9999-8888",
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "역삼동 OO아파트 101동 1001호 매물 존재 여부 확인"
+    content: `{"message":"거의 다 됐어요! 👍\\n\\n부동산 이름을 알려주시거나:\\n1️⃣ 직방 매물이에요\\n2️⃣ 다방 매물이에요\\n3️⃣ 네이버 부동산이에요\\n4️⃣ 모르겠어요 (그냥 '부동산'으로 할게요)","collected":{"target_phone":"02-9999-8888","scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","special_request":"역삼동 OO아파트 101동 1001호 매물 존재 여부 확인"},"is_complete":false,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","confidence":1.0}}`,
   },
-  "is_complete": false,
-  "next_question": "부동산 이름/출처"
-}
-\`\`\``,
-  },
-  // 예시 5: 4번 선택 (모르겠어요)
+  // 예시 5: 모르겠어요 → 완료
   {
     role: 'user' as const,
     content: '4번',
   },
   {
     role: 'assistant' as const,
-    content: `완벽해요! 정리해볼게요 📋
-
-📍 **부동산**
-📞 02-9999-8888
-🏠 매물: 역삼동 OO아파트 101동 1001호
-❓ 확인: 매물 존재 여부
-
-✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!
-✏️ 수정할 게 있으면 말씀해주세요!
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "부동산",
-    "target_phone": "02-9999-8888",
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "역삼동 OO아파트 101동 1001호 매물 존재 여부 확인"
-  },
-  "is_complete": true,
-  "next_question": null
-}
-\`\`\``,
-  },
-  // 예시 6: 방문도 원하는 경우
-  {
-    role: 'user' as const,
-    content: '있으면 보러 가고 싶어',
-  },
-  {
-    role: 'assistant' as const,
-    content: `매물이 있으면 방문 일정도 잡아볼게요! 📅
-
-언제가 편하세요?
-1️⃣ 이번 주말
-2️⃣ 평일 저녁 (퇴근 후)
-3️⃣ 가능한 시간 물어봐줘
-4️⃣ 나중에 따로 연락할게
-
-\`\`\`json
-{
-  "collected": {
-    "target_name": "직방 매물",
-    "target_phone": "02-1234-5678",
-    "scenario_type": "INQUIRY",
-    "scenario_sub_type": "PROPERTY",
-    "primary_datetime": null,
-    "service": null,
-    "fallback_datetimes": [],
-    "fallback_action": null,
-    "customer_name": null,
-    "party_size": null,
-    "special_request": "강남역 OO빌라 201호 매물 존재 여부 확인 + 방문 일정"
-  },
-  "is_complete": false,
-  "next_question": "방문 희망 시간"
-}
-\`\`\``,
+    content: `{"message":"완벽해요! 정리해볼게요 📋\\n\\n📍 **부동산**\\n📞 02-9999-8888\\n🏠 매물: 역삼동 OO아파트 101동 1001호\\n❓ 확인: 매물 존재 여부\\n\\n✅ 맞으면 **전화 걸기** 버튼을 눌러주세요!\\n✏️ 수정할 게 있으면 말씀해주세요!","collected":{"target_name":"부동산","target_phone":"02-9999-8888","scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","special_request":"역삼동 OO아파트 101동 1001호 매물 존재 여부 확인"},"is_complete":true,"detected_intent":{"scenario_type":"INQUIRY","scenario_sub_type":"PROPERTY","confidence":1.0}}`,
   },
 ];
