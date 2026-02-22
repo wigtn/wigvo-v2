@@ -1,0 +1,1862 @@
+{
+  "meta": {
+    "total_calls": 259,
+    "calls_with_metrics": 37,
+    "extraction_note": "ACL 2026 System Demonstrations - WIGVO metrics"
+  },
+  "session_a": {
+    "latency_ms": {
+      "n": 141,
+      "mean": 617.2,
+      "std": 242.1,
+      "min": 105.7,
+      "p50": 562.1,
+      "p75": 659.8,
+      "p90": 872.9,
+      "p95": 1023.4,
+      "p99": 1486.5,
+      "max": 2256.1
+    },
+    "latency_histogram": [
+      {
+        "lo": 106,
+        "hi": 321,
+        "count": 1
+      },
+      {
+        "lo": 321,
+        "hi": 536,
+        "count": 62
+      },
+      {
+        "lo": 536,
+        "hi": 751,
+        "count": 52
+      },
+      {
+        "lo": 751,
+        "hi": 966,
+        "count": 16
+      },
+      {
+        "lo": 966,
+        "hi": 1181,
+        "count": 7
+      },
+      {
+        "lo": 1181,
+        "hi": 1396,
+        "count": 0
+      },
+      {
+        "lo": 1396,
+        "hi": 1611,
+        "count": 2
+      },
+      {
+        "lo": 1611,
+        "hi": 1826,
+        "count": 0
+      },
+      {
+        "lo": 1826,
+        "hi": 2041,
+        "count": 0
+      },
+      {
+        "lo": 2041,
+        "hi": 2256,
+        "count": 1
+      }
+    ],
+    "latency_raw": [
+      847.1,
+      460.8,
+      937.4,
+      957.0,
+      1023.4,
+      777.1,
+      454.9,
+      703.0,
+      513.5,
+      1126.5,
+      626.9,
+      2256.1,
+      481.6,
+      486.1,
+      491.8,
+      781.7,
+      657.1,
+      659.8,
+      660.4,
+      999.9,
+      1469.5,
+      764.8,
+      1022.6,
+      749.8,
+      906.1,
+      779.8,
+      921.1,
+      1062.2,
+      618.7,
+      637.5,
+      451.9,
+      458.8,
+      587.1,
+      1497.8,
+      576.2,
+      438.3,
+      551.5,
+      478.7,
+      471.3,
+      475.4,
+      528.0,
+      506.1,
+      518.6,
+      497.4,
+      551.6,
+      526.5,
+      582.0,
+      583.1,
+      537.3,
+      762.8,
+      533.2,
+      578.1,
+      562.1,
+      590.4,
+      742.0,
+      579.6,
+      619.8,
+      859.8,
+      597.2,
+      105.7,
+      553.4,
+      612.8,
+      571.3,
+      586.1,
+      606.8,
+      713.2,
+      702.6,
+      532.1,
+      872.9,
+      454.4,
+      463.9,
+      450.1,
+      446.4,
+      432.7,
+      485.2,
+      474.3,
+      439.3,
+      530.8,
+      492.5,
+      484.1,
+      687.6,
+      566.6,
+      523.5,
+      533.6,
+      579.0,
+      622.2,
+      618.2,
+      658.9,
+      411.2,
+      536.5,
+      569.3,
+      570.6,
+      730.0,
+      545.7,
+      594.4,
+      579.6,
+      625.8,
+      766.9,
+      590.8,
+      611.9,
+      439.1,
+      428.3,
+      442.1,
+      484.6,
+      472.3,
+      764.0,
+      587.5,
+      577.7,
+      430.8,
+      446.1,
+      427.1,
+      449.7,
+      444.0,
+      444.8,
+      603.7,
+      450.9,
+      447.1,
+      437.2,
+      480.7,
+      482.3,
+      444.2,
+      593.1,
+      1149.6,
+      447.9,
+      425.0,
+      441.0,
+      465.3,
+      1093.7,
+      441.7,
+      553.0,
+      466.7,
+      497.8,
+      698.1,
+      611.2,
+      474.6,
+      476.0,
+      777.3,
+      501.9,
+      447.7,
+      815.6,
+      447.7
+    ],
+    "echo_suppression": {
+      "total": 127,
+      "per_call_distribution": {
+        "0_calls": 6,
+        "1_call": 10,
+        "2plus_calls": 21,
+        "0_pct": 16.2,
+        "1_pct": 27.0,
+        "2plus_pct": 56.8
+      },
+      "breakthroughs": 0,
+      "loops_detected": 0
+    },
+    "guardrail": {
+      "level2_corrections": 2,
+      "level3_blocks": 0,
+      "total": 2
+    },
+    "hallucinations_blocked": 5,
+    "interrupt": {
+      "total": 0,
+      "per_call_distribution": {
+        "0_calls": 37,
+        "1_call": 0,
+        "2plus_calls": 0
+      }
+    },
+    "total_turns": 348
+  },
+  "session_b": {
+    "e2e_latency_ms": {
+      "n": 207,
+      "mean": 2248.9,
+      "std": 1614.5,
+      "min": 54.0,
+      "p50": 1993.6,
+      "p75": 2712.5,
+      "p90": 4462.7,
+      "p95": 5390.0,
+      "p99": 8198.1,
+      "max": 10503.4
+    },
+    "e2e_latency_histogram": [
+      {
+        "lo": 54,
+        "hi": 1099,
+        "count": 54
+      },
+      {
+        "lo": 1099,
+        "hi": 2144,
+        "count": 58
+      },
+      {
+        "lo": 2144,
+        "hi": 3189,
+        "count": 57
+      },
+      {
+        "lo": 3189,
+        "hi": 4234,
+        "count": 14
+      },
+      {
+        "lo": 4234,
+        "hi": 5279,
+        "count": 11
+      },
+      {
+        "lo": 5279,
+        "hi": 6324,
+        "count": 8
+      },
+      {
+        "lo": 6324,
+        "hi": 7369,
+        "count": 1
+      },
+      {
+        "lo": 7369,
+        "hi": 8414,
+        "count": 3
+      },
+      {
+        "lo": 8414,
+        "hi": 9458,
+        "count": 0
+      },
+      {
+        "lo": 9458,
+        "hi": 10503,
+        "count": 1
+      }
+    ],
+    "e2e_latency_raw": [
+      2492.3,
+      3551.6,
+      2246.3,
+      1601.7,
+      7100.9,
+      925.7,
+      5481.7,
+      4825.3,
+      8256.0,
+      1427.0,
+      682.7,
+      2679.1,
+      3158.8,
+      2111.1,
+      2782.9,
+      1845.6,
+      54.0,
+      5727.7,
+      1766.9,
+      2815.0,
+      1412.1,
+      4279.4,
+      1177.3,
+      5057.8,
+      3725.6,
+      1392.0,
+      896.2,
+      6297.7,
+      3604.7,
+      557.0,
+      2590.5,
+      2367.4,
+      2384.6,
+      1682.5,
+      1749.0,
+      2018.1,
+      69.7,
+      5299.6,
+      7551.7,
+      1740.7,
+      4234.6,
+      1289.0,
+      4886.9,
+      8239.4,
+      2459.7,
+      929.6,
+      161.4,
+      5477.6,
+      1407.9,
+      2267.1,
+      4028.2,
+      891.9,
+      5400.6,
+      3424.5,
+      2211.7,
+      1993.6,
+      2352.6,
+      2068.3,
+      1352.5,
+      3072.0,
+      1971.0,
+      2601.6,
+      2420.0,
+      4559.8,
+      1644.3,
+      766.7,
+      2227.0,
+      835.7,
+      1081.6,
+      2432.3,
+      1895.1,
+      163.6,
+      1500.4,
+      3183.5,
+      2390.0,
+      3387.8,
+      1570.3,
+      2745.9,
+      1735.3,
+      1247.7,
+      2334.5,
+      628.6,
+      1684.9,
+      1353.1,
+      2350.0,
+      2040.1,
+      1473.1,
+      1633.8,
+      2639.7,
+      1699.6,
+      1954.8,
+      2946.8,
+      2930.7,
+      951.5,
+      2426.4,
+      5365.5,
+      3900.5,
+      4480.5,
+      2271.1,
+      2294.5,
+      273.3,
+      3198.6,
+      1880.3,
+      1580.5,
+      1622.8,
+      735.1,
+      2167.0,
+      716.2,
+      3076.5,
+      2658.4,
+      2228.6,
+      3337.8,
+      2312.7,
+      3136.7,
+      1044.1,
+      688.2,
+      2028.2,
+      2192.1,
+      1149.3,
+      2085.5,
+      1575.2,
+      2246.7,
+      2276.2,
+      2117.3,
+      843.7,
+      803.3,
+      532.4,
+      2459.9,
+      940.9,
+      1615.3,
+      1730.4,
+      167.6,
+      212.6,
+      1135.3,
+      2300.9,
+      2641.3,
+      167.9,
+      1030.8,
+      703.6,
+      796.1,
+      712.4,
+      1788.1,
+      312.4,
+      3022.1,
+      1503.3,
+      1521.8,
+      1912.7,
+      441.0,
+      882.8,
+      668.8,
+      2396.1,
+      3318.5,
+      1048.8,
+      796.7,
+      670.3,
+      3464.1,
+      2348.6,
+      1326.0,
+      4654.0,
+      541.8,
+      2335.6,
+      4523.2,
+      2783.6,
+      2196.0,
+      436.8,
+      1378.8,
+      3134.1,
+      10503.4,
+      775.3,
+      1323.1,
+      807.4,
+      821.7,
+      2177.8,
+      1836.6,
+      2389.0,
+      1619.5,
+      658.9,
+      2550.8,
+      946.9,
+      1029.3,
+      980.3,
+      572.1,
+      2485.5,
+      1004.4,
+      4450.8,
+      976.8,
+      5981.2,
+      2188.4,
+      1584.4,
+      2177.7,
+      1052.6,
+      1480.1,
+      3065.5,
+      1668.8,
+      1979.6,
+      1876.0,
+      2104.0,
+      3889.7,
+      2514.9,
+      3476.3,
+      446.8,
+      784.1,
+      4870.9,
+      985.8,
+      3545.7,
+      1635.9,
+      2516.3
+    ],
+    "stt_latency_ms": {
+      "n": 189,
+      "mean": 2243.0,
+      "std": 1630.8,
+      "min": 86.4,
+      "p50": 1968.6,
+      "p75": 2938.5,
+      "p90": 4427.4,
+      "p95": 5115.9,
+      "p99": 7325.5,
+      "max": 10310.8
+    },
+    "stt_latency_raw": [
+      3505.4,
+      2408.9,
+      352.9,
+      5746.7,
+      525.1,
+      4527.5,
+      4260.8,
+      7153.9,
+      977.5,
+      2775.4,
+      2700.4,
+      2347.1,
+      1652.2,
+      608.6,
+      5028.1,
+      1454.1,
+      3114.5,
+      598.7,
+      4303.1,
+      734.3,
+      4442.5,
+      3136.5,
+      2006.5,
+      317.8,
+      4880.6,
+      3598.3,
+      972.3,
+      1932.6,
+      2175.4,
+      2120.5,
+      2183.6,
+      1478.2,
+      1767.1,
+      6380.7,
+      7176.3,
+      683.0,
+      5174.5,
+      2385.1,
+      5194.4,
+      8419.9,
+      2467.5,
+      1887.8,
+      156.0,
+      4547.3,
+      1594.3,
+      4262.8,
+      1085.0,
+      4749.3,
+      3115.1,
+      1679.1,
+      2346.3,
+      2086.7,
+      1252.8,
+      3859.5,
+      693.9,
+      3304.6,
+      2078.2,
+      4759.9,
+      772.6,
+      544.6,
+      2016.0,
+      828.7,
+      1071.4,
+      1945.1,
+      1353.2,
+      617.2,
+      692.8,
+      2927.9,
+      1385.4,
+      3124.8,
+      484.1,
+      3062.2,
+      455.2,
+      2217.4,
+      2746.4,
+      629.9,
+      882.2,
+      1282.1,
+      2162.3,
+      2312.1,
+      2132.4,
+      1447.0,
+      2374.7,
+      1370.8,
+      3113.4,
+      2931.3,
+      3075.4,
+      1624.8,
+      1860.5,
+      5018.1,
+      3950.2,
+      4282.5,
+      3289.2,
+      1449.4,
+      1453.4,
+      1820.7,
+      1871.0,
+      496.5,
+      2183.1,
+      1970.7,
+      1670.2,
+      3571.1,
+      2976.8,
+      1157.6,
+      2069.7,
+      5281.2,
+      1155.9,
+      2007.0,
+      2675.1,
+      2122.1,
+      2581.0,
+      1176.6,
+      332.9,
+      2143.7,
+      759.8,
+      1417.3,
+      1319.3,
+      151.2,
+      1616.9,
+      1002.9,
+      1791.6,
+      550.7,
+      301.9,
+      705.8,
+      731.3,
+      679.6,
+      686.2,
+      2703.4,
+      2417.3,
+      1420.0,
+      1722.1,
+      1161.7,
+      192.7,
+      3386.8,
+      4423.6,
+      1393.1,
+      1022.9,
+      4185.7,
+      248.2,
+      2285.6,
+      4084.4,
+      301.9,
+      1968.6,
+      4116.2,
+      2815.8,
+      2288.5,
+      297.2,
+      1732.6,
+      2676.8,
+      10310.8,
+      1254.9,
+      1522.9,
+      229.3,
+      121.9,
+      1864.4,
+      536.3,
+      1932.2,
+      2233.2,
+      1237.5,
+      2605.0,
+      711.0,
+      86.4,
+      1625.9,
+      1879.8,
+      2406.1,
+      1291.4,
+      4105.5,
+      527.4,
+      5851.6,
+      2664.1,
+      1584.9,
+      2938.5,
+      1403.7,
+      1382.8,
+      2496.2,
+      2192.8,
+      3139.9,
+      1987.5,
+      1538.8,
+      3469.9,
+      1701.2,
+      2324.5,
+      136.8,
+      223.3,
+      4927.1,
+      1296.1,
+      3463.2,
+      2071.2,
+      2818.3
+    ],
+    "translation_latency_ms": {
+      "n": 103,
+      "mean": 762.6,
+      "std": 1061.5,
+      "min": 5.4,
+      "p50": 457.3,
+      "p75": 936.6,
+      "p90": 1676.0,
+      "p95": 2254.8,
+      "p99": 6503.2,
+      "max": 7278.5
+    },
+    "translation_latency_raw": [
+      1142.7,
+      1893.3,
+      6575.8,
+      1220.9,
+      7278.5,
+      383.4,
+      435.8,
+      193.4,
+      699.7,
+      312.8,
+      813.4,
+      443.0,
+      615.3,
+      589.0,
+      578.4,
+      1417.1,
+      6.4,
+      657.9,
+      209.1,
+      539.8,
+      375.4,
+      1057.7,
+      5.4,
+      930.3,
+      2943.2,
+      2285.5,
+      532.6,
+      6.3,
+      99.7,
+      1277.1,
+      341.8,
+      871.7,
+      222.1,
+      211.0,
+      6.9,
+      10.2,
+      487.2,
+      541.8,
+      807.6,
+      255.6,
+      1004.7,
+      262.9,
+      1086.3,
+      1280.1,
+      802.7,
+      71.0,
+      187.8,
+      186.8,
+      265.0,
+      328.8,
+      15.5,
+      566.0,
+      347.4,
+      198.0,
+      845.2,
+      59.6,
+      1126.3,
+      196.3,
+      558.4,
+      1979.1,
+      78.5,
+      124.6,
+      470.3,
+      1700.2,
+      296.0,
+      1579.1,
+      1750.2,
+      2339.5,
+      299.4,
+      24.0,
+      109.9,
+      101.8,
+      190.5,
+      690.1,
+      1925.4,
+      25.9,
+      422.1,
+      1178.5,
+      1024.1,
+      2685.4,
+      139.6,
+      457.3,
+      192.5,
+      578.1,
+      699.8,
+      313.4,
+      1300.4,
+      456.8,
+      235.9,
+      942.9,
+      79.5,
+      345.3,
+      449.4,
+      129.6,
+      97.3,
+      569.3,
+      565.2,
+      419.8,
+      813.7,
+      1151.7,
+      310.0,
+      560.8,
+      82.4
+    ],
+    "first_message_latency_ms": {
+      "n": 31,
+      "mean": 2584.5,
+      "std": 2381.3,
+      "min": 641.5,
+      "p50": 1549.8,
+      "p75": 3231.6,
+      "p90": 4837.0,
+      "p95": 7459.8,
+      "p99": 10297.2,
+      "max": 11307.8
+    },
+    "length_vs_latency": {
+      "buckets": {
+        "0-30": {
+          "n": 132,
+          "mean": 1795.6,
+          "p50": 1860.8,
+          "p95": 3360.3
+        },
+        "31-60": {
+          "n": 55,
+          "mean": 2628.3,
+          "p50": 2389.0,
+          "p95": 5423.7
+        },
+        "61-100": {
+          "n": 17,
+          "mean": 3391.2,
+          "p50": 2390.0,
+          "p95": 6044.5
+        },
+        "100+": {
+          "n": 3,
+          "mean": 8764.8,
+          "p50": 8239.4,
+          "p95": 10277.0
+        }
+      },
+      "pearson_r_char_len": 0.529,
+      "scatter": [
+        {
+          "char_len": 14,
+          "latency_ms": 2492.3
+        },
+        {
+          "char_len": 20,
+          "latency_ms": 3551.6
+        },
+        {
+          "char_len": 43,
+          "latency_ms": 2246.3
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 1601.7
+        },
+        {
+          "char_len": 41,
+          "latency_ms": 7100.9
+        },
+        {
+          "char_len": 10,
+          "latency_ms": 925.7
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 5481.7
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 4825.3
+        },
+        {
+          "char_len": 39,
+          "latency_ms": 8256.0
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 1427.0
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 682.7
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 2679.1
+        },
+        {
+          "char_len": 9,
+          "latency_ms": 3158.8
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 2111.1
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 2782.9
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1845.6
+        },
+        {
+          "char_len": 19,
+          "latency_ms": 54.0
+        },
+        {
+          "char_len": 82,
+          "latency_ms": 5727.7
+        },
+        {
+          "char_len": 91,
+          "latency_ms": 1766.9
+        },
+        {
+          "char_len": 33,
+          "latency_ms": 2815.0
+        },
+        {
+          "char_len": 82,
+          "latency_ms": 1412.1
+        },
+        {
+          "char_len": 58,
+          "latency_ms": 4279.4
+        },
+        {
+          "char_len": 50,
+          "latency_ms": 1177.3
+        },
+        {
+          "char_len": 61,
+          "latency_ms": 5057.8
+        },
+        {
+          "char_len": 48,
+          "latency_ms": 3725.6
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1392.0
+        },
+        {
+          "char_len": 42,
+          "latency_ms": 896.2
+        },
+        {
+          "char_len": 92,
+          "latency_ms": 6297.7
+        },
+        {
+          "char_len": 33,
+          "latency_ms": 3604.7
+        },
+        {
+          "char_len": 8,
+          "latency_ms": 557.0
+        },
+        {
+          "char_len": 50,
+          "latency_ms": 2590.5
+        },
+        {
+          "char_len": 32,
+          "latency_ms": 2367.4
+        },
+        {
+          "char_len": 10,
+          "latency_ms": 2384.6
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1682.5
+        },
+        {
+          "char_len": 5,
+          "latency_ms": 1749.0
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2018.1
+        },
+        {
+          "char_len": 19,
+          "latency_ms": 69.7
+        },
+        {
+          "char_len": 70,
+          "latency_ms": 5299.6
+        },
+        {
+          "char_len": 125,
+          "latency_ms": 7551.7
+        },
+        {
+          "char_len": 73,
+          "latency_ms": 1740.7
+        },
+        {
+          "char_len": 67,
+          "latency_ms": 4234.6
+        },
+        {
+          "char_len": 42,
+          "latency_ms": 1289.0
+        },
+        {
+          "char_len": 54,
+          "latency_ms": 4886.9
+        },
+        {
+          "char_len": 118,
+          "latency_ms": 8239.4
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 2459.7
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 929.6
+        },
+        {
+          "char_len": 8,
+          "latency_ms": 161.4
+        },
+        {
+          "char_len": 32,
+          "latency_ms": 5477.6
+        },
+        {
+          "char_len": 37,
+          "latency_ms": 1407.9
+        },
+        {
+          "char_len": 12,
+          "latency_ms": 2267.1
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 4028.2
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 891.9
+        },
+        {
+          "char_len": 32,
+          "latency_ms": 5400.6
+        },
+        {
+          "char_len": 22,
+          "latency_ms": 3424.5
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2211.7
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 1993.6
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2352.6
+        },
+        {
+          "char_len": 10,
+          "latency_ms": 2068.3
+        },
+        {
+          "char_len": 39,
+          "latency_ms": 1352.5
+        },
+        {
+          "char_len": 17,
+          "latency_ms": 3072.0
+        },
+        {
+          "char_len": 60,
+          "latency_ms": 1971.0
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 2601.6
+        },
+        {
+          "char_len": 40,
+          "latency_ms": 2420.0
+        },
+        {
+          "char_len": 29,
+          "latency_ms": 4559.8
+        },
+        {
+          "char_len": 37,
+          "latency_ms": 1644.3
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 766.7
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 2227.0
+        },
+        {
+          "char_len": 9,
+          "latency_ms": 835.7
+        },
+        {
+          "char_len": 14,
+          "latency_ms": 1081.6
+        },
+        {
+          "char_len": 24,
+          "latency_ms": 2432.3
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 1895.1
+        },
+        {
+          "char_len": 10,
+          "latency_ms": 163.6
+        },
+        {
+          "char_len": 38,
+          "latency_ms": 1500.4
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 3183.5
+        },
+        {
+          "char_len": 66,
+          "latency_ms": 2390.0
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 3387.8
+        },
+        {
+          "char_len": 26,
+          "latency_ms": 1570.3
+        },
+        {
+          "char_len": 17,
+          "latency_ms": 2745.9
+        },
+        {
+          "char_len": 41,
+          "latency_ms": 1735.3
+        },
+        {
+          "char_len": 20,
+          "latency_ms": 1247.7
+        },
+        {
+          "char_len": 7,
+          "latency_ms": 2334.5
+        },
+        {
+          "char_len": 45,
+          "latency_ms": 628.6
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 1684.9
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 1353.1
+        },
+        {
+          "char_len": 9,
+          "latency_ms": 2350.0
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2040.1
+        },
+        {
+          "char_len": 2,
+          "latency_ms": 1473.1
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1633.8
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2639.7
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1699.6
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1954.8
+        },
+        {
+          "char_len": 30,
+          "latency_ms": 2946.8
+        },
+        {
+          "char_len": 37,
+          "latency_ms": 2930.7
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 951.5
+        },
+        {
+          "char_len": 20,
+          "latency_ms": 2426.4
+        },
+        {
+          "char_len": 54,
+          "latency_ms": 5365.5
+        },
+        {
+          "char_len": 57,
+          "latency_ms": 3900.5
+        },
+        {
+          "char_len": 54,
+          "latency_ms": 4480.5
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 2271.1
+        },
+        {
+          "char_len": 28,
+          "latency_ms": 2294.5
+        },
+        {
+          "char_len": 12,
+          "latency_ms": 273.3
+        },
+        {
+          "char_len": 28,
+          "latency_ms": 3198.6
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 1880.3
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1580.5
+        },
+        {
+          "char_len": 9,
+          "latency_ms": 1622.8
+        },
+        {
+          "char_len": 20,
+          "latency_ms": 735.1
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 2167.0
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 716.2
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 3076.5
+        },
+        {
+          "char_len": 39,
+          "latency_ms": 2658.4
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2228.6
+        },
+        {
+          "char_len": 20,
+          "latency_ms": 3337.8
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 2312.7
+        },
+        {
+          "char_len": 10,
+          "latency_ms": 3136.7
+        },
+        {
+          "char_len": 23,
+          "latency_ms": 1044.1
+        },
+        {
+          "char_len": 12,
+          "latency_ms": 688.2
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 2028.2
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 2192.1
+        },
+        {
+          "char_len": 24,
+          "latency_ms": 1149.3
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 2085.5
+        },
+        {
+          "char_len": 7,
+          "latency_ms": 1575.2
+        },
+        {
+          "char_len": 14,
+          "latency_ms": 2246.7
+        },
+        {
+          "char_len": 15,
+          "latency_ms": 2276.2
+        },
+        {
+          "char_len": 9,
+          "latency_ms": 2117.3
+        },
+        {
+          "char_len": 15,
+          "latency_ms": 843.7
+        },
+        {
+          "char_len": 24,
+          "latency_ms": 803.3
+        },
+        {
+          "char_len": 14,
+          "latency_ms": 532.4
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 2459.9
+        },
+        {
+          "char_len": 38,
+          "latency_ms": 940.9
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 1615.3
+        },
+        {
+          "char_len": 19,
+          "latency_ms": 1730.4
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 167.6
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 212.6
+        },
+        {
+          "char_len": 22,
+          "latency_ms": 1135.3
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 2300.9
+        },
+        {
+          "char_len": 40,
+          "latency_ms": 2641.3
+        },
+        {
+          "char_len": 17,
+          "latency_ms": 167.9
+        },
+        {
+          "char_len": 23,
+          "latency_ms": 1030.8
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 703.6
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 796.1
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 712.4
+        },
+        {
+          "char_len": 40,
+          "latency_ms": 1788.1
+        },
+        {
+          "char_len": 16,
+          "latency_ms": 312.4
+        },
+        {
+          "char_len": 14,
+          "latency_ms": 3022.1
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1503.3
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1521.8
+        },
+        {
+          "char_len": 11,
+          "latency_ms": 1912.7
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 441.0
+        },
+        {
+          "char_len": 52,
+          "latency_ms": 882.8
+        },
+        {
+          "char_len": 22,
+          "latency_ms": 668.8
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 2396.1
+        },
+        {
+          "char_len": 47,
+          "latency_ms": 3318.5
+        },
+        {
+          "char_len": 38,
+          "latency_ms": 1048.8
+        },
+        {
+          "char_len": 29,
+          "latency_ms": 796.7
+        },
+        {
+          "char_len": 36,
+          "latency_ms": 670.3
+        },
+        {
+          "char_len": 36,
+          "latency_ms": 3464.1
+        },
+        {
+          "char_len": 29,
+          "latency_ms": 2348.6
+        },
+        {
+          "char_len": 67,
+          "latency_ms": 1326.0
+        },
+        {
+          "char_len": 61,
+          "latency_ms": 4654.0
+        },
+        {
+          "char_len": 27,
+          "latency_ms": 541.8
+        },
+        {
+          "char_len": 35,
+          "latency_ms": 2335.6
+        },
+        {
+          "char_len": 58,
+          "latency_ms": 4523.2
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 2783.6
+        },
+        {
+          "char_len": 74,
+          "latency_ms": 2196.0
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 436.8
+        },
+        {
+          "char_len": 68,
+          "latency_ms": 1378.8
+        },
+        {
+          "char_len": 28,
+          "latency_ms": 3134.1
+        },
+        {
+          "char_len": 125,
+          "latency_ms": 10503.4
+        },
+        {
+          "char_len": 25,
+          "latency_ms": 775.3
+        },
+        {
+          "char_len": 42,
+          "latency_ms": 1323.1
+        },
+        {
+          "char_len": 48,
+          "latency_ms": 807.4
+        },
+        {
+          "char_len": 44,
+          "latency_ms": 821.7
+        },
+        {
+          "char_len": 13,
+          "latency_ms": 2177.8
+        },
+        {
+          "char_len": 73,
+          "latency_ms": 1836.6
+        },
+        {
+          "char_len": 42,
+          "latency_ms": 2389.0
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1619.5
+        },
+        {
+          "char_len": 26,
+          "latency_ms": 658.9
+        },
+        {
+          "char_len": 38,
+          "latency_ms": 2550.8
+        },
+        {
+          "char_len": 38,
+          "latency_ms": 946.9
+        },
+        {
+          "char_len": 49,
+          "latency_ms": 1029.3
+        },
+        {
+          "char_len": 44,
+          "latency_ms": 980.3
+        },
+        {
+          "char_len": 18,
+          "latency_ms": 572.1
+        },
+        {
+          "char_len": 30,
+          "latency_ms": 2485.5
+        },
+        {
+          "char_len": 59,
+          "latency_ms": 1004.4
+        },
+        {
+          "char_len": 57,
+          "latency_ms": 4450.8
+        },
+        {
+          "char_len": 19,
+          "latency_ms": 976.8
+        },
+        {
+          "char_len": 96,
+          "latency_ms": 5981.2
+        },
+        {
+          "char_len": 15,
+          "latency_ms": 2188.4
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1584.4
+        },
+        {
+          "char_len": 21,
+          "latency_ms": 2177.7
+        },
+        {
+          "char_len": 44,
+          "latency_ms": 1052.6
+        },
+        {
+          "char_len": 71,
+          "latency_ms": 1480.1
+        },
+        {
+          "char_len": 39,
+          "latency_ms": 3065.5
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1668.8
+        },
+        {
+          "char_len": 17,
+          "latency_ms": 1979.6
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 1876.0
+        },
+        {
+          "char_len": 6,
+          "latency_ms": 2104.0
+        },
+        {
+          "char_len": 47,
+          "latency_ms": 3889.7
+        },
+        {
+          "char_len": 17,
+          "latency_ms": 2514.9
+        },
+        {
+          "char_len": 48,
+          "latency_ms": 3476.3
+        },
+        {
+          "char_len": 30,
+          "latency_ms": 446.8
+        },
+        {
+          "char_len": 24,
+          "latency_ms": 784.1
+        },
+        {
+          "char_len": 63,
+          "latency_ms": 4870.9
+        },
+        {
+          "char_len": 44,
+          "latency_ms": 985.8
+        },
+        {
+          "char_len": 34,
+          "latency_ms": 3545.7
+        },
+        {
+          "char_len": 4,
+          "latency_ms": 1635.9
+        },
+        {
+          "char_len": 31,
+          "latency_ms": 2516.3
+        }
+      ]
+    }
+  },
+  "call_results": {
+    "total_calls": 259,
+    "calls_with_metrics": 37,
+    "status_distribution": {
+      "IN_PROGRESS": {
+        "count": 129,
+        "pct": 49.8
+      },
+      "COMPLETED": {
+        "count": 96,
+        "pct": 37.1
+      },
+      "FAILED": {
+        "count": 18,
+        "pct": 6.9
+      },
+      "ended": {
+        "count": 16,
+        "pct": 6.2
+      }
+    },
+    "mode_distribution": {
+      "text_to_voice": {
+        "count": 107,
+        "pct": 41.3
+      },
+      "voice_to_voice": {
+        "count": 91,
+        "pct": 35.1
+      },
+      "full_agent": {
+        "count": 59,
+        "pct": 22.8
+      },
+      "voice_to_text": {
+        "count": 2,
+        "pct": 0.8
+      }
+    },
+    "duration_s": {
+      "n": 77,
+      "mean": 71.3,
+      "std": 50.0,
+      "min": 6.3,
+      "p50": 52.1,
+      "p75": 109.9,
+      "p90": 148.7,
+      "p95": 155.7,
+      "p99": 188.3,
+      "max": 200.8
+    }
+  },
+  "vad": {
+    "vad_false_triggers_total": 59,
+    "vad_false_triggers_per_call": 1.59
+  },
+  "outliers": {
+    "session_a_top5": [
+      {
+        "call_id": "b10e84b8",
+        "latency_ms": 2256.1,
+        "original": "물론입니다, 천천히 작성해 주세요. 제가 기다리고 있겠습니다. 필요하신 만큼 시간 드릴 테니 편하게 말씀하시면 됩니다.",
+        "translated": "물론입니다, 천천히 작성해 주세요. 제가 기다리고 있겠습니다. 필요하신 만큼 시간 드릴 테니 편하게 말씀하시면 됩니다.",
+        "char_len": 66,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "cf210c99",
+        "latency_ms": 1497.8,
+        "original": "좋아요. 제 친구 중 한 명이 마늘 알레르기가 있어서 반찬에 마늘이 들어가지 않도록 해주실 수 있을까요?",
+        "translated": "좋아요. 제 친구 중 한 명이 마늘 알레르기가 있어서 반찬에 마늘이 들어가지 않도록 해주실 수 있을까요?",
+        "char_len": 58,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "5cf4c526",
+        "latency_ms": 1469.5,
+        "original": "네, 좋아요.",
+        "translated": "네, 좋아요.",
+        "char_len": 7,
+        "mode": "voice_to_voice"
+      },
+      {
+        "call_id": "31d7504e",
+        "latency_ms": 1149.6,
+        "original": "안녕하세요, 강남역 근처 원룸에 대해 문의드리려고 전화드렸는데요. 보증금 1,000만 원에 아직 가능한가요?",
+        "translated": "안녕하세요, 강남역 근처 원룸에 대해 문의드리려고 전화드렸는데요. 보증금 1,000만 원에 아직 가능한가요?",
+        "char_len": 60,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "58b62c35",
+        "latency_ms": 1126.5,
+        "original": "안녕하세요, 귀하의 웹사이트에서 본 강남역 근처의 원룸에 대해 문의드립니다. 아직 임대 가능한가요?",
+        "translated": "안녕하세요, 귀하의 웹사이트에서 본 강남역 근처의 원룸에 대해 문의드립니다. 아직 임대 가능한가요?",
+        "char_len": 55,
+        "mode": "text_to_voice"
+      }
+    ],
+    "session_b_top5": [
+      {
+        "call_id": "9682b290",
+        "latency_ms": 10503.4,
+        "stt_ms": 10310.8,
+        "translation_ms": 192.5,
+        "original": "We can certainly inform the kitchen, but please note that some of our sauces are pre-made with peanu",
+        "translated": "We can certainly inform the kitchen, but please note that some of our sauces are pre-made with peanu",
+        "char_len": 125,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "bbdcebfa",
+        "latency_ms": 8256.0,
+        "stt_ms": 977.5,
+        "translation_ms": 7278.5,
+        "original": "네, 가능합니다. 저희 부동산 사무실로 오시면 제가 바로 보여드릴게요.",
+        "translated": "Yes, that works. If you come to our real estate office, I can show you the place right away.",
+        "char_len": 39,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "cf210c99",
+        "latency_ms": 8239.4,
+        "stt_ms": 8419.9,
+        "translation_ms": -180.5,
+        "original": "Mr. Harrison, your reservation for six at 7 p.m. on Friday is confirmed. I’ll send you a confirmatio",
+        "translated": "Mr. Harrison, your reservation for six at 7 p.m. on Friday is confirmed. I’ll send you a confirmatio",
+        "char_len": 118,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "cf210c99",
+        "latency_ms": 7551.7,
+        "stt_ms": 7176.3,
+        "translation_ms": 375.4,
+        "original": "We don’t have private rooms, but we do have a quiet corner table inside available. Would you like me",
+        "translated": "We don’t have private rooms, but we do have a quiet corner table inside available. Would you like me",
+        "char_len": 125,
+        "mode": "text_to_voice"
+      },
+      {
+        "call_id": "bbdcebfa",
+        "latency_ms": 7100.9,
+        "stt_ms": 525.1,
+        "translation_ms": 6575.8,
+        "original": "10만원 별도로 있는데 여기에 수도도락, 인터넷 비용이 포함되어 있습니다.",
+        "translated": "The maintenance fee is 100,000 won separately, and that includes water and internet.",
+        "char_len": 41,
+        "mode": "text_to_voice"
+      }
+    ]
+  }
+}
