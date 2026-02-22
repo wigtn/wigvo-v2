@@ -209,6 +209,12 @@ print("-" * 64)
 print(f"  Total calls:          {total_calls}")
 print(f"  Instrumented (w/ metrics): {n_instrumented}")
 print(f"  Connected calls:      {n_connected}")
+n_completed = status_counter.get("COMPLETED", 0)
+if n_connected > 0:
+    comp_rate = n_completed / n_connected * 100
+    print(f"  Completion rate:      {comp_rate:.1f}% ({n_completed}/{n_connected})")
+else:
+    print(f"  Completion rate:      N/A (no connected calls)")
 print()
 print("  Status:")
 for s, cnt in status_counter.most_common():
@@ -227,6 +233,22 @@ print(f"  [Session A: Caller -> Recipient]  N={sa_st['n']} turns")
 print("-" * 64)
 if sa_st["n"]:
     print(f"  P50: {sa_st['p50']:.0f}ms  P95: {sa_st['p95']:.0f}ms  Mean: {sa_st['mean']:.0f}ms  Max: {sa_st['max']:.0f}ms")
+
+# First Message Latency (aggregated across all instrumented calls)
+all_fml = []
+for c, m in instrumented:
+    fml_raw = m.get("first_message_latency_ms")
+    if isinstance(fml_raw, (int, float)):
+        all_fml.append(fml_raw)
+    elif isinstance(fml_raw, list):
+        all_fml.extend(fml_raw)
+fml_st = fmt_stats(all_fml)
+print()
+if fml_st["n"]:
+    print(f"  First Message Latency:")
+    print(f"  P50: {fml_st['p50']:.0f}ms  P95: {fml_st['p95']:.0f}ms  Mean: {fml_st['mean']:.0f}ms  (N={fml_st['n']})")
+else:
+    print("  First Message Latency: (no first message data)")
 
 # ── Session B ──
 print()
@@ -256,13 +278,13 @@ if all_scatter:
     r = pearson_r(xs, ys)
     print(f"  Pearson r (char_len vs SB latency): {r:.3f}")
     print()
-    print(f"  {'Range':>8s}   {'N':>3s}   {'Mean':>8s}")
+    print(f"  {'Range':>8s}  {'N':>4s}  {'P50':>8s}  {'P95':>8s}  {'Mean':>8s}")
     for label, vals in buckets.items():
         if vals:
-            mean = sum(vals) / len(vals)
-            print(f"  {label:>8s}   {len(vals):3d}   {mean:7.0f}ms")
+            st = fmt_stats(vals)
+            print(f"  {label:>8s}  {st['n']:4d}  {st['p50']:7.0f}ms  {st['p95']:7.0f}ms  {st['mean']:7.0f}ms")
         else:
-            print(f"  {label:>8s}     0        -")
+            print(f"  {label:>8s}     0         -         -         -")
 else:
     print("  (no scatter data)")
 

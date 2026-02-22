@@ -117,6 +117,22 @@ if sa_st["n"]:
 else:
     print("  (no data)")
 
+# First Message Latency (may be a single float or a list)
+fml_raw = metrics.get("first_message_latency_ms")
+if isinstance(fml_raw, (int, float)):
+    fml = [fml_raw]
+elif isinstance(fml_raw, list):
+    fml = fml_raw
+else:
+    fml = []
+fml_st = fmt_stats(fml)
+print()
+if fml_st["n"]:
+    print(f"  First Message Latency:")
+    print(f"  P50: {fml_st['p50']:.0f}ms  P95: {fml_st['p95']:.0f}ms  Mean: {fml_st['mean']:.0f}ms  (N={fml_st['n']})")
+else:
+    print("  First Message Latency: (no first message data)")
+
 # ── [Session B: Recipient -> Caller] ─────────────────────────────────────────
 
 sb_e2e = metrics.get("session_b_e2e_latencies_ms", [])
@@ -188,13 +204,13 @@ if scatter:
     r = pearson_r(xs, ys)
     print(f"  Pearson r (char_len vs SB latency): {r:.3f}")
     print()
-    print(f"  {'Range':>8s}   {'N':>3s}   {'Mean':>8s}")
+    print(f"  {'Range':>8s}  {'N':>4s}  {'P50':>8s}  {'P95':>8s}  {'Mean':>8s}")
     for label, vals in buckets.items():
         if vals:
-            mean = sum(vals) / len(vals)
-            print(f"  {label:>8s}   {len(vals):3d}   {mean:7.0f}ms")
+            st = fmt_stats(vals)
+            print(f"  {label:>8s}  {st['n']:4d}  {st['p50']:7.0f}ms  {st['p95']:7.0f}ms  {st['mean']:7.0f}ms")
         else:
-            print(f"  {label:>8s}     0        -")
+            print(f"  {label:>8s}     0         -         -         -")
 else:
     print("  (no transcript data for scatter analysis)")
 
