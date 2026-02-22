@@ -78,16 +78,23 @@ class BasePipeline(ABC):
 
             client = await get_client()
             m = call.call_metrics
-            data = {
+            data: dict[str, object] = {
                 "call_result_data": {
                     **call.call_result_data,
                     "metrics": m.model_dump(),
                     "cost_usd": round(call.cost_tokens.cost_usd, 6),
                 },
-                "transcript_bilingual": [t.model_dump() for t in call.transcript_bilingual],
+                "transcript_bilingual": [t.model_dump() if hasattr(t, "model_dump") else t for t in call.transcript_bilingual],
                 "cost_tokens": call.cost_tokens.model_dump(),
                 "total_tokens": call.cost_tokens.total,
             }
+            # cleanup_call 미실행 대비: call_sid, duration, communication_mode도 저장
+            if call.call_sid:
+                data["call_sid"] = call.call_sid
+            if call.communication_mode:
+                data["communication_mode"] = call.communication_mode.value
+            if call.started_at > 0:
+                data["duration_s"] = round(time.time() - call.started_at, 1)
             await client.table("calls").update(data).eq("id", call.call_id).execute()
             logger.debug("Incremental metrics saved for call %s", call.call_id)
         except Exception:

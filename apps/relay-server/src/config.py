@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 # Monorepo 루트의 .env 파일 경로 (config.py → src → relay-server → apps → wigvo)
@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_service_key: str = ""
+    supabase_service_role_key: str = ""
+
+    @model_validator(mode="after")
+    def resolve_service_key(self) -> "Settings":
+        """SUPABASE_SERVICE_ROLE_KEY 우선, fallback SUPABASE_SERVICE_KEY."""
+        if self.supabase_service_role_key:
+            self.supabase_service_key = self.supabase_service_role_key
+        return self
 
     # Relay Server
     relay_server_url: str = "http://localhost:8000"
