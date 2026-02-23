@@ -5,12 +5,14 @@ import { useTranslations } from 'next-intl';
 import { Globe } from 'lucide-react';
 import { changeLocale } from '@/components/providers/I18nProvider';
 import { getStoredLocale, type Locale } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 interface LanguageSwitcherProps {
   direction?: 'up' | 'down';
+  isCollapsed?: boolean;
 }
 
-export default function LanguageSwitcher({ direction = 'up' }: LanguageSwitcherProps) {
+export default function LanguageSwitcher({ direction = 'up', isCollapsed = false }: LanguageSwitcherProps) {
   const t = useTranslations('language');
   const [isOpen, setIsOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState<Locale>('en');
@@ -51,17 +53,22 @@ export default function LanguageSwitcher({ direction = 'up' }: LanguageSwitcherP
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#334155] bg-white border border-[#E2E8F0] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-sm hover:border-[#CBD5E1] hover:text-[#0F172A] transition-all"
+        className={cn(
+          "flex items-center text-sm font-medium text-[#334155] bg-white border border-[#E2E8F0] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-sm hover:border-[#CBD5E1] hover:text-[#0F172A] transition-all",
+          isCollapsed ? "justify-center w-9 h-9 p-0" : "gap-2 px-4 py-2",
+        )}
         aria-label="Change language"
       >
-        <Globe className="w-4 h-4" />
-        <span>{currentLocale === 'ko' ? '한국어' : 'English'}</span>
+        <Globe className="w-4 h-4 shrink-0" />
+        {!isCollapsed && <span>{currentLocale === 'ko' ? '한국어' : 'English'}</span>}
       </button>
 
       {isOpen && (
-        <div className={`absolute right-0 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50 ${
-          direction === 'down' ? 'top-full mt-2' : 'bottom-full mb-2'
-        }`}>
+        <div className={cn(
+          "absolute w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden z-50",
+          direction === 'down' ? 'top-full mt-2' : 'bottom-full mb-2',
+          isCollapsed ? 'left-0' : 'right-0',
+        )}>
           <button
             onClick={() => handleLocaleChange('en')}
             className={`w-full px-4 py-2.5 text-left text-sm hover:bg-[#F8FAFC] transition-colors ${

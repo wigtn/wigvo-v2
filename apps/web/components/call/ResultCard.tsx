@@ -52,7 +52,7 @@ export default function ResultCard({ call }: ResultCardProps) {
   const router = useRouter();
   const t = useTranslations('result');
   const tc = useTranslations('common');
-  const { resetCalling, resetDashboard, callingCallId } = useDashboard();
+  const { resetCalling, resetDashboard, setActiveMenu, callingCallId } = useDashboard();
   const { handleNewConversation } = useChat();
   const isInline = !!callingCallId;
 
@@ -109,7 +109,11 @@ export default function ResultCard({ call }: ResultCardProps) {
       {/* 액션 버튼 */}
       <div className="flex w-full flex-col gap-2 pt-2">
         <button
-          onClick={() => router.push('/history')}
+          onClick={() => {
+            resetCalling();
+            setActiveMenu('conversations');
+            router.push('/');
+          }}
           className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-white border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] transition-all"
         >
           <List className="size-4" />

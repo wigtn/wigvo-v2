@@ -132,7 +132,7 @@ export default function Sidebar({
       {/* Language Switcher + 로그아웃 */}
       <div className="px-2 pb-4">
         <div className={cn("mb-3", isSidebarCollapsed ? "flex justify-center" : "px-1")}>
-          <LanguageSwitcher />
+          <LanguageSwitcher isCollapsed={isSidebarCollapsed} />
         </div>
         <div className="mx-1 mb-3 border-t border-[#E2E8F0]" />
         <button

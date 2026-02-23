@@ -20,6 +20,7 @@ import {
   List,
 } from 'lucide-react';
 import type { CommunicationMode } from '@/shared/call-types';
+import { useDashboard } from '@/hooks/useDashboard';
 
 interface CallSummaryPanelProps {
   call: Call;
@@ -173,7 +174,12 @@ export default function CallSummaryPanel({ call, onNewChat }: CallSummaryPanelPr
             {t('newChat')}
           </button>
           <button
-            onClick={() => router.push('/history')}
+            onClick={() => {
+              const { resetCalling, setActiveMenu } = useDashboard.getState();
+              resetCalling();
+              setActiveMenu('conversations');
+              router.push('/');
+            }}
             className="w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-medium bg-white border border-[#E2E8F0] text-[#334155] hover:bg-[#F8FAFC] transition-all"
           >
             <List className="size-4" />
