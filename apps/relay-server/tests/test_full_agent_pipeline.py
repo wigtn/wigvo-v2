@@ -92,7 +92,7 @@ class TestFullAgentPipelineCreation:
     def test_echo_gate_initialized(self):
         """FullAgent도 Echo Gate (Silence Injection)를 사용한다."""
         router = _make_router()
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
 
 
 class TestFullAgentFeedbackLoop:

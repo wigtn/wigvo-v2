@@ -64,7 +64,6 @@ async def persist_call(call: ActiveCall) -> None:
         "recovery_events": [e.model_dump() if hasattr(e, "model_dump") else e for e in call.recovery_events],
         "call_result": call.call_result,
         "call_result_data": call.call_result_data,
-        "auto_ended": call.auto_ended,
         "function_call_logs": call.function_call_logs,
         "duration_s": round(time.time() - call.started_at, 1) if call.started_at > 0 else None,
         "total_tokens": call.cost_tokens.total,

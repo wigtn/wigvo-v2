@@ -118,14 +118,34 @@ class CallManager:
 
             logger.info("Cleaning up call %s (reason: %s)", call_id, reason)
 
-            # 0. Twilio 통화 종료 (PSTN 전화 끊기)
+            # 0a. DB status를 먼저 COMPLETED로 업데이트 (fail-safe)
+            # persist_call()이 실패하거나 Cloud Run이 종료되어도 status가 남도록
             call = self._calls.get(call_id)
+            if call:
+                try:
+                    from src.db.supabase_client import get_client
+
+                    client = await get_client()
+                    pre_result = "ERROR" if reason in ("error", "server_shutdown") else "SUCCESS"
+                    await (
+                        client.table("calls")
+                        .update({"status": "COMPLETED", "result": pre_result})
+                        .eq("id", call_id)
+                        .execute()
+                    )
+                except Exception:
+                    logger.warning("Failed to pre-persist status for call %s", call_id)
+
+            # 0b. Twilio 통화 종료 (PSTN 전화 끊기)
+            # asyncio.to_thread로 비동기화하여 이벤트 루프 블로킹 방지
             if call and call.call_sid:
                 try:
                     from src.twilio.outbound import get_twilio_client
 
                     client = get_twilio_client()
-                    client.calls(call.call_sid).update(status="completed")
+                    await asyncio.to_thread(
+                        client.calls(call.call_sid).update, status="completed"
+                    )
                     logger.info("Twilio call terminated: %s", call.call_sid)
                 except Exception as e:
                     logger.warning("Failed to terminate Twilio call %s: %s", call.call_sid, e)

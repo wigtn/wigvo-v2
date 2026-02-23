@@ -90,7 +90,7 @@ class TestTextToVoicePipelineCreation:
     def test_echo_gate_initialized(self):
         """TextToVoice는 Echo Gate (Silence Injection)를 사용한다."""
         router = _make_router()
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
 
     def test_first_message_exact_utterance(self):
         """First Message 핸들러가 exact utterance 모드로 생성된다."""
@@ -124,7 +124,7 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
         # Echo window 비활성 상태 (정상 오디오)
-        router._pipeline._in_echo_window = False
+        router.echo_gate.in_echo_window = False
 
         audio = b"\x80" * 100  # g711_ulaw 오디오
         await router.handle_twilio_audio(audio)
@@ -141,7 +141,7 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
         # Echo window 비활성 상태
-        router._pipeline._in_echo_window = False
+        router.echo_gate.in_echo_window = False
 
         with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
             mock_s.audio_energy_gate_enabled = True
@@ -167,7 +167,7 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
         # Echo window 활성 상태
-        router._pipeline._in_echo_window = True
+        router.echo_gate.in_echo_window = True
 
         with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
             mock_s.audio_energy_gate_enabled = True
@@ -196,7 +196,7 @@ class TestTextToVoiceAudioHandling:
         router.recovery_b.is_recovering = False
         router.recovery_b.is_degraded = False
         # Echo window 비활성
-        router._pipeline._in_echo_window = False
+        router.echo_gate.in_echo_window = False
 
         with patch("src.realtime.pipeline.text_to_voice.settings") as mock_s:
             mock_s.audio_energy_gate_enabled = True
@@ -282,7 +282,7 @@ class TestTextToVoiceSessionACallbacks:
 
         router.twilio_handler.send_audio.assert_called_once()
         # Echo window가 활성화되었는지 확인
-        assert router._pipeline._in_echo_window is True
+        assert router.echo_gate.in_echo_window is True
 
     @pytest.mark.asyncio
     async def test_tts_delivered_during_recipient_speech(self):

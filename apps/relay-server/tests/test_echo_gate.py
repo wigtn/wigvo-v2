@@ -86,31 +86,31 @@ class TestEchoGate:
     """Echo Gate: echo window 활성화/비활성화 + 동적 cooldown 테스트."""
 
     def test_echo_window_activates(self):
-        """_activate_echo_window 호출 시 _in_echo_window = True."""
+        """echo_gate._activate() 호출 시 in_echo_window = True."""
         router = _make_router()
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
 
-        router._activate_echo_window()
+        router.echo_gate._activate()
 
-        assert router._pipeline._in_echo_window is True
+        assert router.echo_gate.in_echo_window is True
 
     @pytest.mark.asyncio
     async def test_echo_window_deactivates_after_dynamic_cooldown(self):
-        """동적 cooldown 후 _in_echo_window = False."""
+        """동적 cooldown 후 in_echo_window = False."""
         router = _make_router()
 
         # TTS 길이 시뮬레이션: 800 bytes = 0.1s of audio @ 8kHz
-        router._pipeline._tts_first_chunk_at = time.time()
-        router._pipeline._tts_total_bytes = 800
+        router.echo_gate._tts_first_chunk_at = time.time()
+        router.echo_gate._tts_total_bytes = 800
 
-        router._activate_echo_window()
-        assert router._pipeline._in_echo_window is True
+        router.echo_gate._activate()
+        assert router.echo_gate.in_echo_window is True
 
-        router._start_echo_cooldown()
-        # 동적 cooldown: remaining(0.1s) + margin(0.5s) ≈ 0.6s
+        router.echo_gate.on_tts_done()
+        # 동적 cooldown: remaining(0.1s) + margin(0.3s), capped at 1.2s
         await asyncio.sleep(1.0)
 
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
 
     def test_echo_cooldown_reset_on_new_tts(self):
         """새 TTS 시작 시 기존 쿨다운 타이머가 취소."""
@@ -119,12 +119,12 @@ class TestEchoGate:
         old_task = MagicMock()
         old_task.done.return_value = False
         old_task.cancel = MagicMock()
-        router._pipeline._echo_cooldown_task = old_task
+        router.echo_gate._echo_cooldown_task = old_task
 
-        router._activate_echo_window()
+        router.echo_gate._activate()
 
         old_task.cancel.assert_called_once()
-        assert router._pipeline._echo_cooldown_task is None
+        assert router.echo_gate._echo_cooldown_task is None
 
     @pytest.mark.asyncio
     async def test_tts_activates_echo_window(self):
@@ -135,7 +135,7 @@ class TestEchoGate:
 
         await router._on_session_a_tts(b"\x00\x01")
 
-        assert router._pipeline._in_echo_window is True
+        assert router.echo_gate.in_echo_window is True
 
     @pytest.mark.asyncio
     async def test_done_starts_dynamic_cooldown(self):
@@ -143,17 +143,17 @@ class TestEchoGate:
         router = _make_router()
 
         # TTS 추적값 설정 (짧은 TTS)
-        router._pipeline._tts_first_chunk_at = time.time()
-        router._pipeline._tts_total_bytes = 400  # 0.05s of audio
+        router.echo_gate._tts_first_chunk_at = time.time()
+        router.echo_gate._tts_total_bytes = 400  # 0.05s of audio
 
-        router._activate_echo_window()
+        router.echo_gate._activate()
         await router._on_session_a_done()
 
         # cooldown task가 생성됨
-        assert router._pipeline._echo_cooldown_task is not None
-        # 짧은 TTS → 빠른 cooldown (0.05 + 0.5 = 0.55s)
+        assert router.echo_gate._echo_cooldown_task is not None
+        # 짧은 TTS → 빠른 cooldown (0.05 + 0.3 = 0.35s, capped at 1.2s)
         await asyncio.sleep(1.0)
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
 
 
 class TestSilenceInjection:
@@ -164,7 +164,7 @@ class TestSilenceInjection:
         """echo window 중 저에너지 오디오(에코)가 무음(0xFF)으로 대체되어 Session B에 전송."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
-        router._pipeline._in_echo_window = True
+        router.echo_gate.in_echo_window = True
 
         audio = bytes([0xFE] * 160)  # 저에너지 오디오 (에코 수준)
         await router.handle_twilio_audio(audio)
@@ -181,13 +181,13 @@ class TestSilenceInjection:
         """echo window 중 고에너지 오디오(실제 발화)는 게이트를 해제하고 원본 전달."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
-        router._pipeline._in_echo_window = True
+        router.echo_gate.in_echo_window = True
 
         audio = bytes([0x10] * 160)  # 고에너지 오디오 (실제 발화)
         await router.handle_twilio_audio(audio)
 
         # 에코 게이트가 해제됨
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
         # 원본 오디오가 Session B에 전송됨
         router.session_b.send_recipient_audio.assert_called_once()
         sent_b64 = router.session_b.send_recipient_audio.call_args[0][0]
@@ -199,7 +199,7 @@ class TestSilenceInjection:
         """echo window 외 → 실제 오디오가 Session B에 전송."""
         router = _make_router()
         router.session_b.send_recipient_audio = AsyncMock()
-        router._pipeline._in_echo_window = False
+        router.echo_gate.in_echo_window = False
 
         audio = bytes([0x10] * 160)
 
@@ -216,7 +216,7 @@ class TestSilenceInjection:
     async def test_speech_started_breaks_echo_window(self):
         """echo window 중 speech_started는 게이트를 해제하고 정상 처리된다."""
         router = _make_router()
-        router._pipeline._in_echo_window = True
+        router.echo_gate.in_echo_window = True
 
         router.first_message = MagicMock()
         router.first_message.on_recipient_speech_detected = AsyncMock()
@@ -225,14 +225,14 @@ class TestSilenceInjection:
         await router._on_recipient_started()
 
         # echo window 해제 + 정상 처리
-        assert router._pipeline._in_echo_window is False
+        assert router.echo_gate.in_echo_window is False
         router.first_message.on_recipient_speech_detected.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_speech_stopped_processed_during_echo_window(self):
         """echo window 중에도 speech_stopped는 정상 처리된다."""
         router = _make_router()
-        router._pipeline._in_echo_window = True
+        router.echo_gate.in_echo_window = True
 
         router.interrupt = MagicMock()
         router.interrupt.on_recipient_speech_stopped = AsyncMock()
@@ -249,7 +249,7 @@ class TestSilenceInjection:
     async def test_speech_processed_outside_echo_window(self):
         """echo window 외 speech_started는 정상 처리됨."""
         router = _make_router()
-        router._pipeline._in_echo_window = False
+        router.echo_gate.in_echo_window = False
 
         router.first_message = MagicMock()
         router.first_message.on_recipient_speech_detected = AsyncMock()
@@ -264,9 +264,9 @@ class TestSilenceInjection:
         """echo window가 output_suppressed를 토글하지 않음."""
         router = _make_router()
 
-        router._activate_echo_window()
+        router.echo_gate._activate()
 
-        assert router._pipeline._in_echo_window is True
+        assert router.echo_gate.in_echo_window is True
         # output_suppressed는 토글되지 않아야 함
         assert router.session_b.output_suppressed is not True
 
