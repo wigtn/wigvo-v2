@@ -161,6 +161,7 @@ class TextToVoicePipeline(BasePipeline):
             echo_margin_s=0.5,
             max_echo_window_s=None,
             settling_s=settings.echo_post_settling_s,
+            break_on_high_energy=False,  # T2V: 사용자 메시지 완전 전달 우선
         )
 
         # Interrupt debounce: 노이즈에 의한 즉시 TTS 취소 방지 (400ms 대기 후 확인)
