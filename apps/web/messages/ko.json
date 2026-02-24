@@ -148,9 +148,6 @@
       "textToVoice": "텍스트 → 음성",
       "textToVoiceSubtitle": "Text to Voice",
       "textToVoiceDesc": "텍스트를 입력하면 AI가 대신 말합니다",
-      "voiceToText": "음성 → 자막",
-      "voiceToTextSubtitle": "Voice to Text",
-      "voiceToTextDesc": "상대방 말이 자막으로 표시됩니다",
       "fullAgent": "AI 자율 통화",
       "fullAgentSubtitle": "AI Agent",
       "fullAgentDesc": "AI가 수집된 정보로 통화를 진행합니다"
@@ -167,7 +164,6 @@
     "modeLabel": {
       "voiceToVoice": "양방향 음성 번역",
       "textToVoice": "텍스트→음성",
-      "voiceToText": "음성→자막",
       "fullAgent": "AI 자율 통화"
     },
     "categoryLabel": {
@@ -206,7 +202,6 @@
     "modeBadge": {
       "voiceToVoice": "양방향 음성 번역",
       "textToVoice": "텍스트 → 음성",
-      "voiceToText": "음성 → 자막",
       "fullAgent": "AI 자율 통화"
     },
     "caption": {
@@ -253,7 +248,6 @@
     "mode": {
       "voiceToVoice": "양방향 음성",
       "textToVoice": "텍스트→음성",
-      "voiceToText": "음성→자막",
       "fullAgent": "AI 자율"
     }
   },
@@ -330,7 +324,7 @@
     "proPeriod": "/월",
     "proDescription": "무제한 통화로 자유롭게 사용하세요",
     "proFeature1": "무제한 AI 통화",
-    "proFeature2": "4가지 통화 모드 전체",
+    "proFeature2": "3가지 통화 모드 전체",
     "proFeature3": "AI 자율 통화 (Full Agent)",
     "proFeature4": "우선 AI 처리",
     "proFeature5": "통화 요약 및 내보내기",

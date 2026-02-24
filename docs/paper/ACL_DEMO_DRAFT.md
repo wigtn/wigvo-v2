@@ -10,14 +10,14 @@
 
 Recent advances in large language models (LLMs) have enabled high-quality speech-to-speech translation in controlled environments such as mobile apps, web browsers, and video conferencing platforms. However, billions of users still rely on legacy Public Switched Telephone Network (PSTN) infrastructure, where deploying LLM-based translation is significantly more challenging due to limited control over devices, audio capture, and network behavior. Existing commercial solutions either depend on specific carriers (e.g., telco-native services) or on premium on-device hardware, leaving ordinary landlines and low-end smartphones largely unsupported.
 
-In this work, we present **WIGVO**, a server-side relay system that brings LLM-based real-time speech translation to any standard phone call without requiring app installation, carrier support, or specialized hardware. WIGVO acts as a web-to-PSTN bridge: a caller connects via a browser, WIGVO relays media streams between Twilio and OpenAI's Realtime API, and the callee participates through an ordinary phone number on the PSTN. The system is designed to be **carrier-agnostic** and **device-agnostic**, enabling practical deployment in real-world telephony settings, including accessibility-focused scenarios such as text-to-voice and voice-to-text relay for users with speech or hearing impairments.
+In this work, we present **WIGVO**, a server-side relay system that brings LLM-based real-time speech translation to any standard phone call without requiring app installation, carrier support, or specialized hardware. WIGVO acts as a web-to-PSTN bridge: a caller connects via a browser, WIGVO relays media streams between Twilio and OpenAI's Realtime API, and the callee participates through an ordinary phone number on the PSTN. The system is designed to be **carrier-agnostic** and **device-agnostic**, enabling practical deployment in real-world telephony settings, including accessibility-focused scenarios such as text-to-voice relay for users with speech impairments or phone anxiety.
 
 Deploying LLM-based translation over PSTN presents several unique technical challenges. First, the relay server cannot rely on client-side acoustic echo cancellation (AEC) or high-fidelity microphones. Instead, it must handle low-bandwidth G.711 μ-law audio at 8 kHz with unpredictable latency and jitter. Second, naive use of a single translation session for both speakers leads to direction confusion and self-translation loops, where the model accidentally translates its own synthesized speech. Third, background noise and low-energy PSTN artifacts often trigger hallucinated subtitles or TTS outputs from the underlying speech recognition and translation stack.
 
 WIGVO addresses these challenges through three key design decisions:
 (1) a **Dual-Session Architecture** that assigns independent Realtime sessions to each speaker direction (caller→callee and callee→caller) to avoid context mixing;
 (2) a **server-side Echo Gating mechanism** based on deterministic silence injection and dynamic RMS thresholds, which suppresses acoustic echo loops without client control; and
-(3) a **modular pipeline design** that supports multiple communication modes (voice-to-voice, text-to-voice, voice-to-text, and agent modes) on top of a shared audio routing core.
+(3) a **modular pipeline design** that supports multiple communication modes (voice-to-voice, text-to-voice, and agent modes) on top of a shared audio routing core.
 
 This paper describes the design and implementation of WIGVO and demonstrates its applicability through realistic telephone scenarios, including a restaurant reservation and a medical appointment with text-to-voice relay. We also report latency measurements from real PSTN calls and ablation-style observations on echo handling and robustness. **Our goal is not to propose a new LLM, but to show how existing commercial LLMs can be made usable in the harsh conditions of legacy telephony through careful system design.**
 
@@ -78,8 +78,7 @@ This combination of silence injection and dynamic RMS gating proved robust again
 Beyond standard voice-to-voice translation, WIGVO supports multiple interaction modes through a **pipeline Strategy Pattern**:
 
 - **Voice-to-Voice (V2V):** full bidirectional speech translation with audio in both directions.
-- **Text-to-Voice (T2V):** user types text; Session A generates TTS for the recipient, while Session B returns captions only.
-- **Voice-to-Text (VTT):** user or recipient speaks; only text captions are shown, useful for hearing-impaired users.
+- **Text-to-Voice (T2V):** user types text; Session A generates TTS for the recipient, while Session B returns captions only. Designed for users with speech impairments or phone anxiety.
 - **FullAgent:** an experimental mode where the LLM acts as an autonomous agent, using function calling to perform actions on behalf of the caller.
 
 Each pipeline shares the same underlying AudioRouter and DualSessionManager but configures different modalities for Session A/B (e.g., suppressing B-side audio in T2V) and different guardrail behaviors. This modularity allows WIGVO to implement accessibility-focused scenarios -- such as a speech-anxious user booking a medical appointment via text-to-voice relay -- without changing the core telephony and echo-handling logic.

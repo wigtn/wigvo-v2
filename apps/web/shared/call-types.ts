@@ -58,7 +58,7 @@ export const DEFAULT_LANGUAGE_PAIR: LanguagePair = {
 
 export type CallMode = 'agent' | 'relay';
 
-// --- Communication Mode (v4: 4가지 통화 모드) ---
+// --- Communication Mode (3가지 통화 모드) ---
 
 export type CommunicationMode =
   | 'voice_to_voice'   // 양방향 음성 번역

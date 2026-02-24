@@ -120,20 +120,20 @@ class BasePipeline(ABC):
 
 #### Per-Pipeline Configuration
 
-| Component | VoiceToVoice | VoiceToText (sub-mode) | TextToVoice | FullAgent |
-|-----------|-------------|----------------------|-------------|-----------|
-| **Pipeline** | VoiceToVoicePipeline | VoiceToVoicePipeline | TextToVoicePipeline | FullAgentPipeline |
-| **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
-| **Session A turn_detection** | client/server VAD | client/server VAD | `null` (manual) | `null` (manual) |
-| **Session B modalities** | `['text', 'audio']` | `['text', 'audio']` | **`['text']`** | **`['text']`** |
-| **Session B -> App audio** | Sent | **Suppressed** | N/A (text only) | N/A (text only) |
-| **Silence Injection** | **Active** | **Active** | **Active** | Not needed |
-| **Echo Gate** | Active | Active | **Active** | Not needed |
-| **Energy Gate** | Active | Active | Active | Active |
-| **Local VAD** | Active | Active | Active | Active |
-| **Interrupt Handler** | Active | Active | Active | Active |
-| **Function Calling** | None | None | None | **Active** |
-| **Per-response instruction** | None | None | **Active** | **Active** |
+| Component | VoiceToVoice | TextToVoice | FullAgent |
+|-----------|-------------|-------------|-----------|
+| **Pipeline** | VoiceToVoicePipeline | TextToVoicePipeline | FullAgentPipeline |
+| **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
+| **Session A turn_detection** | client/server VAD | `null` (manual) | `null` (manual) |
+| **Session B modalities** | `['text', 'audio']` | **`['text']`** | **`['text']`** |
+| **Session B -> App audio** | Sent | N/A (text only) | N/A (text only) |
+| **Silence Injection** | **Active** | **Active** | Not needed |
+| **Echo Gate** | Active | **Active** | Not needed |
+| **Energy Gate** | Active | Active | Active |
+| **Local VAD** | Active | Active | Active |
+| **Interrupt Handler** | Active | Active | Active |
+| **Function Calling** | None | None | **Active** |
+| **Per-response instruction** | None | **Active** | **Active** |
 
 ### Dual Session Structure
 
@@ -274,7 +274,7 @@ Twilio                    Relay Server                      App
 
 #### Silence Injection + Dynamic Energy Threshold (Primary Echo Prevention)
 
-**VoiceToVoice/VoiceToText pipelines.** When Session A sends TTS to Twilio, the echo returns to Session B. The primary defense is replacing incoming Twilio audio with silence frames during the echo window, combined with energy-based filtering.
+**VoiceToVoice pipeline.** When Session A sends TTS to Twilio, the echo returns to Session B. The primary defense is replacing incoming Twilio audio with silence frames during the echo window, combined with energy-based filtering.
 
 ```
 Session A TTS chunk sent to Twilio
@@ -403,15 +403,15 @@ Text delta arrives (ahead of audio)
 
 ### Mode Comparison
 
-| | Voice-to-Voice | Voice-to-Text | Text-to-Voice | Full Agent |
-|---|---|---|---|---|
-| Session A role | Voice translation | Voice translation | Text translation (strict) | AI autonomous conversation |
-| User input | Voice | Voice | Text | Text instructions |
-| Session B output | Voice + text | Text only (App) | Text only | Text only |
-| Session B -> A feedback | None | None | None | Recipient translation auto-forwarded |
-| Function Calling | Disabled | Disabled | Disabled | Active |
-| Echo detection | Silence Injection + Gate | Silence Injection + Gate | Not needed | Not needed |
-| B audio tokens | Consumed | Consumed | **0** | **0** |
+| | Voice-to-Voice | Text-to-Voice | Full Agent |
+|---|---|---|---|
+| Session A role | Voice translation | Text translation (strict) | AI autonomous conversation |
+| User input | Voice | Text | Text instructions |
+| Session B output | Voice + text | Text only | Text only |
+| Session B -> A feedback | None | None | Recipient translation auto-forwarded |
+| Function Calling | Disabled | Disabled | Active |
+| Echo detection | Silence Injection + Gate | Silence Injection + Gate | Not needed |
+| B audio tokens | Consumed | **0** | **0** |
 
 ### CallManager (Central Resource Management)
 
@@ -621,20 +621,20 @@ class BasePipeline(ABC):
 
 #### 파이프라인별 구성
 
-| 구성 | VoiceToVoice | VoiceToText (서브모드) | TextToVoice | FullAgent |
-|------|-------------|----------------------|-------------|-----------|
-| **파이프라인** | VoiceToVoicePipeline | VoiceToVoicePipeline | TextToVoicePipeline | FullAgentPipeline |
-| **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
-| **Session A turn_detection** | client/server VAD | client/server VAD | `null` (manual) | `null` (manual) |
-| **Session B modalities** | `['text', 'audio']` | `['text', 'audio']` | **`['text']`** | **`['text']`** |
-| **Session B → App 오디오** | 전송 | **생략** | N/A (텍스트만) | N/A (텍스트만) |
-| **Silence Injection** | **활성** | **활성** | **활성** | 불필요 |
-| **Echo Gate** | 활성 | 활성 | **활성** | 불필요 |
-| **Energy Gate** | 활성 | 활성 | 활성 | 활성 |
-| **Local VAD** | 활성 | 활성 | 활성 | 활성 |
-| **Interrupt Handler** | 활성 | 활성 | 활성 | 활성 |
-| **Function Calling** | 없음 | 없음 | 없음 | **활성** |
-| **Per-response instruction** | 없음 | 없음 | **활성** | **활성** |
+| 구성 | VoiceToVoice | TextToVoice | FullAgent |
+|------|-------------|-------------|-----------|
+| **파이프라인** | VoiceToVoicePipeline | TextToVoicePipeline | FullAgentPipeline |
+| **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
+| **Session A turn_detection** | client/server VAD | `null` (manual) | `null` (manual) |
+| **Session B modalities** | `['text', 'audio']` | **`['text']`** | **`['text']`** |
+| **Session B → App 오디오** | 전송 | N/A (텍스트만) | N/A (텍스트만) |
+| **Silence Injection** | **활성** | **활성** | 불필요 |
+| **Echo Gate** | 활성 | **활성** | 불필요 |
+| **Energy Gate** | 활성 | 활성 | 활성 |
+| **Local VAD** | 활성 | 활성 | 활성 |
+| **Interrupt Handler** | 활성 | 활성 | 활성 |
+| **Function Calling** | 없음 | 없음 | **활성** |
+| **Per-response instruction** | 없음 | **활성** | **활성** |
 
 ### Dual Session 구조
 
@@ -775,7 +775,7 @@ Twilio                    Relay Server                      App
 
 #### Silence Injection + Dynamic Energy Threshold (주요 에코 방지)
 
-**VoiceToVoice/VoiceToText 파이프라인.** Session A가 TTS를 Twilio로 보내면 에코가 Session B로 돌아온다. 주요 방어 기법은 echo window 동안 Twilio 수신 오디오를 silence 프레임으로 교체하는 것이며, 에너지 기반 필터링과 함께 동작한다.
+**VoiceToVoice 파이프라인.** Session A가 TTS를 Twilio로 보내면 에코가 Session B로 돌아온다. 주요 방어 기법은 echo window 동안 Twilio 수신 오디오를 silence 프레임으로 교체하는 것이며, 에너지 기반 필터링과 함께 동작한다.
 
 ```
 Session A TTS 청크를 Twilio로 전송
@@ -904,15 +904,15 @@ TextToVoice/FullAgent에서 Session B는 `modalities=['text']`로 설정되어:
 
 ### 모드별 비교
 
-| | Voice-to-Voice | Voice-to-Text | Text-to-Voice | Full Agent |
-|---|---|---|---|---|
-| Session A 역할 | 음성 번역 | 음성 번역 | 텍스트 번역 (strict) | AI 자율 대화 |
-| User 입력 | 음성 | 음성 | 텍스트 | 텍스트 지시 |
-| Session B 출력 | 음성 + 텍스트 | 텍스트만 (App) | 텍스트만 | 텍스트만 |
-| Session B → A 피드백 | 없음 | 없음 | 없음 | 수신자 번역 자동 전달 |
-| Function Calling | 비활성 | 비활성 | 비활성 | 활성 |
-| Echo 감지 | Silence Injection + Gate | Silence Injection + Gate | 불필요 | 불필요 |
-| B audio 토큰 | 소비 | 소비 | **0** | **0** |
+| | Voice-to-Voice | Text-to-Voice | Full Agent |
+|---|---|---|---|
+| Session A 역할 | 음성 번역 | 텍스트 번역 (strict) | AI 자율 대화 |
+| User 입력 | 음성 | 텍스트 | 텍스트 지시 |
+| Session B 출력 | 음성 + 텍스트 | 텍스트만 | 텍스트만 |
+| Session B → A 피드백 | 없음 | 없음 | 수신자 번역 자동 전달 |
+| Function Calling | 비활성 | 비활성 | 활성 |
+| Echo 감지 | Silence Injection + Gate | Silence Injection + Gate | 불필요 |
+| B audio 토큰 | 소비 | **0** | **0** |
 
 ### CallManager (중앙 리소스 관리)
 

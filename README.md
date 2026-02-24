@@ -136,7 +136,7 @@ This reduced speech-end detection from 15-72 seconds to **480ms**.
 
 ### 5. Modular Pipeline Architecture (Strategy Pattern)
 
-Four communication modes are implemented as independent pipeline strategies, sharing a common interface through `AudioRouter`:
+Three communication modes are implemented as independent pipeline strategies, sharing a common interface through `AudioRouter`:
 
 ```
 AudioRouter (thin delegator, ~160 lines)
@@ -370,7 +370,6 @@ Each communication mode is handled by a dedicated **pipeline** (Strategy pattern
 | Mode | Pipeline | Input | Output | For |
 |------|----------|-------|--------|-----|
 | **Voice → Voice** | `VoiceToVoicePipeline` | Speak your language | Translated speech + captions | General users |
-| **Voice → Text** | `VoiceToVoicePipeline` (suppress audio) | Speak | Real-time captions only | Hearing disabilities |
 | **Text → Voice** | `TextToVoicePipeline` | Type text | AI speaks for you via phone | Speech disabilities, phone anxiety |
 | **Agent Mode** | `FullAgentPipeline` | Provide info upfront | AI handles entire call autonomously | Anyone |
 
