@@ -48,7 +48,7 @@ Real-time speech translation with large language models (LLMs) has become feasib
 
 \section{Introduction}
 
-Streaming speech-to-speech translation has advanced rapidly with Realtime LLM APIs~\citep{openai_realtime_api_2024}, but existing work focuses on WebRTC and VoIP settings where wideband audio and client-side acoustic echo cancellation (AEC) are available~\citep{seamless_streaming_2023,whisper_radford_2023}. The Public Switched Telephone Network (PSTN), however, remains the primary inbound telephony interface for local businesses, hospitals, and government offices~\citep{itu_pstn_overview_2020}. PSTN encodes audio via G.711 $\mu$-law at 8\,kHz, introduces end-to-end delays of 80--600\,ms, and provides no client-side AEC. For foreign residents, people with speech anxiety, or users with hearing impairments, making such calls remains a significant barrier.
+Streaming speech-to-speech translation has advanced rapidly with Realtime LLM APIs~\citep{openai_realtime_api_2024}, but existing work focuses on WebRTC and VoIP settings where wideband audio and client-side acoustic echo cancellation (AEC)~\citep{itu_g168_2015} are available~\citep{seamless_streaming_2023,whisper_radford_2023}. The Public Switched Telephone Network (PSTN), however, remains the primary inbound telephony interface for local businesses, hospitals, and government offices~\citep{itu_pstn_overview_2020}. PSTN encodes audio via G.711 $\mu$-law at 8\,kHz~\citep{itu_g711_1988}, introduces end-to-end delays of 80--600\,ms~\citep{itu_g114_2003}, and provides no client-side AEC. For foreign residents, people with speech anxiety, or users with hearing impairments, making such calls remains a significant barrier.
 
 Recent end-to-end full-duplex speech models such as Moshi~\citep{defossez2024moshi} and Hibiki~\citep{labiausse2025hibiki} achieve sub-200\,ms latency in broadband settings, but they do not address PSTN-specific signal processing challenges: narrowband codec artifacts, telephony echo without client-side AEC, and VAD failures on noisy G.711 audio.
 
@@ -155,7 +155,7 @@ The echo gate described in Section~4 suppresses self-translation loops but does 
 
 \subsection{Server VAD Failure Modes on PSTN}
 
-OpenAI's Realtime API provides a server-side VAD that works well for wideband WebRTC audio. On PSTN lines, however, we observed three failure modes:
+OpenAI's Realtime API~\citep{openai_realtime_api_2024} provides a server-side VAD that works well for wideband WebRTC audio. On PSTN lines, however, we observed three failure modes:
 
 \begin{enumerate}
     \item \textbf{Background noise misclassification.} Constant low-level PSTN noise (line hum, codec quantization artifacts) is classified as speech, causing the VAD to enter a ``speaking'' state that never terminates. We observed stuck durations ranging from 15\,s to 72\,s before manual intervention.
@@ -185,7 +185,7 @@ This design reduces \texttt{speech\_stopped} latency from 15--72\,s (server VAD 
 
 \subsection{STT Hallucination Blocklist}
 
-Whisper occasionally generates broadcast-style hallucinations on low-energy PSTN input---for example, Korean news sign-off phrases such as ``MBC News'' or ``Thank you for watching.'' A 15-pattern blocklist intercepts these outputs before they reach the translation stage; 5 hallucinated outputs were blocked across 37 instrumented calls.
+Whisper~\citep{whisper_radford_2023} occasionally generates broadcast-style hallucinations on low-energy PSTN input---for example, Korean news sign-off phrases such as ``MBC News'' or ``Thank you for watching.'' A 15-pattern blocklist intercepts these outputs before they reach the translation stage; 5 hallucinated outputs were blocked across 37 instrumented calls.
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -259,7 +259,7 @@ The echo gate activated 3.4 times per call on average, corresponding to TTS play
 
 \subsection{Cost}
 
-Across the 37 instrumented calls (45.5 minutes total), WIGVO consumed 638{,}035 tokens at a total cost of USD\,19.05, yielding \textbf{USD\,0.42/min} (USD\,0.50/call). These costs reflect dual-session Realtime API pricing and remain an order of magnitude cheaper than human relay services (USD\,1--3/min).
+Across the 37 instrumented calls (45.5 minutes total), WIGVO consumed 638{,}035 tokens at a total cost of USD\,19.05, yielding \textbf{USD\,0.42/min} (USD\,0.50/call). These costs reflect dual-session Realtime API pricing and remain an order of magnitude cheaper than professional telephone interpretation services (USD\,1--3/min).\footnote{Based on published per-minute rates for over-the-phone interpretation (OPI) from major commercial providers.}
 
 \section{Demonstration}
 
@@ -297,7 +297,7 @@ The current evaluation focuses on Korean-English over PSTN. WIGVO's modular casc
 Session~B latency (${\sim}$2\,s median) introduces noticeable delay, primarily due to streaming ASR. As production-ready full-duplex speech models mature~\citep{defossez2024moshi, labiausse2025hibiki}, this bottleneck may be reduced by replacing the STT stage with an end-to-end audio model. The PSTN relay layer, echo gate, and VAD architecture would remain necessary regardless, as they address network-level constraints orthogonal to model design.
 
 \paragraph{Cost and user evaluation.}
-Per-minute cost (USD\,0.42) is driven by Realtime API audio token pricing; self-hosted STT alternatives could reduce this. A formal user study (e.g., SUS assessment) with target populations has not yet been conducted and is planned as future work.
+Per-minute cost (USD\,0.42) is driven by Realtime API audio token pricing; self-hosted STT alternatives could reduce this. A formal user study (e.g., SUS assessment; \citealt{brooke_sus_1996}) with target populations has not yet been conducted and is planned as future work.
 
 \section*{Ethics Statement}
 
@@ -305,7 +305,7 @@ All calls were initiated by the authors and collaborators for system testing. Au
 
 \section*{Acknowledgments}
 
-This work was conducted independently by the WIGTN crew at SoundMind Inc. We thank the anonymous reviewers for their feedback. WIGVO uses OpenAI's Realtime API and Twilio Media Streams. The relay server is implemented in Python with FastAPI.
+This work was conducted independently by the WIGTN crew at SoundMind Inc. We thank the anonymous reviewers for their feedback. WIGVO uses OpenAI's Realtime API~\citep{openai_realtime_api_2024} and Twilio Media Streams~\citep{twilio_media_streams_2024}. The relay server is implemented in Python with FastAPI.
 
 \bibliography{references}
 \bibliographystyle{acl_natbib}
