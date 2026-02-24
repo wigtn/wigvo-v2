@@ -24,8 +24,8 @@ const DEFAULT_VAD_CONFIG: VadConfig = {
   silenceThreshold: 0.008,
   speechOnsetDelay: 150,
   speechEndDelay: 350,
-  sampleRate: 16000,
-  chunkSize: 1600,
+  sampleRate: 24000,
+  chunkSize: 2400,
 };
 
 export interface VadCallbacks {

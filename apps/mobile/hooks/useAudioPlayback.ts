@@ -19,7 +19,7 @@ export function useAudioPlayback() {
 
     try {
       // Create a WAV file from PCM16 base64 data
-      const wavBase64 = createWavBase64(audioBase64, 16000, 1, 16);
+      const wavBase64 = createWavBase64(audioBase64, 24000, 1, 16);
       const uri = FileSystem.cacheDirectory + `playback_${Date.now()}.wav`;
       await FileSystem.writeAsStringAsync(uri, wavBase64, {
         encoding: FileSystem.EncodingType.Base64,

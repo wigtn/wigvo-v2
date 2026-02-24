@@ -275,9 +275,18 @@ if stt_st["n"]:
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
 if all_paired_e2e:
-    ratios = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
-    stt_pct = sum(ratios) / len(ratios) * 100 if ratios else 0
-    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(ratios)} paired turns)")
+    valid_ratios = []
+    misaligned = 0
+    for stt, e2e in zip(all_paired_stt, all_paired_e2e):
+        if e2e <= 0:
+            continue
+        if stt > e2e:
+            misaligned += 1
+            continue
+        valid_ratios.append(stt / e2e)
+    stt_pct = sum(valid_ratios) / len(valid_ratios) * 100 if valid_ratios else 0
+    mis_tag = f"  ({misaligned} misaligned skipped)" if misaligned else ""
+    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(valid_ratios)} paired turns){mis_tag}")
 
 # ── Utterance Analysis ──
 print()
@@ -373,9 +382,18 @@ if sa_st["n"]:
 if e2e_st["n"]:
     print(f"  SB P50 / P95       : {e2e_st['p50']:.0f}ms / {e2e_st['p95']:.0f}ms  (N={e2e_st['n']} turns)")
 if all_paired_e2e:
-    ratios_paper = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
-    stt_pct_paper = sum(ratios_paper) / len(ratios_paper) * 100 if ratios_paper else 0
-    print(f"  STT % of E2E       : {stt_pct_paper:.1f}%  (N={len(ratios_paper)} paired turns)")
+    valid_ratios_p = []
+    misaligned_p = 0
+    for stt, e2e in zip(all_paired_stt, all_paired_e2e):
+        if e2e <= 0:
+            continue
+        if stt > e2e:
+            misaligned_p += 1
+            continue
+        valid_ratios_p.append(stt / e2e)
+    stt_pct_paper = sum(valid_ratios_p) / len(valid_ratios_p) * 100 if valid_ratios_p else 0
+    mis_tag_p = f"  ({misaligned_p} misaligned)" if misaligned_p else ""
+    print(f"  STT % of E2E       : {stt_pct_paper:.1f}%  (N={len(valid_ratios_p)} paired turns){mis_tag_p}")
 if all_scatter:
     xs_p = [s["char_len"] for s in all_scatter]
     ys_p = [s["latency_ms"] for s in all_scatter]

@@ -276,9 +276,18 @@ if stt_st["n"]:
 if trans_st["n"]:
     print(f"  Translate  P50: {trans_st['p50']:.0f}ms  P95: {trans_st['p95']:.0f}ms  Mean: {trans_st['mean']:.0f}ms")
 if all_paired_e2e:
-    ratios = [stt / e2e for stt, e2e in zip(all_paired_stt, all_paired_e2e) if e2e > 0]
-    stt_pct = sum(ratios) / len(ratios) * 100 if ratios else 0
-    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(ratios)} paired turns)")
+    valid_ratios = []
+    misaligned = 0
+    for stt, e2e in zip(all_paired_stt, all_paired_e2e):
+        if e2e <= 0:
+            continue
+        if stt > e2e:
+            misaligned += 1
+            continue
+        valid_ratios.append(stt / e2e)
+    stt_pct = sum(valid_ratios) / len(valid_ratios) * 100 if valid_ratios else 0
+    mis_tag = f"  ({misaligned} misaligned skipped)" if misaligned else ""
+    print(f"  STT % of E2E: {stt_pct:.1f}%  (N={len(valid_ratios)} paired turns){mis_tag}")
 
 # ── Utterance Analysis ──
 print()
