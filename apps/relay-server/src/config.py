@@ -76,12 +76,15 @@ class Settings(BaseSettings):
     heartbeat_timeout_s: float = 120.0  # 45→120s: 대화 중 자연스러운 침묵(타이핑 대기 등)을 disconnect로 오판 방지
     ring_buffer_capacity_slots: int = 1500  # 30초 / 20ms
 
+    # STT 모델 (input_audio_transcription)
+    stt_model: str = "gpt-4o-transcribe"
+
     # Whisper fallback (Degraded Mode)
     whisper_model: str = "whisper-1"
 
     # Echo Gate (에코 피드백 루프 차단)
     echo_gate_cooldown_s: float = 2.5  # TTS 완료 후 에코 소멸 대기 (레거시 폴백용)
-    echo_post_settling_s: float = 1.0  # echo window 후 AGC 안정화 대기
+    echo_post_settling_s: float = 2.0  # echo window 후 AGC 안정화 대기
     # Session B VAD 설정 (수신자 음성 감지 민감도)
     session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (전화 오디오 권장 0.8~0.85)
     session_b_vad_silence_ms: int = 500  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 500ms)

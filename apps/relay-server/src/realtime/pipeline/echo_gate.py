@@ -44,7 +44,6 @@ class EchoGateManager:
         echo_margin_s: float = 0.3,
         max_echo_window_s: float | None = 1.2,
         settling_s: float = 2.0,
-        break_on_high_energy: bool = True,
     ):
         self._session_b = session_b
         self._local_vad = local_vad
@@ -52,7 +51,6 @@ class EchoGateManager:
         self._echo_margin_s = echo_margin_s
         self._max_echo_window_s = max_echo_window_s
         self._settling_s = settling_s
-        self._break_on_high_energy = break_on_high_energy
 
         self._in_echo_window = False
         self._settling_until: float = 0.0
@@ -111,16 +109,13 @@ class EchoGateManager:
         if self._in_echo_window:
             rms = _ulaw_rms(audio_bytes)
             if rms > settings.echo_energy_threshold_rms:
-                if self._break_on_high_energy:
-                    logger.info(
-                        "High energy (RMS=%.0f) during echo window — breaking echo gate",
-                        rms,
-                    )
-                    self._call_metrics.echo_gate_breakthroughs += 1
-                    self._deactivate()
-                    return audio_bytes
-                # break 비활성화: high energy 감지했지만 gate 유지 (T2V 전달 우선)
-                return b"\xff" * len(audio_bytes)
+                logger.info(
+                    "High energy (RMS=%.0f) during echo window — breaking echo gate",
+                    rms,
+                )
+                self._call_metrics.echo_gate_breakthroughs += 1
+                self._deactivate()
+                return audio_bytes
             return b"\xff" * len(audio_bytes)
         return audio_bytes
 

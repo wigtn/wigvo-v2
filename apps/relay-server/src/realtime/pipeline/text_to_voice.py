@@ -161,7 +161,6 @@ class TextToVoicePipeline(BasePipeline):
             echo_margin_s=0.3,
             max_echo_window_s=None,
             settling_s=settings.echo_post_settling_s,
-            break_on_high_energy=False,  # T2V: 사용자 메시지 완전 전달 우선
         )
 
         # Interrupt debounce: 노이즈에 의한 즉시 TTS 취소 방지 (400ms 대기 후 확인)
@@ -425,9 +424,11 @@ class TextToVoicePipeline(BasePipeline):
 
         if not self.call.first_message_sent:
             await self.first_message.on_recipient_speech_detected()
+        elif self.session_a.is_generating:
+            # T2V: TTS 생성 중 수신자 발화 → interrupt 차단 (사용자 메시지 완전 전달 우선)
+            # V2V와 달리 사용자 입력이 텍스트이므로 TTS를 끊으면 메시지가 유실됨
+            logger.info("Recipient speech during TTS generation — skipping interrupt (T2V)")
         else:
-            # 즉시 interrupt: LocalVAD 필터(RMS gate + Silero 3프레임)를 통과한 speech는
-            # 충분히 신뢰할 수 있으므로 debounce 없이 즉시 TTS 중단
             await self.interrupt.on_recipient_speech_started()
 
     async def _on_recipient_stopped(self) -> None:

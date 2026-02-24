@@ -30,7 +30,6 @@ def _make_echo_gate(
     echo_margin_s: float = 0.3,
     max_echo_window_s: float | None = 1.2,
     settling_s: float = 2.0,
-    break_on_high_energy: bool = True,
 ) -> tuple[EchoGateManager, MagicMock, MagicMock]:
     """EchoGateManager + mock session_b + mock call_metrics를 생성한다."""
     session_b = MagicMock()
@@ -43,7 +42,6 @@ def _make_echo_gate(
         echo_margin_s=echo_margin_s,
         max_echo_window_s=max_echo_window_s,
         settling_s=settling_s,
-        break_on_high_energy=break_on_high_energy,
     )
     return gate, session_b, call_metrics
 
@@ -308,41 +306,6 @@ class TestStop:
         """cooldown task 없을 때 stop()은 안전하게 no-op."""
         gate, _, _ = _make_echo_gate()
         await gate.stop()  # 에러 없이 완료
-
-
-class TestBreakOnHighEnergy:
-    """break_on_high_energy 파라미터 테스트 (V2V vs T2V 동작 분리)."""
-
-    def test_break_enabled_deactivates_on_high_rms(self):
-        """break=True (V2V 기본값): high RMS → gate break + 원본 전달."""
-        gate, _, metrics = _make_echo_gate(break_on_high_energy=True)
-        gate.in_echo_window = True
-        audio = bytes([0x10] * 160)  # 고에너지 (RMS ~3999)
-        result = gate.filter_audio(audio)
-        assert result == audio
-        assert gate.in_echo_window is False
-        assert metrics.echo_gate_breakthroughs == 1
-
-    def test_break_disabled_keeps_gate_on_high_rms(self):
-        """break=False (T2V): high RMS → gate 유지 + 무음 전달."""
-        gate, _, metrics = _make_echo_gate(break_on_high_energy=False)
-        gate.in_echo_window = True
-        audio = bytes([0x10] * 160)  # 고에너지 (RMS ~3999)
-        result = gate.filter_audio(audio)
-        assert all(b == 0xFF for b in result)
-        assert len(result) == 160
-        assert gate.in_echo_window is True  # gate 유지
-        assert metrics.echo_gate_breakthroughs == 0  # break 미발생
-
-    def test_break_disabled_low_rms_still_silenced(self):
-        """break=False: low RMS → 무음 (기존과 동일)."""
-        gate, _, _ = _make_echo_gate(break_on_high_energy=False)
-        gate.in_echo_window = True
-        audio = bytes([0xFE] * 160)  # 저에너지 (RMS ~2)
-        result = gate.filter_audio(audio)
-        assert all(b == 0xFF for b in result)
-        assert len(result) == 160
-        assert gate.in_echo_window is True
 
 
 class TestInEchoWindowProperty:
