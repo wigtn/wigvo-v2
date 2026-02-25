@@ -43,12 +43,12 @@ src/
 │   │   └── echo_gate.py      # EchoGateManager (V2V/T2V shared echo prevention)
 │   │
 │   ├── audio_router.py      # AudioRouter — thin delegator (Pipeline selection + common lifecycle)
-│   ├── echo_detector.py     # EchoDetector — Pearson correlation-based echo detection (legacy)
 │   ├── local_vad.py         # Local VAD — Silero + RMS server-side voice detection
 │   ├── audio_utils.py       # Shared mu-law -> linear PCM conversion + RMS calculation
-│   ├── session_manager.py   # RealtimeSession (OpenAI WS wrapper) + DualSessionManager
-│   ├── session_a.py         # SessionAHandler — User->recipient translation event handling
-│   ├── session_b.py         # SessionBHandler — Recipient->User translation event handling
+│   ├── sessions/
+│   │   ├── session_manager.py # RealtimeSession (OpenAI WS wrapper) + DualSessionManager
+│   │   ├── session_a.py      # SessionAHandler — User->recipient translation event handling
+│   │   └── session_b.py      # SessionBHandler — Recipient->User translation event handling
 │   ├── interrupt_handler.py # Turn overlap/interrupt handling (recipient priority)
 │   ├── first_message.py     # Recipient answer detection -> AI notice + Exact Utterance
 │   ├── context_manager.py   # Conversation context sliding window (6 turns)
@@ -203,7 +203,7 @@ App                       Relay Server                      Twilio
  │                      │                                     │
  │              Pipeline._on_session_a_tts()                   │
  │                      │                                     │
- │                (EchoDetector.record_sent_chunk())            │
+ │                (EchoGate.on_tts_chunk())            │
  │                (Interrupt check)                             │
  │                      │                                     │
  │              TwilioHandler.send_audio() ─────────────────> │
@@ -312,11 +312,9 @@ Twilio audio (g711_ulaw) -> mu-law decode -> PCM16
 
 **Benefits**: Consistent latency independent of OpenAI server VAD variability. Allows fine-grained control of speech detection thresholds for PSTN audio quality.
 
-#### EchoDetector (Legacy -- Disabled by Default)
+#### EchoDetector (Removed)
 
-Pearson correlation-based echo fingerprinting. Exists in code but disabled (`ECHO_DETECTOR_ENABLED=False`). Can be re-enabled for experimentation. When active, compares energy patterns of sent TTS against incoming audio using normalized correlation.
-
-Set `ECHO_DETECTOR_ENABLED=True` to activate. When disabled, Silence Injection + Dynamic Energy Threshold handles all echo prevention.
+A Pearson correlation-based echo fingerprinting approach was initially attempted but proved unreliable for PSTN audio where echo arrives distorted and time-shifted. It has been removed from the codebase. Silence Injection + Dynamic Energy Threshold handles all echo prevention.
 
 #### Echo Gate v2 (Output Gating)
 
@@ -386,7 +384,7 @@ When the recipient answers the phone and speaks for the first time ("Hello") -> 
 #### Recovery
 
 - **RingBuffer**: All audio is constantly recorded in a 30-second circular buffer
-- **Heartbeat**: Failure detected if no events within 45 seconds
+- **Heartbeat**: Failure detected if no events within 120 seconds
 - **Reconnection**: Exponential backoff (1s -> 2s -> 4s -> 8s, max 30s)
 - **Catch-up**: Unsent audio is batch-STT'd via Whisper API
 - **Degraded Mode**: Falls back to Whisper batch if recovery fails for 10+ seconds
@@ -476,19 +474,12 @@ Call sites: App WS disconnect, Twilio disconnect, status-callback, manual end, s
 | `GUARDRAIL_ENABLED` | `true` | Enable Guardrail |
 | `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat timeout (seconds) |
 | **STT Model** | | |
-| `STT_MODEL` | `gpt-4o-transcribe` | STT model for T2V/Agent modes |
-| _(V2V hardcoded)_ | `whisper-1` | V2V uses whisper-1 (hallucination blocklist compatible) |
+| `STT_MODEL` | `whisper-1` | STT model (unified for all modes, hallucination blocklist compatible) |
 | **Echo Prevention** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate cooldown (seconds, for fallback) |
 | `AUDIO_ENERGY_GATE_ENABLED` | `true` | Enable PSTN noise energy gate |
 | `AUDIO_ENERGY_MIN_RMS` | `150.0` | PSTN noise filter threshold (RMS) |
 | `ECHO_ENERGY_THRESHOLD_RMS` | `500.0` | Echo window energy threshold (RMS) |
-| `ECHO_DETECTOR_ENABLED` | `false` | Enable legacy EchoDetector (Pearson correlation) |
-| `ECHO_DETECTOR_THRESHOLD` | `0.6` | Pearson correlation threshold |
-| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.15` | Safety margin after TTS ends (seconds) |
-| `ECHO_DETECTOR_MIN_DELAY_CHUNKS` | `4` | Minimum echo delay (80ms) |
-| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `20` | Maximum echo delay (400ms) |
-| `ECHO_DETECTOR_CORRELATION_WINDOW` | `8` | Comparison window size (160ms) |
 | **Local VAD** | | |
 | `LOCAL_VAD_ENABLED` | `true` | Enable Local VAD (Silero + RMS) |
 | `LOCAL_VAD_RMS_THRESHOLD` | `200.0` | RMS energy threshold for speech |
@@ -544,12 +535,12 @@ src/
 │   │   └── echo_gate.py      # EchoGateManager (V2V/T2V 공유 에코 방지)
 │   │
 │   ├── audio_router.py      # AudioRouter — 얇은 위임자 (Pipeline 선택 + 공통 생명주기)
-│   ├── echo_detector.py     # EchoDetector — Pearson 상관계수 기반 에코 감지 (레거시)
 │   ├── local_vad.py         # Local VAD — Silero + RMS 서버 측 음성 감지
 │   ├── audio_utils.py       # 공유 mu-law → linear PCM 변환 + RMS 계산
-│   ├── session_manager.py   # RealtimeSession (OpenAI WS 래퍼) + DualSessionManager
-│   ├── session_a.py         # SessionAHandler — User→수신자 번역 이벤트 처리
-│   ├── session_b.py         # SessionBHandler — 수신자→User 번역 이벤트 처리
+│   ├── sessions/
+│   │   ├── session_manager.py # RealtimeSession (OpenAI WS 래퍼) + DualSessionManager
+│   │   ├── session_a.py      # SessionAHandler — User→수신자 번역 이벤트 처리
+│   │   └── session_b.py      # SessionBHandler — 수신자→User 번역 이벤트 처리
 │   ├── interrupt_handler.py # 턴 겹침/인터럽트 처리 (수신자 우선)
 │   ├── first_message.py     # 수신자 응답 감지 → AI 고지 전송 + Exact Utterance
 │   ├── context_manager.py   # 대화 컨텍스트 슬라이딩 윈도우 (6턴)
@@ -704,7 +695,7 @@ App                       Relay Server                      Twilio
  │                      │                                     │
  │              Pipeline._on_session_a_tts()                   │
  │                      │                                     │
- │                (EchoDetector.record_sent_chunk())            │
+ │                (EchoGate.on_tts_chunk())            │
  │                (Interrupt 체크)                              │
  │                      │                                     │
  │              TwilioHandler.send_audio() ───────────────────►│
@@ -813,11 +804,9 @@ Twilio 오디오 (g711_ulaw) → mu-law 디코드 → PCM16
 
 **장점**: OpenAI 서버 VAD 변동과 무관한 일관된 지연 시간. PSTN 오디오 품질에 맞춘 세밀한 발화 감지 임계값 제어 가능.
 
-#### EchoDetector (레거시 -- 기본 비활성)
+#### EchoDetector (제거됨)
 
-Pearson 상관계수 기반 에코 핑거프린팅. 코드에 존재하나 비활성 상태(`ECHO_DETECTOR_ENABLED=False`). 실험 목적으로 재활성화 가능. 활성화 시 보낸 TTS의 에너지 패턴과 수신 오디오를 정규화 상관계수로 비교한다.
-
-`ECHO_DETECTOR_ENABLED=True`로 설정하면 활성화. 비활성 시 Silence Injection + Dynamic Energy Threshold가 모든 에코 방지를 담당한다.
+Pearson 상관계수 기반 에코 핑거프린팅이 초기 접근 방식이었으나, PSTN 오디오에서 에코가 왜곡되고 시간 편이되어 신뢰할 수 없음이 확인되어 코드베이스에서 제거되었다. Silence Injection + Dynamic Energy Threshold가 모든 에코 방지를 담당한다.
 
 #### Echo Gate v2 (출력 게이팅)
 
@@ -887,7 +876,7 @@ TextToVoice/FullAgent에서 Session B는 `modalities=['text']`로 설정되어:
 #### Recovery
 
 - **RingBuffer**: 30초 순환 버퍼에 모든 오디오를 항상 기록
-- **Heartbeat**: 45초 이내 이벤트 없으면 장애로 판단
+- **Heartbeat**: 120초 이내 이벤트 없으면 장애로 판단
 - **재연결**: exponential backoff (1s → 2s → 4s → 8s, max 30s)
 - **Catch-up**: 미전송 오디오를 Whisper API로 배치 STT
 - **Degraded Mode**: 10초 이상 복구 실패 시 Whisper batch fallback
@@ -977,19 +966,12 @@ _listen_tasks: dict[str, asyncio.Task]         # 세션 리스닝 태스크
 | `GUARDRAIL_ENABLED` | `true` | Guardrail 활성화 |
 | `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat 타임아웃 (초) |
 | **STT 모델** | | |
-| `STT_MODEL` | `gpt-4o-transcribe` | T2V/Agent 모드 STT 모델 |
-| _(V2V 하드코딩)_ | `whisper-1` | V2V는 whisper-1 사용 (할루시네이션 블록리스트 호환) |
+| `STT_MODEL` | `whisper-1` | STT 모델 (전 모드 통일, 할루시네이션 블록리스트 호환) |
 | **에코 방지** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate 쿨다운 (초, 폴백용) |
 | `AUDIO_ENERGY_GATE_ENABLED` | `true` | PSTN 소음 에너지 게이트 활성화 |
 | `AUDIO_ENERGY_MIN_RMS` | `150.0` | PSTN 소음 필터 임계값 (RMS) |
 | `ECHO_ENERGY_THRESHOLD_RMS` | `500.0` | Echo window 에너지 임계값 (RMS) |
-| `ECHO_DETECTOR_ENABLED` | `false` | 레거시 EchoDetector 활성화 (Pearson 상관계수) |
-| `ECHO_DETECTOR_THRESHOLD` | `0.6` | Pearson 상관계수 임계값 |
-| `ECHO_DETECTOR_SAFETY_COOLDOWN_S` | `0.15` | TTS 종료 후 안전 마진 (초) |
-| `ECHO_DETECTOR_MIN_DELAY_CHUNKS` | `4` | 최소 에코 딜레이 (80ms) |
-| `ECHO_DETECTOR_MAX_DELAY_CHUNKS` | `20` | 최대 에코 딜레이 (400ms) |
-| `ECHO_DETECTOR_CORRELATION_WINDOW` | `8` | 비교 윈도우 크기 (160ms) |
 | **Local VAD** | | |
 | `LOCAL_VAD_ENABLED` | `true` | Local VAD 활성화 (Silero + RMS) |
 | `LOCAL_VAD_RMS_THRESHOLD` | `200.0` | 발화 판정 RMS 에너지 임계값 |

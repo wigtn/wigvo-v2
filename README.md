@@ -11,14 +11,14 @@ Real-time bidirectional voice translation over actual phone calls.
 No apps needed on the recipient's end. Just call.
 
 *From zero to working PSTN bidirectional translation calls in 7 days.*
-*150+ tests. Production-deployed on Google Cloud Run.*
+*265+ tests. Production-deployed on Google Cloud Run.*
 
 <br />
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#tech-stack)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#tech-stack)
-[![Tests](https://img.shields.io/badge/Tests-150+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-265+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br />
 
@@ -123,7 +123,7 @@ This separation is non-negotiable. It eliminates translation direction confusion
 
 Hardware echo cancellation (AEC) is built into phone chipsets and telecom switches. WIGVO doesn't have access to either. The echo problem must be solved **purely in software**, on audio that has already been encoded, transmitted through the phone network, and echoed back.
 
-The solution — **Silence Injection with Dynamic Cooldown** — was developed through 7 iterations of trial and error (detailed below). It replaces incoming audio with mu-law silence frames during TTS playback, with cooldown duration proportional to TTS length plus a 0.5s echo round-trip margin.
+The solution — **Silence Injection with Dynamic Cooldown** — was developed through 7 iterations of trial and error (detailed below). It replaces incoming audio with mu-law silence frames during TTS playback, with cooldown duration proportional to TTS length plus a 0.3s echo round-trip margin.
 
 ### 4. Local VAD for PSTN (Silero Neural Network)
 
@@ -135,6 +135,10 @@ OpenAI's built-in Server VAD cannot handle PSTN audio. Background noise causes i
 This reduced speech-end detection from 15-72 seconds to **480ms**.
 
 ### 5. Modular Pipeline Architecture (Strategy Pattern)
+
+<div align="center">
+<img src="docs/paper/figures/figure2_pipeline.png" alt="WIGVO Pipeline Architecture" width="100%" />
+</div>
 
 Three communication modes are implemented as independent pipeline strategies, sharing a common interface through `AudioRouter`:
 
@@ -320,7 +324,7 @@ Echo window lifecycle:
   TTS complete          → Start dynamic cooldown
   Cooldown expired      → Deactivate echo window
 
-Dynamic cooldown = remaining TTS playback time + 0.5s echo round-trip margin
+Dynamic cooldown = remaining TTS playback time + 0.3s echo round-trip margin
   Short utterance ("네"): ~0.8s cooldown
   Long sentence:          ~3.0s cooldown
 ```
@@ -341,7 +345,7 @@ Recipient speech always takes priority. A max speech duration safety net (8 seco
 
 **Layer 4: Legacy Audio Fingerprint (disabled)**
 
-A Pearson-correlation-based per-chunk echo detector exists in the codebase (`echo_detector.py`, `ECHO_DETECTOR_ENABLED=False`). It was the first approach attempted but proved unreliable for PSTN audio where echo arrives distorted and time-shifted. The Silence Injection approach is simpler and more robust.
+A Pearson-correlation-based per-chunk echo detector was the first approach attempted but proved unreliable for PSTN audio where echo arrives distorted and time-shifted. It has since been removed from the codebase. The Silence Injection approach is simpler and more robust.
 
 ---
 
@@ -376,6 +380,12 @@ Each communication mode is handled by a dedicated **pipeline** (Strategy pattern
 ---
 
 ## Architecture
+
+<div align="center">
+<img src="docs/paper/figures/figure1_architecture.png" alt="WIGVO System Architecture" width="100%" />
+</div>
+
+> *Figure 1: WIGVO System Architecture — Dual-session relay server bridging web/mobile clients, OpenAI Realtime API, and Twilio PSTN phone calls via Supabase.*
 
 ```
 ┌──────────────────┐         ┌───────────────────────────────┐         ┌──────────────────┐
@@ -510,11 +520,11 @@ apps/
 │   │   │   │   └── full_agent.py     # Agent (function calling, autonomous)
 │   │   │   ├── audio_router.py      # Thin delegator → pipeline selection
 │   │   │   ├── local_vad.py         # Silero neural VAD + RMS energy gate
-│   │   │   ├── echo_detector.py     # Pearson correlation echo detection (legacy, disabled)
 │   │   │   ├── audio_utils.py       # Shared mu-law audio utilities
-│   │   │   ├── session_manager.py   # Dual session orchestrator
-│   │   │   ├── session_a.py         # User → Recipient translation
-│   │   │   ├── session_b.py         # Recipient → User translation
+│   │   │   ├── sessions/            # OpenAI Realtime session handlers
+│   │   │   │   ├── session_manager.py # Dual session orchestrator
+│   │   │   │   ├── session_a.py     # User → Recipient translation
+│   │   │   │   └── session_b.py     # Recipient → User translation
 │   │   │   ├── context_manager.py   # 6-turn sliding context window
 │   │   │   ├── recovery.py          # Session failure recovery + degraded mode
 │   │   │   └── ring_buffer.py       # 30s circular audio buffer
@@ -522,7 +532,7 @@ apps/
 │   │   ├── tools/                   # Agent Mode function calling
 │   │   ├── prompt/                  # System prompt templates + generator
 │   │   └── db/                      # Supabase client
-│   ├── tests/                       # 150+ pytest unit tests
+│   ├── tests/                       # 265+ pytest unit tests
 │   │   ├── component/              # Module benchmarks (cost tracking, ring buffer perf)
 │   │   ├── integration/            # Server-required tests (API, WebSocket)
 │   │   ├── e2e/                    # End-to-end call tests (Twilio + OpenAI required)
@@ -626,7 +636,7 @@ ngrok http 8000               # Copy URL to .env RELAY_SERVER_URL
 ### Testing
 
 ```bash
-# Unit tests (150+ tests, no server needed)
+# Unit tests (265+ tests, no server needed)
 cd apps/relay-server
 uv run pytest -v
 

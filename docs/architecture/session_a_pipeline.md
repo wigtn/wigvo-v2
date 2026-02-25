@@ -68,12 +68,8 @@ Relay Server ──────────── WebSocket ──────�
 | `g711_ulaw` | ITU-T G.711 mu-law, mono | **8kHz** | 8-bit | 8,000 B/s |
 
 ```python
-# STT 모델 선택: V2V는 whisper-1 (할루시네이션 블록리스트 호환), T2V/Agent는 gpt-4o-transcribe
-stt_model = (
-    settings.stt_model  # "gpt-4o-transcribe"
-    if communication_mode in (CommunicationMode.TEXT_TO_VOICE, CommunicationMode.FULL_AGENT)
-    else "whisper-1"
-)
+# STT 모델: 전 모드 whisper-1 통일 (할루시네이션 블록리스트 호환 + 레이턴시 최저)
+stt_model = "whisper-1"
 
 self.session_a = RealtimeSession(
     label="SessionA",
@@ -228,8 +224,8 @@ User audio commit ──→ [OpenAI STT + Translation + TTS generation] ──�
 ```
 
 평가 결과 (paper_metrics.json, N=141):
-- **평균**: 562ms
-- **P50**: 478ms
+- **평균**: 617ms
+- **P50**: 562ms
 - **P95**: 1,023ms
 
 ## Interrupt 처리 (interrupt_handler.py)
@@ -310,5 +306,4 @@ Session A 연결이 끊기면:
 | Context window | 6 turns | context_manager.py:17 |
 | Context max chars | 100/turn | context_manager.py:18 |
 | Recipient cooldown | 1.5s | interrupt_handler.py:31 |
-| STT model (V2V) | whisper-1 | session_manager.py (할루시네이션 블록리스트 호환) |
-| STT model (T2V/Agent) | gpt-4o-transcribe | session_manager.py (settings.stt_model) |
+| STT model (전 모드) | whisper-1 | session_manager.py (할루시네이션 블록리스트 호환 + 레이턴시 최저) |

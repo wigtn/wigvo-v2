@@ -52,12 +52,8 @@ Callee Phone ──PSTN──→ Twilio Media Stream ──[g711_ulaw 8kHz]─�
 | `pcm16` | 16-bit signed LE, mono | **24kHz** | 16-bit | 48,000 B/s |
 
 ```python
-# STT 모델 선택: V2V는 whisper-1 (할루시네이션 블록리스트 호환), T2V/Agent는 gpt-4o-transcribe
-stt_model = (
-    settings.stt_model  # "gpt-4o-transcribe"
-    if communication_mode in (CommunicationMode.TEXT_TO_VOICE, CommunicationMode.FULL_AGENT)
-    else "whisper-1"
-)
+# STT 모델: 전 모드 whisper-1 통일 (할루시네이션 블록리스트 호환 + 레이턴시 최저)
+stt_model = "whisper-1"
 
 self.session_b = RealtimeSession(
     label="SessionB",
@@ -413,7 +409,7 @@ _STT_HALLUCINATION_BLOCKLIST = frozenset({
 평가 결과 (paper_metrics.json, N=207):
 - **평균**: 2,249ms
 - **P50**: 1,994ms
-- **P95**: 4,667ms
+- **P95**: 5,390ms
 
 ### STT Latency (speech_started → original STT)
 
@@ -495,8 +491,7 @@ Text-to-Voice 파이프라인에서 Session B는 `modalities=["text"]`로 설정
 | Energy gate threshold | 150 RMS | config.py:107 |
 | Echo post settling | 2.0s | config.py:87 (AGC 안정화 대기) |
 | Hallucination blocklist | 15 patterns | session_b.py:24-40 (V2V whisper-1 전용) |
-| STT model (V2V) | whisper-1 | session_manager.py (할루시네이션 블록리스트 호환) |
-| STT model (T2V/Agent) | gpt-4o-transcribe | session_manager.py (settings.stt_model) |
+| STT model (전 모드) | whisper-1 | session_manager.py (할루시네이션 블록리스트 호환 + 레이턴시 최저) |
 | Server VAD threshold | 0.8 | config.py:87 |
 | Server VAD silence ms | 500ms | config.py:88 |
 | Server VAD prefix padding | 300ms | config.py:89 |
