@@ -49,7 +49,7 @@
 \maketitle
 
 \begin{abstract}
-Real-time speech translation with large language models (LLMs) has become feasible in controlled settings such as mobile apps and web browsers, where developers assume wideband audio and client-side echo cancellation. Recent end-to-end full-duplex models further push latency below 200\,ms but remain confined to broadband environments. However, deploying such systems over the Public Switched Telephone Network (PSTN) remains challenging due to narrowband G.711 audio, unpredictable round-trip delays, and absence of client-side signal processing. We present \textbf{WIGVO}, a server-side relay system that enables bidirectional LLM-based speech translation over ordinary telephone calls without requiring app installation or carrier integration. A central contribution is addressing what we term \emph{echo-induced self-reinforcing translation loops}: synthesized speech echoing back through the PSTN gets re-ingested and repeatedly translated. WIGVO solves this through a dual-session architecture with deterministic silence injection and energy-based voice activity detection (VAD) gating. We evaluate WIGVO on 96 completed PSTN calls (37 fully instrumented) across three communication modes---voice-to-voice (V2V), text-to-voice (T2V), and full-agent---observing 562\,ms median caller-to-callee latency and 1{,}994\,ms median callee-to-caller latency, zero echo-induced translation loops, and USD\,0.42 per minute cost. The system is deployed at \url{https://wigvo.run} with a live demo and video walkthrough.
+Real-time speech translation with large language models (LLMs) has become feasible in controlled settings such as mobile apps and web browsers, where developers assume wideband audio and client-side echo cancellation. Recent end-to-end full-duplex models further push latency below 200\,ms but remain confined to broadband environments. However, deploying such systems over the Public Switched Telephone Network (PSTN) remains challenging due to narrowband G.711 audio, unpredictable round-trip delays, and absence of client-side signal processing. We present \textbf{WIGVO}, a server-side relay system that enables bidirectional LLM-based speech translation over ordinary telephone calls without requiring app installation or carrier integration. A central contribution is addressing what we term \emph{echo-induced self-reinforcing translation loops}: synthesized speech echoing back through the PSTN gets re-ingested and repeatedly translated. WIGVO solves this through a dual-session architecture with deterministic silence injection and energy-based voice activity detection (VAD) gating. We evaluate WIGVO on 96 completed PSTN calls (37 fully instrumented) across three communication modes---voice-to-voice (V2V), text-to-voice (T2V), and full-agent---observing 562\,ms median caller-to-callee latency and 1{,}994\,ms median callee-to-caller latency, zero echo-induced translation loops, and USD\,0.42 per minute cost. The system is deployed at \url{https://wigvo-web-gzjzn35jyq-du.a.run.app} with a live demo and video walkthrough.
 \end{abstract}
 
 \section{Introduction}
@@ -223,13 +223,15 @@ Table~\ref{tab:latency} reports latency statistics across the 37 instrumented ca
     First message (ms) & 2{,}585 & 1{,}550 & 7{,}460 & 11{,}308 & 31 \\
     \bottomrule
   \end{tabular}
-  \caption{Translation latency across 37 instrumented calls. Session~A: caller$\to$callee (ASR+translate+TTS). Session~B: callee$\to$caller, decomposed into STT (Whisper) and translation (GPT-4o) components. $N$: number of measured turns.}
+  \caption{Translation latency across 37 instrumented calls. Session~A: caller$\to$callee (ASR+translate+TTS). Session~B: callee$\to$caller, decomposed into STT (Whisper) and translation (GPT-4o) components. $N$ varies across rows because each metric has a different measurement scope: direction-specific turn counts, successful STT completions, and paired STT+E2E availability for translation decomposition.}
   \label{tab:latency}
 \end{table}
 
-Session~A achieves 562\,ms median latency, within the range for interactive communication. Session~B, which depends on PSTN audio quality and streaming ASR, shows 1{,}994\,ms median. STT (Whisper) accounts for 74.7\% of Session~B mean latency across 103 paired turns, with translation contributing the remainder. Figure~\ref{fig:latency} shows the end-to-end latency distributions for Session~A and Session~B. Figure~\ref{fig:scatter} shows the correlation between utterance length and Session~B latency ($r=0.529$, $p<0.001$).
+Session~A achieves 562\,ms median latency, within the range for interactive communication. Session~B, which depends on PSTN audio quality and streaming ASR, shows 1{,}994\,ms median. STT (Whisper) accounts for 74.7\% of Session~B mean latency across 103 paired turns, with translation contributing the remainder. Figure~\ref{fig:latency} shows the end-to-end latency distributions for Session~A and Session~B. Figure~\ref{fig:scatter} shows the correlation between utterance length and Session~B latency ($r=0.529$, $p<0.001$). The five highest Session~B outliers (5{,}981--10{,}503\,ms) all correspond to long callee utterances of 92--125 characters, where streaming STT accounts for $\geq$95\% of E2E latency; the translation step in these cases remains under 1{,}500\,ms. This confirms that tail latency is driven by utterance length and ASR processing time, not architectural overhead.
 
 T2V mode shows lower Session~A latency (no caller-side ASR), while Agent mode shows higher Session~B latency due to function-calling overhead.
+
+While Session~B's ${\sim}$2\,s median exceeds ITU-T G.114's 150\,ms one-way threshold for conversational speech~\citep{itu_g114_2003}, that standard applies to same-language dialogue, not cross-lingual translation where additional processing is inherent. A more appropriate baseline is professional simultaneous interpretation, where ear-voice span---the delay between hearing source speech and producing the target---ranges from 2 to 5\,s~\citep{goldman_eisler_1972,timarova_2011_evs}. WIGVO's Session~B latency falls at the lower bound of this range. Moreover, the latency is structurally asymmetric by design: Session~A (562\,ms) keeps the caller-to-callee direction within interactive thresholds, while Session~B prioritizes STT accuracy on degraded G.711 audio over speed. Decomposing Session~B, STT accounts for 74.7\% of mean latency; the translation step itself is 457\,ms at P50. This indicates that the bottleneck is narrowband ASR, not the relay architecture.
 
 \begin{figure}[t]
   \centering
@@ -274,9 +276,40 @@ The echo gate activated 3.4 times per call on average, corresponding to TTS play
 
 Across the 37 instrumented calls (45.5 minutes total), WIGVO consumed 638{,}035 tokens at a total cost of USD\,19.05, yielding \textbf{USD\,0.42/min} (USD\,0.50/call). These costs reflect dual-session Realtime API pricing and remain an order of magnitude cheaper than professional telephone interpretation services (USD\,1--3/min).\footnote{Based on published per-minute rates for over-the-phone interpretation (OPI) from major commercial providers.}
 
+\subsection{Baseline Comparison}
+
+Table~\ref{tab:baseline} contextualizes WIGVO's latency against related systems. Direct comparison is inherently limited because no existing system performs bidirectional cross-lingual speech translation over PSTN: research systems operate in wideband settings with incompatible latency metrics (Average Lagging, frame-level), while commercial telephony platforms are monolingual voice agents.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{llcl}
+    \toprule
+    \textbf{System} & \textbf{Network} & \textbf{Bidir.} & \textbf{Latency} \\
+    \midrule
+    Seamless Str. & Wideband & $\times$ & $<$2\,s AL \\
+    Moshi & Wideband & $\times$$^{\dagger}$ & ${\sim}$200\,ms \\
+    Hibiki & Wideband & $\times$ & 2.8--5.6\,s LAAL \\
+    Google Duplex & PSTN & $\times$$^{\ddagger}$ & N/D \\
+    Vapi & WebRTC/PSTN & $\times$$^{\ddagger}$ & ${\sim}$965\,ms$^{*}$ \\
+    Bland.ai & PSTN & $\times$$^{\ddagger}$ & $<$400\,ms$^{*}$ \\
+    \midrule
+    \textbf{WIGVO} SA & \textbf{PSTN} & \checkmark & \textbf{562\,ms P50} \\
+    \textbf{WIGVO} SB & \textbf{PSTN} & \checkmark & \textbf{1{,}994\,ms P50} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Latency comparison with related systems. AL: Average Lagging; LAAL: Length-Adaptive AL. $\dagger$: full-duplex but monolingual (no translation). $\ddagger$: monolingual voice agent (no cross-lingual). $*$: vendor-reported; independent reviews report higher values. N/D: not disclosed. Bidir.: bidirectional cross-lingual translation.}
+  \label{tab:baseline}
+\end{table}
+
+Research S2ST systems report latency on wideband (16--24\,kHz) benchmarks. Hibiki~\citep{labiausse2025hibiki} achieves 2.8\,s LAAL on short-form French$\to$English but is limited to a single language pair; Seamless Streaming~\citep{seamless_streaming_2023} covers 36 target languages at $<$2\,s AL but does not address telephony. Moshi~\citep{defossez2024moshi} achieves 200\,ms full-duplex latency but performs monolingual dialogue, not translation. None of these systems handle G.711 $\mu$-law, PSTN echo, or narrowband VAD.
+
+Commercial telephony platforms (Vapi, Bland.ai) operate over PSTN but provide monolingual voice agents without translation. Twilio's industry benchmark for AI voice agents targets 1{,}115\,ms median mouth-to-ear turn gap~\citep{twilio_voice_latency_2025}. WIGVO's Session~A (562\,ms) falls well within this target. Session~B (1{,}994\,ms) exceeds it, but this direction includes an additional cross-lingual translation step that monolingual agents do not perform.
+
 \section{Demonstration}
 
-WIGVO is deployed at \url{https://wigvo.run} with a live demo accessible to reviewers.\footnote{Demo video: \url{https://youtu.be/PLACEHOLDER}} The web interface supports scenario selection (restaurant, hospital, government office), real-time caption display, and mode switching. Figure~\ref{fig:screenshot} shows the interface during an active V2V call.
+WIGVO is deployed at \url{https://wigvo-web-gzjzn35jyq-du.a.run.app} with a live demo accessible to reviewers.\footnote{Demo video: \url{https://youtu.be/PLACEHOLDER}} The source code is publicly available at \url{https://github.com/wigtn/wigvo-v2}. The web interface supports scenario selection (restaurant, hospital, government office), real-time caption display, and mode switching. Figure~\ref{fig:screenshot} shows the interface during an active V2V call.
 
 \begin{figure}[t]
   \centering
@@ -296,7 +329,10 @@ A Korean user with speech anxiety types messages that WIGVO speaks to a clinic v
 \section{Discussion}
 
 \paragraph{Scope of contribution.}
-WIGVO's contribution is architectural: demonstrating that existing Realtime LLM APIs can be made robust for PSTN environments through dual-session separation, deterministic echo gating, and energy-based filtering. Translation quality is not independently evaluated; WIGVO inherits the translation capabilities of GPT-4o Realtime \citep{openai_realtime_api_2024}. Formal translation quality evaluation (e.g., BLEU, chrF) is left for future work.
+WIGVO's contribution is architectural: demonstrating that existing Realtime LLM APIs can be made robust for PSTN environments through dual-session separation, deterministic echo gating, and energy-based filtering. Translation quality inherits the capabilities of GPT-4o Realtime \citep{openai_realtime_api_2024}; formal evaluation (BLEU, chrF) against independent reference translations is planned for the camera-ready version.
+
+\paragraph{Comparison limitations.}
+As shown in Table~\ref{tab:baseline}, no existing system occupies the same design point as WIGVO---bidirectional cross-lingual S2ST over narrowband PSTN. Research systems target wideband settings with different metrics, and commercial telephony platforms are monolingual. We therefore report absolute latency and echo metrics rather than head-to-head comparisons, which would require re-implementing competitors in a PSTN environment or restricting WIGVO to wideband---neither of which would yield a fair comparison.
 
 \paragraph{Broader applications.}
 The dual-session gated architecture is applicable beyond translation: multilingual call centers, voice inclusion services for users with disabilities, and telephony-native LLM agents that combine task completion with cross-lingual communication.
@@ -306,8 +342,8 @@ The dual-session gated architecture is applicable beyond translation: multilingu
 \paragraph{Language and environment coverage.}
 The current evaluation focuses on Korean-English over PSTN. WIGVO's modular cascade architecture is inherently language-agnostic, and multilingual extension requires no architectural changes beyond model substitution. In broadband VoIP settings, the echo gate and ZOH upsampling become unnecessary, and the system degrades gracefully to a standard cascade pipeline. Systematic multilingual evaluation and mixed PSTN-VoIP benchmarking remain future work.
 
-\paragraph{Session~B latency and full-duplex models.}
-Session~B latency (${\sim}$2\,s median) introduces noticeable delay, primarily due to streaming ASR. As production-ready full-duplex speech models mature~\citep{defossez2024moshi, labiausse2025hibiki}, this bottleneck may be reduced by replacing the STT stage with an end-to-end audio model. The PSTN relay layer, echo gate, and VAD architecture would remain necessary regardless, as they address network-level constraints orthogonal to model design.
+\paragraph{Session~B latency reduction.}
+Replacing Whisper STT (74.7\% of Session~B latency) with a self-hosted streaming model~\citep{kyutai2025stt} or an end-to-end full-duplex model~\citep{defossez2024moshi, labiausse2025hibiki} could reduce Session~B from ${\sim}$2\,s to under 800\,ms, bringing it below the Twilio industry benchmark of 1{,}115\,ms~\citep{twilio_voice_latency_2025}. The PSTN relay layer, echo gate, and VAD architecture would remain necessary regardless, as they address network-level constraints orthogonal to model design.
 
 \paragraph{Cost and user evaluation.}
 Per-minute cost (USD\,0.42) is driven by Realtime API audio token pricing; self-hosted STT alternatives could reduce this. A formal user study (e.g., SUS assessment; \citealt{brooke_sus_1996}) with target populations has not yet been conducted and is planned as future work.

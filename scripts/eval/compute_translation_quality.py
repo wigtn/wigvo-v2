@@ -2,7 +2,7 @@
 """WIGVO 번역 품질 오프라인 평가 스크립트.
 
 Supabase에서 transcript_bilingual (원문, 번역) 쌍을 가져와
-GPT-4o reference 번역 대비 BLEU/chrF2++ 점수를 계산한다.
+GPT-4o 또는 Gemini reference 번역 대비 BLEU/chrF2++ 점수를 계산한다.
 
 논문 활용: 실시간 번역 품질을 오프라인(제약 없는) 번역 대비로 측정하여
 latency-quality tradeoff 입증 (Huber et al. 2023 방법론).
@@ -179,7 +179,39 @@ def _percentile(values: list[float], p: float) -> float:
     return sorted_v[f] * (c - k) + sorted_v[c] * (k - f)
 
 
-def generate_references(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
+def generate_references_gemini(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
+    """Gemini 2.0 Flash로 reference 번역을 생성한다."""
+    try:
+        from google import genai
+    except ImportError:
+        logger.error("google-genai 패키지가 필요합니다: pip install google-genai")
+        sys.exit(1)
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        logger.error("GEMINI_API_KEY 환경변수가 필요합니다")
+        sys.exit(1)
+
+    client = genai.Client(api_key=api_key)
+
+    for i, pair in enumerate(pairs):
+        logger.info("Generating reference [%d/%d]: %s", i + 1, len(pairs), pair.original[:50])
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=pair.original,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=(
+                    f"You are a professional translator. Translate the following text from "
+                    f"{src_lang} to {tgt_lang}. Output ONLY the translated text, nothing else."
+                ),
+                temperature=0.0,
+                max_output_tokens=1024,
+            ),
+        )
+        pair.reference = response.text.strip()
+
+
+def generate_references_gpt4o(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
     """GPT-4o text API로 reference 번역을 생성한다."""
     try:
         from openai import OpenAI
@@ -332,9 +364,10 @@ def save_results(
     results: list[EvalResult],
     output_path: str,
     sys_metrics: SystemMetrics | None = None,
+    ref_model: str = "gpt-4o",
 ) -> None:
     """결과를 JSON으로 저장한다."""
-    output: dict = {}
+    output: dict = {"meta": {"ref_model": ref_model}}
 
     # System metrics
     if sys_metrics and sys_metrics.num_calls > 0:
@@ -390,14 +423,24 @@ def main() -> None:
     parser.add_argument("--all", action="store_true", help="최근 N개 통화 전체 평가")
     parser.add_argument("--limit", type=int, default=10, help="--all 시 최대 통화 수")
     parser.add_argument("--output", default="eval_results.json", help="결과 저장 경로")
+    parser.add_argument("--ref-model", default="gemini",
+                        choices=["gemini", "gpt4o"],
+                        help="Reference 번역 생성 모델 (기본: gemini)")
     parser.add_argument("--skip-reference", action="store_true",
-                        help="GPT-4o reference 생성 스킵 (기존 reference가 있는 경우)")
+                        help="Reference 생성 스킵 (기존 reference가 있는 경우)")
     args = parser.parse_args()
 
     if not args.call_id and not args.all:
         parser.print_help()
         print("\n--call-id 또는 --all 중 하나를 지정하세요.")
         sys.exit(1)
+
+    # ref_model 선택
+    if args.ref_model == "gemini":
+        generate_fn = generate_references_gemini
+    else:
+        generate_fn = generate_references_gpt4o
+    ref_model_name = "gemini-2.0-flash" if args.ref_model == "gemini" else "gpt-4o"
 
     # 1. Supabase에서 transcript 조회
     logger.info("Fetching transcripts from Supabase...")
@@ -421,25 +464,26 @@ def main() -> None:
             logger.warning("No valid translation pairs (original_text == translated_text?)")
             logger.warning("Showing system metrics only. Run new calls to accumulate translation data.")
             print_results([], sys_metrics)
-            save_results([], args.output, sys_metrics)
+            save_results([], args.output, sys_metrics, ref_model=ref_model_name)
             return
         logger.error("No valid translation pairs found (original_text == translated_text?)")
         logger.info("Ensure transcript_bilingual has separate original/translated values.")
         sys.exit(1)
 
-    # 4. GPT-4o reference 번역 생성
+    # 4. Reference 번역 생성
     if not args.skip_reference:
+        logger.info("Using %s for reference generation", ref_model_name)
         if user_pairs:
             src = calls[0].get("source_language", "en")
             tgt = calls[0].get("target_language", "ko")
             logger.info("Generating references for user pairs (%s→%s)...", src, tgt)
-            generate_references(user_pairs, src, tgt)
+            generate_fn(user_pairs, src, tgt)
 
         if recipient_pairs:
             src = calls[0].get("source_language", "en")
             tgt = calls[0].get("target_language", "ko")
             logger.info("Generating references for recipient pairs (%s→%s)...", tgt, src)
-            generate_references(recipient_pairs, tgt, src)
+            generate_fn(recipient_pairs, tgt, src)
 
     # 5. BLEU/chrF2++ 계산
     results = []
@@ -450,7 +494,7 @@ def main() -> None:
 
     # 6. 결과 출력 + 저장
     print_results(results, sys_metrics)
-    save_results(results, args.output, sys_metrics)
+    save_results(results, args.output, sys_metrics, ref_model=ref_model_name)
 
 
 if __name__ == "__main__":
