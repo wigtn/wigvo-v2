@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     ring_buffer_capacity_slots: int = 1500  # 30초 / 20ms
 
     # STT 모델 (input_audio_transcription)
-    stt_model: str = "gpt-4o-transcribe"
+    stt_model: str = "whisper-1"
 
     # Whisper fallback (Degraded Mode)
     whisper_model: str = "whisper-1"

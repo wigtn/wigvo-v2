@@ -338,12 +338,8 @@ class DualSessionManager:
         else:
             session_b_modalities = ["text", "audio"]
 
-        # STT 모델 선택: V2V는 whisper-1 (할루시네이션 블록리스트 호환), T2V/Agent는 gpt-4o-transcribe
-        stt_model = (
-            settings.stt_model
-            if communication_mode in (CommunicationMode.TEXT_TO_VOICE, CommunicationMode.FULL_AGENT)
-            else "whisper-1"
-        )
+        # STT 모델: 전 모드 whisper-1 통일 (할루시네이션 블록리스트 호환 + 레이턴시 최저)
+        stt_model = "whisper-1"
 
         # Session A: User → 수신자 (PRD 3.2 / M-4)
         # Client VAD 시 turn_detection=null (서버가 아닌 클라이언트가 발화 종료 판단)
