@@ -179,3 +179,68 @@ class TestFullAgentTextHandling:
         """FullAgent도 audio 입력을 무시한다."""
         router = _make_router()
         await router.handle_user_audio(base64.b64encode(b"\x00" * 100).decode())
+
+
+class TestFullAgentFeedbackIntegration:
+    """FullAgent 피드백 루프 심층 검증."""
+
+    @pytest.mark.asyncio
+    async def test_recipient_format_prefix(self):
+        """수신자 번역이 '[Recipient says]:' 포맷으로 Session A에 전달된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.send_user_text = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+
+        await router._on_turn_complete("recipient", "Yes, we have a table available")
+
+        sent = router.session_a.send_user_text.call_args[0][0]
+        assert sent == "[Recipient says]: Yes, we have a table available"
+
+    @pytest.mark.asyncio
+    async def test_user_turn_does_not_forward(self):
+        """user role 턴은 Session A에 전달하지 않는다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.send_user_text = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+
+        await router._on_turn_complete("user", "Make a reservation for 4 people")
+
+        router.session_a.send_user_text.assert_not_called()
+        router.session_a.mark_generating.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_mark_generating_after_forward(self):
+        """forward 후 session_a.mark_generating()이 호출된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.send_user_text = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+
+        await router._on_turn_complete("recipient", "test reply")
+
+        router.session_a.mark_generating.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_updated_on_turn(self):
+        """턴 완료 시 context_manager에 추가된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.send_user_text = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+        router.context_manager = MagicMock()
+        router.context_manager.add_turn = MagicMock()
+
+        await router._on_turn_complete("recipient", "some text")
+
+        router.context_manager.add_turn.assert_called_once_with("recipient", "some text")
+
+    def test_echo_gate_max_capped_inherited_from_t2v(self):
+        """FullAgent는 T2V를 상속하므로 echo gate max=5.0이다."""
+        router = _make_router()
+        assert router.echo_gate._max_echo_window_s == 5.0

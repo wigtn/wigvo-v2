@@ -92,7 +92,8 @@ class TextToVoicePipeline(BasePipeline):
             )
 
         # 대화 컨텍스트 매니저 (번역 일관성)
-        self.context_manager = ConversationContextManager()
+        # T2V: 2턴으로 축소 — 컨텍스트 기반 추측 할루시네이션 방지
+        self.context_manager = ConversationContextManager(max_turns=2)
 
         # Session A 핸들러: User text → 번역 TTS → Twilio
         self.session_a = SessionAHandler(
@@ -111,6 +112,7 @@ class TextToVoicePipeline(BasePipeline):
 
         # Session B 핸들러: 수신자 음성 → 텍스트 번역 → App
         # modalities=['text'] — DualSessionManager가 communication_mode 기반으로 설정
+        # context_prune_keep=0: T2V에서는 컨텍스트 아이템 전부 삭제 → 추측 할루시네이션 방지
         self.session_b = SessionBHandler(
             session=dual_session.session_b,
             call=call,
@@ -122,6 +124,7 @@ class TextToVoicePipeline(BasePipeline):
             on_transcript_complete=self._on_turn_complete,
             on_caption_done=self._on_session_b_caption_done,
             use_local_vad=settings.local_vad_enabled,
+            context_prune_keep=0,
         )
 
         # Local VAD (Silero + RMS Energy Gate)
@@ -154,12 +157,13 @@ class TextToVoicePipeline(BasePipeline):
         )
 
         # Echo Gate Manager (TTS 에코 차단)
+        # T2V: max_echo_window_s=5.0 캡 (무제한→5초, 긴 silence 누적 방지)
         self.echo_gate = EchoGateManager(
             session_b=self.session_b,
             local_vad=self.local_vad,
             call_metrics=self.call.call_metrics,
             echo_margin_s=0.3,
-            max_echo_window_s=None,
+            max_echo_window_s=5.0,
             settling_s=settings.echo_post_settling_s,
         )
 

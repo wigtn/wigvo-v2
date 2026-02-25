@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     # STT 모델 (input_audio_transcription)
     stt_model: str = "whisper-1"
 
+    # Anti-Hallucination: 발화 길이 대비 번역 최대 비율 (chars/sec)
+    # 한국어 평균 발화: ~4음절/sec, 영어 번역: ~15 chars/sec → 100 c/s는 충분한 마진
+    hallucination_max_chars_per_sec: float = 100.0
+
     # Whisper fallback (Degraded Mode)
     whisper_model: str = "whisper-1"
 

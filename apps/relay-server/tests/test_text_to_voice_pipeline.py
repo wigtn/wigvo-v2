@@ -369,3 +369,102 @@ class TestTextToVoiceFirstMessage:
         sent_text = mock_session_a.send_user_text.call_args[0][0]
         assert sent_text.startswith('Say exactly this sentence and nothing else:')
         assert router.call.first_message_sent is True
+
+
+class TestTextToVoiceInterruptGuard:
+    """T2V Interrupt Guard: TTS 생성 중 수신자 발화 → interrupt 차단 검증."""
+
+    @pytest.mark.asyncio
+    async def test_interrupt_blocked_during_tts_generation(self):
+        """TTS 생성 중(is_generating=True) 수신자 발화가 interrupt를 차단한다."""
+        router = _make_router()
+        router.call.first_message_sent = True
+        router.session_a = MagicMock()
+        router.session_a.is_generating = True
+        router.interrupt = MagicMock()
+        router.interrupt.on_recipient_speech_started = AsyncMock()
+        router.echo_gate.in_echo_window = False
+
+        await router._on_recipient_started()
+
+        # interrupt가 호출되지 않아야 함
+        router.interrupt.on_recipient_speech_started.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_interrupt_allowed_when_not_generating(self):
+        """TTS 생성 중이 아닐 때(is_generating=False) 수신자 발화가 interrupt를 트리거한다."""
+        router = _make_router()
+        router.call.first_message_sent = True
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.interrupt = MagicMock()
+        router.interrupt.on_recipient_speech_started = AsyncMock()
+        router.echo_gate.in_echo_window = False
+
+        await router._on_recipient_started()
+
+        router.interrupt.on_recipient_speech_started.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_echo_break_still_works_during_generation(self):
+        """TTS 생성 중 echo window가 활성화되어 있으면 echo gate는 해제된다."""
+        router = _make_router()
+        router.call.first_message_sent = True
+        router.session_a = MagicMock()
+        router.session_a.is_generating = True
+        router.interrupt = MagicMock()
+        router.interrupt.on_recipient_speech_started = AsyncMock()
+        router.echo_gate.in_echo_window = True
+
+        await router._on_recipient_started()
+
+        # echo gate 해제
+        assert router.echo_gate.in_echo_window is False
+        # 하지만 interrupt는 차단
+        router.interrupt.on_recipient_speech_started.assert_not_called()
+
+    def test_echo_gate_max_capped_for_t2v(self):
+        """T2V는 echo gate max_echo_window_s=5.0 (무제한→캡)."""
+        router = _make_router()
+        assert router.echo_gate._max_echo_window_s == 5.0
+
+
+class TestTextToVoiceTypingFiller:
+    """타이핑 필러 1회 제한 + 리셋 검증."""
+
+    @pytest.mark.asyncio
+    async def test_typing_filler_sent_once(self):
+        """typing filler는 통화당 최대 1회만 전송된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.wait_for_done = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+
+        await router.handle_typing_started()
+        await router.handle_typing_started()  # 2번째 호출
+
+        # create_response는 1번만 호출되어야 함
+        assert router.dual_session.session_a.create_response.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_typing_filler_reset_on_text_send(self):
+        """handle_user_text() 호출 시 typing filler 플래그가 리셋된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.wait_for_done = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+        router.context_manager = MagicMock()
+        router.context_manager.inject_context = AsyncMock()
+
+        await router.handle_typing_started()
+        assert router._typing_filler_sent is True
+
+        await router.handle_user_text("hello")
+        assert router._typing_filler_sent is False
+
+        # 다시 typing filler 전송 가능
+        await router.handle_typing_started()
+        # 1(filler) + 1(handle_user_text relay per-response) + 1(filler) = 3
+        assert router.dual_session.session_a.create_response.call_count == 3

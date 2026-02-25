@@ -10,6 +10,7 @@ PRD 3.2:
 import asyncio
 import base64
 import logging
+import re
 import time
 from typing import Any, Callable, Coroutine
 
@@ -43,6 +44,26 @@ _STT_HALLUCINATION_BLOCKLIST = frozenset({
     "플러스포어 픽업",
 })
 
+# 동일 토큰 3회 이상 연속 반복 감지 (whisper/gpt-4o 공통 할루시네이션)
+_REPETITION_RE = re.compile(r'(\b\S+\b)(\s+\1){2,}', re.IGNORECASE)
+
+# [unclear] 변형 패턴 — 모델이 지시를 따르지 않고 다른 표현을 사용하는 경우
+_UNCLEAR_PHRASES = (
+    "[unclear]",
+    "unclear",
+    "inaudible",
+    "cannot hear",
+    "can't hear",
+    "couldn't hear",
+    "not clear",
+    "unintelligible",
+    "알아들을 수 없",
+    "들리지 않",
+    "불분명",
+    "잘 안 들",
+    "잘 들리지",
+)
+
 
 class SessionBHandler:
     """Session B의 이벤트를 처리한다."""
@@ -59,6 +80,7 @@ class SessionBHandler:
         on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
         on_caption_done: Callable[[], Coroutine] | None = None,
         use_local_vad: bool = False,
+        context_prune_keep: int = 1,
     ):
         """
         Args:
@@ -89,6 +111,7 @@ class SessionBHandler:
         self._speech_started_at: float = 0.0  # 파이프라인 지연 계측용
         self._speech_stopped_at: float = 0.0  # processing latency 계측용
         self._use_local_vad = use_local_vad
+        self._context_prune_keep = context_prune_keep
 
         # Response 생성 상태 추적: conversation_already_has_active_response 방지
         self._is_response_active = False
@@ -391,13 +414,45 @@ class SessionBHandler:
 
     async def _save_transcript_and_notify(self, transcript: str) -> None:
         """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
-        # Anti-hallucination: 모델이 오디오를 알아듣지 못했을 때 출력하는 [unclear] 마커 필터링
-        if "[unclear]" in transcript.lower():
-            logger.info("[SessionB] Unclear audio marker filtered: %s", transcript[:80])
-            self._pending_stt_ms = 0.0  # 필터된 턴의 STT latency 폐기
+        # --- Stage 2 Anti-Hallucination 필터 ---
+
+        # 1) [unclear] 변형 패턴 필터링 (모델이 다양한 표현으로 "못 알아들었다"를 출력)
+        transcript_lower = transcript.lower()
+        if any(phrase in transcript_lower for phrase in _UNCLEAR_PHRASES):
+            logger.info("[SessionB] Unclear marker filtered: %s", transcript[:80])
+            self._pending_stt_ms = 0.0
             if self._call:
                 self._call.call_metrics.hallucinations_blocked += 1
             return
+
+        # 2) STT 블록리스트 재적용 (번역에도 원문 할루시네이션이 그대로 출력되는 경우)
+        if transcript.strip() in _STT_HALLUCINATION_BLOCKLIST:
+            logger.warning("[SessionB] Translation hallucination blocked: %s", transcript[:80])
+            self._pending_stt_ms = 0.0
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
+            return
+
+        # 3) 반복 패턴 감지 (동일 토큰 3회 이상 연속 반복)
+        if _REPETITION_RE.search(transcript):
+            logger.warning("[SessionB] Repetition hallucination blocked: %s", transcript[:80])
+            self._pending_stt_ms = 0.0
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
+            return
+
+        # 4) 발화 길이 대비 번역 비율 검증 (짧은 입력 + 긴 번역 = 추측)
+        if self._speech_started_at > 0 and self._speech_stopped_at > 0:
+            speech_s = self._speech_stopped_at - self._speech_started_at
+            if speech_s > 0 and len(transcript) / speech_s > settings.hallucination_max_chars_per_sec:
+                logger.warning(
+                    "[SessionB] Suspicious translation rate (%.1f chars/%.1fs = %.1f c/s): %s",
+                    len(transcript), speech_s, len(transcript) / speech_s, transcript[:80],
+                )
+                self._pending_stt_ms = 0.0
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                return
 
         self._transcript_completed_count += 1
         if self._call:
@@ -565,8 +620,8 @@ class SessionBHandler:
                     logger.warning("[SessionB] Previous response wait timeout (5s) — proceeding anyway")
 
             # 이전 턴의 대화 아이템 삭제 → GPT-4o가 현재 오디오에만 집중
-            # keep_last=1: 최신 컨텍스트 주입 아이템만 유지
-            await self._prune_conversation_items(keep_last=1)
+            # T2V: keep_last=0 (컨텍스트 기반 추측 방지), V2V: keep_last=1
+            await self._prune_conversation_items(keep_last=self._context_prune_keep)
 
             if self._use_local_vad:
                 logger.info(
@@ -621,7 +676,7 @@ class SessionBHandler:
                     logger.warning("[SessionB] Timeout: previous response wait timeout (5s) — proceeding anyway")
 
             # 이전 턴 아이템 삭제 (debounced_create_response와 동일)
-            await self._prune_conversation_items(keep_last=1)
+            await self._prune_conversation_items(keep_last=self._context_prune_keep)
 
             if self._use_local_vad:
                 await self.session.commit_audio_only()
