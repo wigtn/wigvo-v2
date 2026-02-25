@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 
@@ -65,7 +66,66 @@ class EvalResult:
     num_segments: int = 0
     bleu: float = 0.0
     chrf: float = 0.0
+    comet: float = 0.0
+    comet_qe: float = 0.0
     pairs: list[TranslationPair] = field(default_factory=list)
+
+
+def is_noise_text(text: str) -> bool:
+    """텍스트가 노이즈(무의미한 입력)인지 판별한다.
+
+    필터 기준:
+    1. 자음만으로 이루어진 텍스트 (ㅇㄹㅇㄹ 등 keyboard spam)
+    2. 짧은 패턴의 3회 이상 반복 (뾰로롱뾰로롱뾰로롱)
+    3. 단일 문자 (뿅 등 단일 의성어)
+    4. 배경 소음 전사 (TV/라디오 — 뉴스 앵커 멘트, 시청 감사 등)
+    """
+    stripped = text.strip()
+    if not stripped:
+        return True
+
+    # 1. 자음만 (Korean Jamo consonants U+3131~U+314E)
+    non_space = stripped.replace(" ", "")
+    if non_space and all("\u3131" <= c <= "\u314E" for c in non_space):
+        return True
+
+    # 2. 짧은 패턴 반복 (패턴 길이 1~6자, 3회 이상)
+    for plen in range(1, min(7, len(non_space) // 2 + 1)):
+        pat = non_space[:plen]
+        reps = len(non_space) // plen
+        if reps >= 3 and pat * reps == non_space[:plen * reps]:
+            return True
+
+    # 3. 단일 문자
+    if len(non_space) <= 1:
+        return True
+
+    # 4. 배경 소음 패턴 (TV/라디오 전사)
+    noise_patterns = [
+        r"MBC|KBS|SBS|JTBC|YTN",          # 방송사 멘트
+        r"시청해\s*주셔서\s*감사",           # "시청해주셔서 감사합니다"
+        r"뉴스.{0,5}입니다",                # "뉴스 OOO입니다"
+    ]
+    for pat in noise_patterns:
+        if re.search(pat, stripped):
+            return True
+
+    return False
+
+
+def filter_noise_pairs(pairs: list[TranslationPair]) -> list[TranslationPair]:
+    """노이즈 쌍을 제거하고 유효한 쌍만 반환한다."""
+    clean = []
+    removed = 0
+    for p in pairs:
+        if is_noise_text(p.original):
+            logger.info("  [NOISE] removed: %s", p.original[:60])
+            removed += 1
+        else:
+            clean.append(p)
+    if removed:
+        logger.info("Noise filter: removed %d/%d pairs", removed, len(pairs))
+    return clean
 
 
 def fetch_transcripts(call_id: str | None = None, limit: int = 10) -> list[dict]:
@@ -180,7 +240,7 @@ def _percentile(values: list[float], p: float) -> float:
 
 
 def generate_references_gemini(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
-    """Gemini 2.0 Flash로 reference 번역을 생성한다."""
+    """Gemini 2.5 Flash로 reference 번역을 생성한다."""
     try:
         from google import genai
     except ImportError:
@@ -197,7 +257,7 @@ def generate_references_gemini(pairs: list[TranslationPair], src_lang: str, tgt_
     for i, pair in enumerate(pairs):
         logger.info("Generating reference [%d/%d]: %s", i + 1, len(pairs), pair.original[:50])
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=pair.original,
             config=genai.types.GenerateContentConfig(
                 system_instruction=(
@@ -208,7 +268,8 @@ def generate_references_gemini(pairs: list[TranslationPair], src_lang: str, tgt_
                 max_output_tokens=1024,
             ),
         )
-        pair.reference = response.text.strip()
+        text = response.text if response.text else ""
+        pair.reference = text.strip() if text else pair.original
 
 
 def generate_references_gpt4o(pairs: list[TranslationPair], src_lang: str, tgt_lang: str) -> None:
@@ -272,6 +333,60 @@ def compute_scores(pairs: list[TranslationPair]) -> EvalResult:
     )
 
 
+def compute_comet_scores(results: list[EvalResult], skip_qe: bool = False) -> None:
+    """COMET (ref-based) + COMET-QE (ref-free) 점수를 계산한다."""
+    try:
+        from comet import download_model, load_from_checkpoint
+    except ImportError:
+        logger.warning("unbabel-comet 패키지가 없습니다. COMET 점수를 건너뜁니다.")
+        logger.warning("설치: pip install unbabel-comet")
+        return
+
+    active_results = [r for r in results if r.num_segments > 0]
+    if not active_results:
+        return
+
+    # COMET (reference-based)
+    try:
+        logger.info("Loading COMET model (wmt22-comet-da)...")
+        model_path = download_model("Unbabel/wmt22-comet-da")
+        model = load_from_checkpoint(model_path)
+
+        for r in active_results:
+            data = [
+                {"src": p.original, "mt": p.hypothesis, "ref": p.reference}
+                for p in r.pairs
+            ]
+            output = model.predict(data, batch_size=8, gpus=0, num_workers=1)
+            r.comet = output.system_score
+
+        del model
+    except Exception as e:
+        logger.warning("COMET (ref-based) 실패: %s", e)
+
+    # COMET-QE (reference-free)
+    if skip_qe:
+        logger.info("COMET-QE 스킵 (--skip-comet-qe)")
+        return
+
+    try:
+        logger.info("Loading COMET-QE model (wmt21-comet-qe-da)...")
+        qe_model_path = download_model("wmt21-comet-qe-da")
+        qe_model = load_from_checkpoint(qe_model_path)
+
+        for r in active_results:
+            data = [
+                {"src": p.original, "mt": p.hypothesis}
+                for p in r.pairs
+            ]
+            output = qe_model.predict(data, batch_size=8, gpus=0, num_workers=1)
+            r.comet_qe = output.system_score
+
+        del qe_model
+    except Exception as e:
+        logger.warning("COMET-QE 실패 (모델 다운로드 필요할 수 있음): %s", e)
+
+
 def print_results(results: list[EvalResult], sys_metrics: SystemMetrics | None = None) -> None:
     """결과를 테이블 형식으로 출력한다."""
     print("\n" + "=" * 70)
@@ -313,6 +428,10 @@ def print_results(results: list[EvalResult], sys_metrics: SystemMetrics | None =
         print(f"\n[Translation Quality] {r.direction} ({r.num_segments} segments)")
         print(f"  BLEU:     {r.bleu:.1f}")
         print(f"  chrF2++:  {r.chrf:.1f}")
+        if r.comet > 0:
+            print(f"  COMET:    {r.comet:.4f}")
+        if r.comet_qe > 0:
+            print(f"  COMET-QE: {r.comet_qe:.4f}")
 
     # --- LaTeX: System Metrics ---
     if sys_metrics and sys_metrics.num_calls > 0:
@@ -336,15 +455,27 @@ def print_results(results: list[EvalResult], sys_metrics: SystemMetrics | None =
         print(r"\end{tabular}")
 
     # --- LaTeX: Translation Quality ---
+    has_comet = any(r.comet > 0 for r in results)
     print("\n--- LaTeX: Translation Quality (Table) ---")
-    print(r"\begin{tabular}{lrrr}")
-    print(r"\hline")
-    print(r"Direction & Segments & BLEU & chrF2++ \\")
-    print(r"\hline")
-    for r in results:
-        if r.num_segments == 0:
-            continue
-        print(f"{r.direction} & {r.num_segments} & {r.bleu:.1f} & {r.chrf:.1f} \\\\")
+    if has_comet:
+        print(r"\begin{tabular}{lrrrrr}")
+        print(r"\hline")
+        print(r"Direction & N & BLEU & chrF2++ & COMET & COMET-QE \\")
+        print(r"\hline")
+        for r in results:
+            if r.num_segments == 0:
+                continue
+            print(f"{r.direction} & {r.num_segments} & {r.bleu:.1f} & {r.chrf:.1f} & "
+                  f"{r.comet:.4f} & {r.comet_qe:.4f} \\\\")
+    else:
+        print(r"\begin{tabular}{lrrr}")
+        print(r"\hline")
+        print(r"Direction & N & BLEU & chrF2++ \\")
+        print(r"\hline")
+        for r in results:
+            if r.num_segments == 0:
+                continue
+            print(f"{r.direction} & {r.num_segments} & {r.bleu:.1f} & {r.chrf:.1f} \\\\")
     print(r"\hline")
     print(r"\end{tabular}")
 
@@ -397,20 +528,25 @@ def save_results(
     # Translation quality
     output["translation_quality"] = []
     for r in results:
-        output["translation_quality"].append({
+        entry: dict = {
             "direction": r.direction,
             "num_segments": r.num_segments,
             "bleu": round(r.bleu, 2),
             "chrf": round(r.chrf, 2),
-            "pairs": [
+        }
+        if r.comet > 0:
+            entry["comet"] = round(r.comet, 4)
+        if r.comet_qe > 0:
+            entry["comet_qe"] = round(r.comet_qe, 4)
+        entry["pairs"] = [
                 {
                     "original": p.original,
                     "hypothesis": p.hypothesis,
                     "reference": p.reference,
                 }
                 for p in r.pairs
-            ],
-        })
+            ]
+        output["translation_quality"].append(entry)
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
@@ -428,6 +564,12 @@ def main() -> None:
                         help="Reference 번역 생성 모델 (기본: gemini)")
     parser.add_argument("--skip-reference", action="store_true",
                         help="Reference 생성 스킵 (기존 reference가 있는 경우)")
+    parser.add_argument("--skip-comet", action="store_true",
+                        help="COMET/COMET-QE 점수 계산 전체 스킵")
+    parser.add_argument("--skip-comet-qe", action="store_true",
+                        help="COMET-QE만 스킵 (QE 모델 1.72GB 다운로드 필요)")
+    parser.add_argument("--filter-noise", action="store_true",
+                        help="노이즈 데이터 필터링 (자음 스팸, 반복 패턴, 배경 소음 등)")
     args = parser.parse_args()
 
     if not args.call_id and not args.all:
@@ -440,7 +582,7 @@ def main() -> None:
         generate_fn = generate_references_gemini
     else:
         generate_fn = generate_references_gpt4o
-    ref_model_name = "gemini-2.0-flash" if args.ref_model == "gemini" else "gpt-4o"
+    ref_model_name = "gemini-2.5-flash" if args.ref_model == "gemini" else "gpt-4o"
 
     # 1. Supabase에서 transcript 조회
     logger.info("Fetching transcripts from Supabase...")
@@ -457,6 +599,13 @@ def main() -> None:
     # 3. (원문 != 번역)인 쌍 추출
     user_pairs, recipient_pairs = extract_pairs(calls)
     logger.info("Extracted %d user pairs, %d recipient pairs", len(user_pairs), len(recipient_pairs))
+
+    # 3.5 노이즈 필터링
+    if args.filter_noise:
+        logger.info("Applying noise filter...")
+        user_pairs = filter_noise_pairs(user_pairs)
+        recipient_pairs = filter_noise_pairs(recipient_pairs)
+        logger.info("After filter: %d user pairs, %d recipient pairs", len(user_pairs), len(recipient_pairs))
 
     if not user_pairs and not recipient_pairs:
         if sys_metrics.num_calls > 0:
@@ -491,6 +640,10 @@ def main() -> None:
         results.append(compute_scores(user_pairs))
     if recipient_pairs:
         results.append(compute_scores(recipient_pairs))
+
+    # 5.5 COMET/COMET-QE 계산
+    if not args.skip_comet:
+        compute_comet_scores(results, skip_qe=args.skip_comet_qe)
 
     # 6. 결과 출력 + 저장
     print_results(results, sys_metrics)
