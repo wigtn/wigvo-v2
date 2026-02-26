@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { CallMode, CaptionEntry, CommunicationMode } from '@/shared/call-types';
+import type { Call } from '@/shared/types';
 
 export interface CallMetrics {
   session_a_latencies_ms: number[];
@@ -31,6 +32,12 @@ interface RelayCallStoreState {
   error: string | null;
   metrics: CallMetrics | null;
 
+  // Call 메타데이터 (Provider가 동기화)
+  callData: Call | null;
+  callDataLoading: boolean;
+  callDataError: string | null;
+  refetchCallData: (() => void) | null;
+
   // 액션 (Provider가 주입)
   startCall: ((callId: string, relayWsUrl: string, mode: CallMode) => void) | null;
   endCall: (() => void) | null;
@@ -54,6 +61,10 @@ const initialState = {
   isPlaying: false,
   error: null as string | null,
   metrics: null as CallMetrics | null,
+  callData: null as Call | null,
+  callDataLoading: true,
+  callDataError: null as string | null,
+  refetchCallData: null as RelayCallStoreState['refetchCallData'],
   startCall: null as RelayCallStoreState['startCall'],
   endCall: null as RelayCallStoreState['endCall'],
   sendText: null as RelayCallStoreState['sendText'],

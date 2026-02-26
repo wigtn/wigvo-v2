@@ -26,7 +26,7 @@ export default function RelayCallProvider({
   communicationMode,
   children,
 }: RelayCallProviderProps) {
-  const { call } = useCallPolling(callingCallId);
+  const { call, loading, error, refetch } = useCallPolling(callingCallId);
   const relay = useRelayCall(communicationMode);
   const syncState = useRelayCallStore((s) => s.syncState);
   const reset = useRelayCallStore((s) => s.reset);
@@ -58,6 +58,20 @@ export default function RelayCallProvider({
     startedRef.current = true;
     relay.startCall(callingCallId, call.relayWsUrl, call.callMode as CallMode);
   }, [call?.relayWsUrl, call?.callMode, callingCallId, relay]);
+
+  // call 메타데이터 → store 동기화
+  useEffect(() => {
+    syncState({
+      callData: call,
+      callDataLoading: loading,
+      callDataError: error,
+    });
+  }, [call, loading, error, syncState]);
+
+  // refetch 함수 → store 등록
+  useEffect(() => {
+    syncState({ refetchCallData: refetch });
+  }, [refetch, syncState]);
 
   // relay 반환값 → store 동기화
   useEffect(() => {

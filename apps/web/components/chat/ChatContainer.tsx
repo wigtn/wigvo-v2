@@ -14,7 +14,6 @@ import CollectionSummary from "./CollectionSummary";
 
 import ScenarioSelector from "./ScenarioSelector";
 import { Phone, Loader2, Plus } from "lucide-react";
-import { useCallPolling } from "@/hooks/useCallPolling";
 
 function formatDuration(seconds: number): string {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -46,7 +45,7 @@ export default function ChatContainer() {
   const { callingCallId, callingCommunicationMode } = useDashboard();
   const isCalling = !!callingCallId;
 
-  // Relay call store (통화 중 자막/상태)
+  // Relay call store (통화 중 자막/상태 + Call 메타데이터)
   const {
     captions,
     callStatus,
@@ -54,10 +53,9 @@ export default function ChatContainer() {
     callDuration,
     sendText,
     sendTypingState,
+    callData: call,
+    refetchCallData,
   } = useRelayCallStore();
-
-  // Call 메타데이터 (targetName 등) - 통화 중에만 폴링
-  const { call, refetch } = useCallPolling(callingCallId ?? '');
 
   // 통화 끝났는지 판별 (입력 활성화용)
   const isCallEnded = callStatus === 'ended';
@@ -66,9 +64,9 @@ export default function ChatContainer() {
   // callStatus가 ended로 바뀌면 즉시 서버 데이터 새로고침
   useEffect(() => {
     if (callStatus === 'ended') {
-      refetch();
+      refetchCallData?.();
     }
-  }, [callStatus, refetch]);
+  }, [callStatus, refetchCallData]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);

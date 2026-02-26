@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useRelayCallStore } from '@/hooks/useRelayCallStore';
-import { useCallPolling } from '@/hooks/useCallPolling';
 import { useDashboard } from '@/hooks/useDashboard';
 import CallingStatus from './CallingStatus';
 import CallStatusBar from './CallStatusBar';
@@ -47,9 +46,12 @@ export default function CallEffectPanel() {
   const t = useTranslations('call');
   const tc = useTranslations('common');
   const { callingCallId, callingCommunicationMode, resetDashboard } = useDashboard();
-  const { call, loading, error: pollError, refetch } = useCallPolling(callingCallId ?? '');
 
   const {
+    callData: call,
+    callDataLoading: loading,
+    callDataError: pollError,
+    refetchCallData,
     callStatus,
     callDuration,
     callMode,
@@ -68,10 +70,10 @@ export default function CallEffectPanel() {
   const prevCallStatusRef = useRef(callStatus);
   useEffect(() => {
     if (callStatus === 'ended' && prevCallStatusRef.current !== 'ended') {
-      refetch();
+      refetchCallData?.();
     }
     prevCallStatusRef.current = callStatus;
-  }, [callStatus, refetch]);
+  }, [callStatus, refetchCallData]);
 
   const communicationMode = callingCommunicationMode ?? 'voice_to_voice';
   const BadgeIcon = modeBadgeIcon[communicationMode];
