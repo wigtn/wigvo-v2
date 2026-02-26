@@ -375,11 +375,14 @@ class TestTextToVoiceFirstMessage:
 
 
 class TestTextToVoiceInterruptGuard:
-    """T2V Interrupt Guard: TTS 생성 중 수신자 발화 → interrupt 차단 검증."""
+    """T2V Interrupt: TTS 생성 중에도 수신자 발화 시 interrupt 허용 검증."""
 
     @pytest.mark.asyncio
-    async def test_interrupt_blocked_during_tts_generation(self):
-        """TTS 생성 중(is_generating=True) 수신자 발화가 interrupt를 차단한다."""
+    async def test_interrupt_allowed_during_tts_generation(self):
+        """TTS 생성 중(is_generating=True) 수신자 발화가 interrupt를 트리거한다.
+
+        텍스트는 transcript_history에 이미 저장되어 있으므로 TTS 중단해도 유실 없음.
+        """
         router = _make_router()
         router.call.first_message_sent = True
         router.session_a = MagicMock()
@@ -390,8 +393,7 @@ class TestTextToVoiceInterruptGuard:
 
         await router._on_recipient_started()
 
-        # interrupt가 호출되지 않아야 함
-        router.interrupt.on_recipient_speech_started.assert_not_called()
+        router.interrupt.on_recipient_speech_started.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_interrupt_allowed_when_not_generating(self):
@@ -409,8 +411,8 @@ class TestTextToVoiceInterruptGuard:
         router.interrupt.on_recipient_speech_started.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_echo_break_still_works_during_generation(self):
-        """TTS 생성 중 echo window가 활성화되어 있으면 echo gate는 해제된다."""
+    async def test_echo_break_and_interrupt_during_generation(self):
+        """TTS 생성 중 echo window 활성 → echo gate 해제 + interrupt 허용."""
         router = _make_router()
         router.call.first_message_sent = True
         router.session_a = MagicMock()
@@ -423,8 +425,8 @@ class TestTextToVoiceInterruptGuard:
 
         # echo gate 해제
         assert router.echo_gate.in_echo_window is False
-        # 하지만 interrupt는 차단
-        router.interrupt.on_recipient_speech_started.assert_not_called()
+        # interrupt도 허용
+        router.interrupt.on_recipient_speech_started.assert_called_once()
 
     def test_echo_gate_max_capped_for_t2v(self):
         """T2V는 echo gate max_echo_window_s=5.0 (무제한→캡)."""

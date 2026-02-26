@@ -224,6 +224,9 @@ class EchoGateManager:
                 cooldown = min(cooldown, self._max_echo_window_s)
 
             await asyncio.sleep(cooldown)
+            # Buffer clear FIRST (echo window 활성 상태에서 실행)
+            # → clear 중 유입된 오디오도 silence injection 대상이므로 유실 없음
+            await self._session_b.clear_input_buffer()
             self._in_echo_window = False
             # Dynamic settling: TTS 길이에 비례, [min, max] clamp
             settling_duration = max(
@@ -235,7 +238,6 @@ class EchoGateManager:
             now = time.time()
             self._settling_until = now + settling_duration
             self._settling_started_at = now
-            await self._session_b.clear_input_buffer()
             if self._local_vad is not None:
                 self._local_vad.reset_state()
             logger.info(
