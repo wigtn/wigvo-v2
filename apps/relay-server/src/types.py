@@ -260,6 +260,8 @@ class CallMetrics(BaseModel):
     echo_loops_detected: int = 0
     # 에코 윈도우 중 고에너지 발화로 게이트 해제 횟수
     echo_gate_breakthroughs: int = 0
+    # Settling 중 Silero VAD 확인 돌파 횟수
+    settling_breakthroughs: int = 0
     # callee가 Session A TTS를 중단한 횟수
     interrupt_count: int = 0
     # Guardrail 비동기 교정 횟수 (Level 2)

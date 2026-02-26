@@ -88,7 +88,11 @@ class Settings(BaseSettings):
 
     # Echo Gate (에코 피드백 루프 차단)
     echo_gate_cooldown_s: float = 2.5  # TTS 완료 후 에코 소멸 대기 (레거시 폴백용)
-    echo_post_settling_s: float = 3.0  # echo window 후 AGC 안정화 대기 (2.0→3.0: echo gate breakthrough 감소)
+    echo_post_settling_s: float = 3.0  # Legacy: EchoGateManager에서 미사용 (dynamic settling으로 대체)
+    # Dynamic Settling (Silero VAD double gate)
+    echo_settling_min_s: float = 0.5          # 최소 settling (짧은 TTS)
+    echo_settling_max_s: float = 1.5          # 최대 settling (기존 3.0→1.5)
+    echo_settling_tts_ratio: float = 0.3      # settling = TTS길이 × ratio, [min, max] clamp
     # Session B VAD 설정 (수신자 음성 감지 민감도)
     session_b_vad_threshold: float = 0.8  # 0.0~1.0, 높을수록 큰 소리만 감지 (전화 오디오 권장 0.8~0.85)
     session_b_vad_silence_ms: int = 500  # 발화 종료 판정까지 필요한 무음 시간 (기본 200ms → 500ms)
@@ -98,7 +102,7 @@ class Settings(BaseSettings):
     # Local VAD (Silero VAD + RMS Energy Gate)
     local_vad_enabled: bool = True
     local_vad_rms_threshold: float = 200.0  # PSTN 배경 소음(50-200) 위로 설정하여 오감지 방지
-    local_vad_speech_threshold: float = 0.5
+    local_vad_speech_threshold: float = 0.8  # 0.5→0.8: PSTN 최적화 (Server VAD와 동일)
     local_vad_silence_threshold: float = 0.35
     local_vad_min_speech_frames: int = 3    # 3 × 32ms = 96ms (할루시네이션 방지: 짧은 노이즈 무시)
     local_vad_min_silence_frames: int = 15  # 15 × 32ms = 480ms

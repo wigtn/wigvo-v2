@@ -152,7 +152,6 @@ class VoiceToVoicePipeline(BasePipeline):
             call_metrics=self.call.call_metrics,
             echo_margin_s=0.5,  # 0.3→0.5: echo gate breakthrough 감소
             max_echo_window_s=1.2,
-            settling_s=settings.echo_post_settling_s,
             on_breakthrough=self._on_echo_breakthrough,
         )
 
@@ -304,12 +303,14 @@ class VoiceToVoicePipeline(BasePipeline):
         # Local VAD 경로: VAD 상태에 따라 실제 오디오 또는 무음을 Session B에 전송
         # SPEAKING 상태: 오디오 그대로 전송 (GPT-4o가 전체 음성을 들어야 정확한 번역 가능)
         # SILENCE 상태: 무음 프레임 전송 (노이즈가 Whisper에 축적되어 할루시네이션 유발 방지)
-        # Echo window 중에는 VAD 처리를 스킵 (에코가 speech로 오감지되는 것을 방지)
+        # Echo window 중: VAD 완전 스킵
+        # Settling 중: RMS pre-gate로 고에너지만 VAD에 전달 → Silero가 speech 판정 시 break
         if self.local_vad is not None:
-            vad_suppressed = self.echo_gate.is_suppressing
-            if not vad_suppressed:
+            audio_rms = _ulaw_rms(effective_audio)
+            can_process_vad = self.echo_gate.should_process_vad(audio_rms)
+            if can_process_vad:
                 await self.local_vad.process(effective_audio)
-            if self.local_vad.is_speaking and not vad_suppressed:
+            if self.local_vad.is_speaking and not self.echo_gate.is_suppressing:
                 audio_to_send = effective_audio
             else:
                 audio_to_send = bytes([0xFF] * len(effective_audio))
@@ -478,6 +479,7 @@ class VoiceToVoicePipeline(BasePipeline):
 
     async def _on_local_vad_speech_start(self) -> None:
         """Local VAD가 수신자 발화 시작을 감지."""
+        self.echo_gate.break_settling()  # Settling 해제 (Silero 확인)
         await self.session_b.notify_speech_started()
 
     async def _on_local_vad_speech_end(self) -> None:

@@ -43,7 +43,6 @@ class EchoGateManager:
         call_metrics: CallMetrics,
         echo_margin_s: float = 0.5,
         max_echo_window_s: float | None = 1.2,
-        settling_s: float = 3.0,
         on_breakthrough: Callable[[], Coroutine] | None = None,
     ):
         self._session_b = session_b
@@ -51,11 +50,11 @@ class EchoGateManager:
         self._call_metrics = call_metrics
         self._echo_margin_s = echo_margin_s
         self._max_echo_window_s = max_echo_window_s
-        self._settling_s = settling_s
         self._on_breakthrough = on_breakthrough
 
         self._in_echo_window = False
         self._settling_until: float = 0.0
+        self._settling_started_at: float = 0.0
         self._echo_cooldown_task: asyncio.Task | None = None
         self._tts_first_chunk_at: float = 0.0
         self._tts_total_bytes: int = 0
@@ -77,6 +76,35 @@ class EchoGateManager:
         return self._in_echo_window or time.time() < self._settling_until
 
     # --- Public methods ---
+
+    def should_process_vad(self, audio_rms: float) -> bool:
+        """Settling 중 VAD 처리 여부를 결정한다 (RMS pre-gate).
+
+        Echo window 중: False (항상 억제)
+        Settling 중: RMS > echo_energy_threshold_rms(500)이면 True (VAD 처리 허용)
+        Normal: True
+
+        NOTE: True를 반환해도 settling을 break하지 않는다.
+        Settling은 LocalVAD가 SPEAKING으로 전환 → break_settling() 호출 시에만 해제.
+        """
+        if self._in_echo_window:
+            return False
+        if time.time() >= self._settling_until:
+            return True  # Settling 만료
+        # Settling 중: 높은 에너지만 VAD에 전달 (AGC 노이즈 pre-gate)
+        return audio_rms > settings.echo_energy_threshold_rms
+
+    def break_settling(self) -> None:
+        """Settling을 즉시 해제한다 (LocalVAD SPEAKING 전환 확인 시)."""
+        now = time.time()
+        if now < self._settling_until:
+            elapsed = now - self._settling_started_at
+            logger.info(
+                "Settling breakthrough — Silero VAD confirmed speech (%.1fs into settling)",
+                elapsed,
+            )
+            self._settling_until = 0.0
+            self._call_metrics.settling_breakthroughs += 1
 
     def on_tts_chunk(self, chunk_size: int) -> bool:
         """TTS 청크 수신 시 호출. echo window 활성화 + 바이트 추적.
@@ -184,7 +212,15 @@ class EchoGateManager:
 
             await asyncio.sleep(cooldown)
             self._in_echo_window = False
-            self._settling_until = time.time() + self._settling_s
+            # Dynamic settling: TTS 길이에 비례, [min, max] clamp
+            settling_duration = max(
+                settings.echo_settling_min_s,
+                min(audio_duration_s * settings.echo_settling_tts_ratio,
+                    settings.echo_settling_max_s),
+            )
+            now = time.time()
+            self._settling_until = now + settling_duration
+            self._settling_started_at = now
             await self._session_b.clear_input_buffer()
             if self._local_vad is not None:
                 self._local_vad.reset_state()
@@ -192,7 +228,7 @@ class EchoGateManager:
                 "Echo window closed after %.1fs cooldown — settling %.1fs "
                 "(audio=%.1fs, remaining=%.1fs, margin=%.1fs)",
                 cooldown,
-                self._settling_s,
+                settling_duration,
                 audio_duration_s,
                 remaining_playback,
                 self._echo_margin_s,

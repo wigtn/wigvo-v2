@@ -29,7 +29,6 @@ def _make_call_metrics():
 def _make_echo_gate(
     echo_margin_s: float = 0.3,
     max_echo_window_s: float | None = 1.2,
-    settling_s: float = 2.0,
 ) -> tuple[EchoGateManager, MagicMock, MagicMock]:
     """EchoGateManager + mock session_b + mock call_metrics를 생성한다."""
     session_b = MagicMock()
@@ -41,7 +40,6 @@ def _make_echo_gate(
         call_metrics=call_metrics,
         echo_margin_s=echo_margin_s,
         max_echo_window_s=max_echo_window_s,
-        settling_s=settling_s,
     )
     return gate, session_b, call_metrics
 
@@ -209,9 +207,10 @@ class TestCooldown:
     @pytest.mark.asyncio
     async def test_settling_after_cooldown(self):
         """Echo window 종료 후 settling 기간 동안 is_suppressing = True."""
-        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.5, settling_s=2.0)
+        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.5)
+        # 40000 bytes = 5s TTS → dynamic settling = max(0.5, min(5*0.3=1.5, 1.5)) = 1.5s
         gate._tts_first_chunk_at = time.time()
-        gate._tts_total_bytes = 100
+        gate._tts_total_bytes = 40000
         gate._activate()
 
         gate.on_tts_done()
@@ -224,7 +223,7 @@ class TestCooldown:
     @pytest.mark.asyncio
     async def test_settling_expires(self):
         """Settling 만료 후 is_suppressing = False."""
-        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3, settling_s=0.5)
+        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3)
         gate._tts_first_chunk_at = time.time()
         gate._tts_total_bytes = 100
         gate._activate()
@@ -240,7 +239,7 @@ class TestCooldown:
     @pytest.mark.asyncio
     async def test_recipient_speech_clears_settling(self):
         """수신자 발화 → settling 즉시 해제."""
-        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3, settling_s=2.0)
+        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3)
         gate._tts_first_chunk_at = time.time()
         gate._tts_total_bytes = 100
         gate._activate()
@@ -306,6 +305,116 @@ class TestStop:
         """cooldown task 없을 때 stop()은 안전하게 no-op."""
         gate, _, _ = _make_echo_gate()
         await gate.stop()  # 에러 없이 완료
+
+
+class TestShouldProcessVad:
+    """should_process_vad RMS pre-gate 테스트."""
+
+    def test_echo_window_always_false(self):
+        """Echo window 중 → RMS 무관 False."""
+        gate, _, _ = _make_echo_gate()
+        gate.in_echo_window = True
+        assert gate.should_process_vad(1000.0) is False
+
+    def test_settling_low_rms_false(self):
+        """Settling 중 RMS 400 → False (AGC 노이즈 차단)."""
+        gate, _, _ = _make_echo_gate()
+        gate._settling_until = time.time() + 10.0  # 10초 settling 강제
+        assert gate.should_process_vad(400.0) is False
+
+    def test_settling_high_rms_true(self):
+        """Settling 중 RMS 600 → True (VAD 처리 허용)."""
+        gate, _, _ = _make_echo_gate()
+        gate._settling_until = time.time() + 10.0
+        assert gate.should_process_vad(600.0) is True
+
+    def test_after_settling(self):
+        """Settling 만료 → RMS 무관 True."""
+        gate, _, _ = _make_echo_gate()
+        gate._settling_until = time.time() - 1.0  # 이미 만료
+        assert gate.should_process_vad(100.0) is True
+
+
+class TestBreakSettling:
+    """break_settling 메서드 테스트."""
+
+    def test_clears_settling(self):
+        """break_settling() → is_suppressing=False."""
+        gate, _, _ = _make_echo_gate()
+        gate._settling_until = time.time() + 10.0
+        gate._settling_started_at = time.time()
+        assert gate.is_suppressing is True
+
+        gate.break_settling()
+
+        assert gate.is_suppressing is False
+        assert gate._settling_until == 0.0
+
+    def test_counts_metric(self):
+        """break_settling() → settling_breakthroughs 메트릭 증가."""
+        gate, _, metrics = _make_echo_gate()
+        metrics.settling_breakthroughs = 0
+        gate._settling_until = time.time() + 10.0
+        gate._settling_started_at = time.time()
+
+        gate.break_settling()
+
+        assert metrics.settling_breakthroughs == 1
+
+    def test_noop_when_not_settling(self):
+        """Settling 아닐 때 break_settling() → no-op."""
+        gate, _, metrics = _make_echo_gate()
+        metrics.settling_breakthroughs = 0
+        gate._settling_until = 0.0
+
+        gate.break_settling()
+
+        assert metrics.settling_breakthroughs == 0
+
+
+class TestDynamicSettling:
+    """동적 settling 시간 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_short_tts_min_settling(self):
+        """짧은 TTS (0.5s) → settling = min (0.5s)."""
+        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3)
+        # 0.5s TTS = 4000 bytes (g711_ulaw @ 8kHz)
+        gate._tts_first_chunk_at = time.time()
+        gate._tts_total_bytes = 4000
+        gate._activate()
+
+        gate.on_tts_done()
+        await asyncio.sleep(0.5)  # cooldown 완료
+
+        # settling = max(0.5, min(0.5*0.3=0.15, 1.5)) = 0.5
+        assert gate.in_echo_window is False
+        assert gate.is_suppressing is True
+        # 0.5s settling이므로 0.7s 후 만료
+        await asyncio.sleep(0.7)
+        assert gate.is_suppressing is False
+
+    @pytest.mark.asyncio
+    async def test_long_tts_max_settling(self):
+        """긴 TTS (5s) → settling = max (1.5s)."""
+        gate, _, _ = _make_echo_gate(echo_margin_s=0.1, max_echo_window_s=0.3)
+        # 5s TTS = 40000 bytes
+        gate._tts_first_chunk_at = time.time()
+        gate._tts_total_bytes = 40000
+        gate._activate()
+
+        gate.on_tts_done()
+        await asyncio.sleep(0.5)  # cooldown 완료
+
+        # settling = max(0.5, min(5.0*0.3=1.5, 1.5)) = 1.5
+        assert gate.in_echo_window is False
+        assert gate.is_suppressing is True
+        # 1.5s settling이므로 1.0s 후에는 아직 suppressing
+        await asyncio.sleep(1.0)
+        assert gate.is_suppressing is True
+        # 0.8s 더 대기하면 만료 (총 1.8s > 1.5s)
+        await asyncio.sleep(0.8)
+        assert gate.is_suppressing is False
 
 
 class TestInEchoWindowProperty:
