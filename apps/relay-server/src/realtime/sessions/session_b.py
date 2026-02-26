@@ -195,7 +195,10 @@ class SessionBHandler:
         # Chat API 번역 (T2V/Agent 모드 한정)
         self._chat_translator = chat_translator
         self._stt_ready_event = asyncio.Event()
-        self._stt_text: str = ""
+        # STT 누적 버퍼: 연속 발화 시 세그먼트별 STT를 누적하여 완전한 문장으로 번역
+        self._stt_texts: list[str] = []
+        # commit_audio_only() 호출 횟수 대비 STT 도착 추적 (모든 STT 수신 후 번역 시작)
+        self._pending_stt_count: int = 0
 
         self._register_handlers()
 
@@ -245,6 +248,14 @@ class SessionBHandler:
     @property
     def is_recipient_speaking(self) -> bool:
         return self._is_recipient_speaking
+
+    # --- STT 누적 카운터 ---
+
+    def _decrement_pending_stt(self) -> None:
+        """Pending STT 카운터 감소 + 모든 STT 수신 시 event 설정."""
+        self._pending_stt_count = max(0, self._pending_stt_count - 1)
+        if self._pending_stt_count <= 0:
+            self._stt_ready_event.set()
 
     # --- 대화 아이템 트래킹 + 프루닝 ---
 
@@ -309,10 +320,9 @@ class SessionBHandler:
         self._speech_started_at = time.time()
         self._timeout_forced = False
 
-        # Chat API 동기화 리셋 (새 발화 시작)
+        # Chat API: 연속 발화 누적 — _stt_texts는 클리어하지 않음
+        # (이전 세그먼트 STT가 이미 누적되어 있을 수 있음)
         if self._chat_translator:
-            self._stt_ready_event.clear()
-            self._stt_text = ""
             self._stt_blocked = False  # 이전 턴에서 stuck 방지
 
         # 대기 중인 debounce response.create 취소 (연속 발화)
@@ -624,10 +634,8 @@ class SessionBHandler:
         self._speech_started_at = time.time()
         self._timeout_forced = False  # 새 발화 시작 → timeout 플래그 초기화
 
-        # Chat API 동기화 리셋 (새 발화 시작)
+        # Chat API: 연속 발화 누적 — _stt_texts는 클리어하지 않음
         if self._chat_translator:
-            self._stt_ready_event.clear()
-            self._stt_text = ""
             self._stt_blocked = False  # 이전 턴에서 stuck 방지
 
         # 대기 중인 debounce response.create 취소 (연속 발화)
@@ -724,6 +732,8 @@ class SessionBHandler:
                         self._response_debounce_s * 1000,
                     )
                     await self.session.commit_audio_only()
+                    self._pending_stt_count += 1
+                    self._stt_ready_event.clear()
                 else:
                     logger.info(
                         "[SessionB] Debounce complete (%.0fms) — waiting for STT (Chat API path)",
@@ -753,23 +763,35 @@ class SessionBHandler:
             logger.exception("[SessionB] Error in debounced response creation")
 
     async def _translate_via_chat_api(self) -> None:
-        """Chat API를 통해 STT→번역을 수행하고 캡션/transcript를 전송한다.
+        """Chat API를 통해 누적 STT→번역을 수행하고 캡션/transcript를 전송한다.
 
-        Flow: _stt_ready_event 대기 → ChatTranslator.translate() → 캡션 + transcript 저장.
+        Flow: _stt_ready_event 대기 → 누적 STT 텍스트 결합 → ChatTranslator.translate() → 캡션 + transcript 저장.
+        연속 발화 시 여러 세그먼트의 STT가 _stt_texts에 누적되어 완전한 문장으로 번역된다.
+
         _debounced_create_response()와 _silence_timeout_handler()에서 호출된다.
         실패 시 에러 로그만 남기고 해당 턴을 skip한다 (Realtime API fallback 없음).
         """
-        # STT 완료 대기 (최대 10s)
+        # 모든 pending commit의 STT 완료 대기 (최대 10s)
         try:
             await asyncio.wait_for(self._stt_ready_event.wait(), timeout=10.0)
         except asyncio.TimeoutError:
             logger.warning("[SessionB] Chat API: STT wait timeout (10s) — skipping turn")
+            self._stt_texts.clear()
+            self._pending_stt_count = 0
             return
 
-        stt_text = self._stt_text
+        # 누적된 STT 텍스트를 결합하여 완전한 문장으로 번역
+        stt_text = " ".join(self._stt_texts).strip()
+        self._stt_texts.clear()
+        self._pending_stt_count = 0
+        self._stt_blocked = False  # Chat API 경로: blocking은 누적 필터가 처리
+
         if not stt_text:
-            logger.info("[SessionB] Chat API: empty STT (filtered) — skipping turn")
+            logger.info("[SessionB] Chat API: empty STT (all filtered) — skipping turn")
             return
+
+        # 누적 원본 텍스트를 bilingual transcript용으로 저장
+        self._last_recipient_stt = stt_text
 
         # Chat API 번역
         result = await self._chat_translator.translate(stt_text)
@@ -840,6 +862,8 @@ class SessionBHandler:
                 if self._use_local_vad:
                     await self.session.clear_input_buffer()
                     await self.session.commit_audio_only()
+                    self._pending_stt_count += 1
+                    self._stt_ready_event.clear()
                 await self._translate_via_chat_api()
             else:
                 # --- 기존 Realtime API 경로 ---
@@ -869,42 +893,42 @@ class SessionBHandler:
         번역 텍스트(Stage 2)는 response.audio_transcript.done에서 별도로 전송된다.
         억제 중이면 큐에 저장하여 나중에 배출한다.
 
-        Chat API 모드: STT 텍스트를 _stt_text에 저장하고 _stt_ready_event를 set하여
-        _translate_via_chat_api()의 대기를 해제한다.
+        Chat API 모드: STT 텍스트를 _stt_texts에 누적하고 _pending_stt_count가 0이 되면
+        _stt_ready_event를 set하여 _translate_via_chat_api()의 대기를 해제한다.
         """
         transcript = event.get("transcript", "")
         if not transcript:
-            # Chat API 대기 해제 (빈 텍스트 → 턴 skip)
             if self._chat_translator:
-                self._stt_text = ""
-                self._stt_ready_event.set()
+                self._decrement_pending_stt()
             return
         # Whisper STT 할루시네이션 필터링 (구두점 정규화: "감사합니다!" → "감사합니다")
         if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST:
             logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
-            self._stt_blocked = True  # 대응하는 번역도 차단
+            self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
             if self._call:
                 self._call.call_metrics.hallucinations_blocked += 1
             if self._chat_translator:
-                self._stt_text = ""
-                self._stt_ready_event.set()
+                self._decrement_pending_stt()  # blocked STT는 누적하지 않되, 카운터는 감소
             return
         # 구조적 노이즈 필터 (자음 스팸, 반복 패턴, 단일 문자)
         if _is_noise_stt(transcript):
             logger.warning("[SessionB] Noise STT filtered: %s", transcript[:80])
-            self._stt_blocked = True  # 대응하는 번역도 차단
+            self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
             if self._call:
                 self._call.call_metrics.hallucinations_blocked += 1
             if self._chat_translator:
-                self._stt_text = ""
-                self._stt_ready_event.set()
+                self._decrement_pending_stt()
             return
         self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
 
-        # Chat API 동기화: STT 텍스트 저장 + 대기 해제
+        # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제
         if self._chat_translator:
-            self._stt_text = transcript
-            self._stt_ready_event.set()
+            self._stt_texts.append(transcript)
+            self._decrement_pending_stt()
+            logger.debug(
+                "[SessionB] STT accumulated (%d texts, %d pending): %s",
+                len(self._stt_texts), self._pending_stt_count, transcript[:60],
+            )
 
         if self._output_suppressed:
             self._pending_output.append(("original_caption", ("recipient", transcript)))

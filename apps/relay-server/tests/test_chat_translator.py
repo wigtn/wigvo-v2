@@ -290,8 +290,8 @@ class TestTranslateViaChatApi:
         chat_mock = _make_chat_translator_mock(translated_text="Hello there")
         handler = _make_handler(call=call, chat_translator=chat_mock)
 
-        # STT 준비 시뮬레이션
-        handler._stt_text = "안녕하세요"
+        # STT 준비 시뮬레이션 (누적 방식)
+        handler._stt_texts = ["안녕하세요"]
         handler._stt_ready_event.set()
         handler._committed_speech_started_at = time.time() - 2.0
         handler._committed_speech_stopped_at = time.time() - 0.5
@@ -312,7 +312,7 @@ class TestTranslateViaChatApi:
         chat_mock = _make_chat_translator_mock()
         handler = _make_handler(chat_translator=chat_mock)
 
-        handler._stt_text = ""
+        handler._stt_texts = []
         handler._stt_ready_event.set()
 
         await handler._translate_via_chat_api()
@@ -340,7 +340,7 @@ class TestTranslateViaChatApi:
         chat_mock = _make_chat_translator_mock(returns_none=True)
         handler = _make_handler(call=call, chat_translator=chat_mock)
 
-        handler._stt_text = "테스트"
+        handler._stt_texts = ["테스트"]
         handler._stt_ready_event.set()
 
         await handler._translate_via_chat_api()
@@ -361,7 +361,7 @@ class TestTranslateViaChatApi:
         )
         handler = _make_handler(call=call, chat_translator=chat_mock)
 
-        handler._stt_text = "원문 텍스트"
+        handler._stt_texts = ["원문 텍스트"]
         handler._stt_ready_event.set()
         handler._committed_speech_started_at = time.time() - 2.0
         handler._committed_speech_stopped_at = time.time() - 0.5
@@ -386,30 +386,67 @@ class TestHandleInputTranscriptionForChatApi:
         await handler._handle_input_transcription_completed({"transcript": "안녕하세요"})
 
         assert handler._stt_ready_event.is_set()
-        assert handler._stt_text == "안녕하세요"
+        assert handler._stt_texts == ["안녕하세요"]
 
     @pytest.mark.asyncio
-    async def test_sets_empty_text_and_event_on_blocklist_match(self):
-        """블록리스트에 매칭되면 빈 텍스트 + event 설정 (번역 skip)."""
+    async def test_accumulates_multiple_stt_segments(self):
+        """연속 발화 시 STT 텍스트가 누적된다."""
+        chat_mock = _make_chat_translator_mock()
+        handler = _make_handler(chat_translator=chat_mock)
+
+        # 2개의 연속 세그먼트 STT
+        await handler._handle_input_transcription_completed({"transcript": "안녕하세요"})
+        await handler._handle_input_transcription_completed({"transcript": "반갑습니다"})
+
+        assert handler._stt_texts == ["안녕하세요", "반갑습니다"]
+
+    @pytest.mark.asyncio
+    async def test_sets_event_only_when_all_pending_commits_done(self):
+        """pending_stt_count가 0이 될 때만 event가 설정된다."""
+        chat_mock = _make_chat_translator_mock()
+        handler = _make_handler(chat_translator=chat_mock)
+
+        # 2개의 commit 대기 중
+        handler._pending_stt_count = 2
+        handler._stt_ready_event.clear()
+
+        # 첫 번째 STT 도착 → 아직 1개 남음
+        await handler._handle_input_transcription_completed({"transcript": "첫 번째"})
+        assert not handler._stt_ready_event.is_set()
+        assert handler._pending_stt_count == 1
+
+        # 두 번째 STT 도착 → 모두 완료
+        await handler._handle_input_transcription_completed({"transcript": "두 번째"})
+        assert handler._stt_ready_event.is_set()
+        assert handler._pending_stt_count == 0
+
+    @pytest.mark.asyncio
+    async def test_does_not_accumulate_blocked_stt(self):
+        """블록리스트에 매칭된 STT는 누적하지 않되, 카운터는 감소한다."""
         chat_mock = _make_chat_translator_mock()
         call = _make_call()
         handler = _make_handler(call=call, chat_translator=chat_mock)
+
+        handler._pending_stt_count = 1
 
         await handler._handle_input_transcription_completed(
             {"transcript": "MBC 뉴스 이덕영입니다"}
         )
 
         assert handler._stt_ready_event.is_set()
-        assert handler._stt_text == ""
+        assert handler._stt_texts == []  # blocked, not accumulated
         assert handler._stt_blocked is True
+        assert handler._pending_stt_count == 0
         assert call.call_metrics.hallucinations_blocked == 1
 
     @pytest.mark.asyncio
-    async def test_sets_empty_text_and_event_on_noise_stt(self):
-        """노이즈 STT(자음 스팸 등) 시 빈 텍스트 + event 설정."""
+    async def test_does_not_accumulate_noise_stt(self):
+        """노이즈 STT(자음 스팸 등)는 누적하지 않되, 카운터는 감소한다."""
         chat_mock = _make_chat_translator_mock()
         call = _make_call()
         handler = _make_handler(call=call, chat_translator=chat_mock)
+
+        handler._pending_stt_count = 1
 
         # 자음만 (Korean Jamo consonants)
         await handler._handle_input_transcription_completed(
@@ -417,39 +454,42 @@ class TestHandleInputTranscriptionForChatApi:
         )
 
         assert handler._stt_ready_event.is_set()
-        assert handler._stt_text == ""
+        assert handler._stt_texts == []  # noise, not accumulated
         assert handler._stt_blocked is True
+        assert handler._pending_stt_count == 0
         assert call.call_metrics.hallucinations_blocked == 1
 
     @pytest.mark.asyncio
-    async def test_sets_empty_text_on_empty_transcript(self):
-        """빈 transcript 수신 시 빈 텍스트 + event 설정."""
+    async def test_decrements_counter_on_empty_transcript(self):
+        """빈 transcript 수신 시 카운터만 감소하고 event 설정."""
         chat_mock = _make_chat_translator_mock()
         handler = _make_handler(chat_translator=chat_mock)
+
+        handler._pending_stt_count = 1
 
         await handler._handle_input_transcription_completed({"transcript": ""})
 
         assert handler._stt_ready_event.is_set()
-        assert handler._stt_text == ""
+        assert handler._stt_texts == []
+        assert handler._pending_stt_count == 0
 
 
 class TestNotifySpeechStartedChatApi:
-    """Chat API 모드에서 notify_speech_started()의 STT 이벤트 리셋 검증."""
+    """Chat API 모드에서 notify_speech_started()의 STT 누적 동작 검증."""
 
     @pytest.mark.asyncio
-    async def test_clears_stt_event_on_new_speech(self):
-        """새 발화 시작 시 _stt_ready_event가 클리어된다."""
+    async def test_preserves_accumulated_stt_on_new_speech(self):
+        """연속 발화 시 이전 STT 텍스트가 보존된다 (누적 방식)."""
         chat_mock = _make_chat_translator_mock()
         handler = _make_handler(chat_translator=chat_mock, use_local_vad=True)
 
-        # 이전 턴에서 설정된 상태 시뮬레이션
-        handler._stt_ready_event.set()
-        handler._stt_text = "이전 텍스트"
+        # 이전 세그먼트에서 누적된 STT
+        handler._stt_texts = ["이전 텍스트"]
 
         await handler.notify_speech_started()
 
-        assert not handler._stt_ready_event.is_set()
-        assert handler._stt_text == ""
+        # 누적 데이터는 보존됨 (연속 발화 지원)
+        assert handler._stt_texts == ["이전 텍스트"]
 
     @pytest.mark.asyncio
     async def test_clears_stt_blocked_flag(self):
@@ -464,15 +504,127 @@ class TestNotifySpeechStartedChatApi:
         assert handler._stt_blocked is False
 
     @pytest.mark.asyncio
-    async def test_server_vad_clears_stt_event_on_speech_started(self):
-        """Server VAD speech_started에서도 _stt_ready_event가 클리어된다."""
+    async def test_server_vad_preserves_accumulated_stt(self):
+        """Server VAD speech_started에서도 누적 STT가 보존된다."""
         chat_mock = _make_chat_translator_mock()
         handler = _make_handler(chat_translator=chat_mock, use_local_vad=False)
 
-        handler._stt_ready_event.set()
-        handler._stt_text = "이전 텍스트"
+        handler._stt_texts = ["이전 텍스트"]
 
         await handler._handle_speech_started({})
 
+        # 연속 발화 누적 지원: 텍스트 보존
+        assert handler._stt_texts == ["이전 텍스트"]
+
+
+class TestContinuousSpeechAccumulation:
+    """연속 발화 시 STT 누적 + 결합 번역 시나리오 검증."""
+
+    @pytest.mark.asyncio
+    async def test_two_segments_accumulated_and_translated(self):
+        """2개의 연속 세그먼트가 누적되어 결합 문장으로 번역된다."""
+        call = _make_call()
+        chat_mock = _make_chat_translator_mock(translated_text="Hello nice to meet you")
+        handler = _make_handler(call=call, chat_translator=chat_mock, use_local_vad=True)
+
+        # Seg1: STT 도착 (이전 translate가 취소된 후)
+        handler._stt_texts = ["안녕하세요"]
+
+        # Seg2: commit + STT 도착
+        handler._pending_stt_count = 1
+        handler._stt_ready_event.clear()
+
+        await handler._handle_input_transcription_completed({"transcript": "반갑습니다"})
+
+        # 모든 pending commit 완료 → event 설정
+        assert handler._stt_ready_event.is_set()
+        assert handler._stt_texts == ["안녕하세요", "반갑습니다"]
+
+        # 번역 실행
+        handler._committed_speech_started_at = time.time() - 3.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+        await handler._translate_via_chat_api()
+
+        # 결합된 텍스트로 번역
+        chat_mock.translate.assert_awaited_once_with("안녕하세요 반갑습니다")
+        # 번역 후 누적 데이터 초기화
+        assert handler._stt_texts == []
+        assert handler._pending_stt_count == 0
+
+    @pytest.mark.asyncio
+    async def test_three_segments_with_pending_counter(self):
+        """3개의 세그먼트: 카운터가 0이 될 때만 event가 설정된다."""
+        chat_mock = _make_chat_translator_mock()
+        handler = _make_handler(chat_translator=chat_mock, use_local_vad=True)
+
+        # 3개의 commit 대기 중
+        handler._pending_stt_count = 3
+        handler._stt_ready_event.clear()
+
+        # STT 1
+        await handler._handle_input_transcription_completed({"transcript": "or can you"})
         assert not handler._stt_ready_event.is_set()
-        assert handler._stt_text == ""
+        assert handler._pending_stt_count == 2
+
+        # STT 2
+        await handler._handle_input_transcription_completed({"transcript": "tell me what kind"})
+        assert not handler._stt_ready_event.is_set()
+        assert handler._pending_stt_count == 1
+
+        # STT 3
+        await handler._handle_input_transcription_completed({"transcript": "of bag you had"})
+        assert handler._stt_ready_event.is_set()
+        assert handler._pending_stt_count == 0
+        assert handler._stt_texts == ["or can you", "tell me what kind", "of bag you had"]
+
+    @pytest.mark.asyncio
+    async def test_mixed_blocked_and_valid_segments(self):
+        """blocked STT + 정상 STT 혼합 시 정상 텍스트만 누적된다."""
+        call = _make_call()
+        chat_mock = _make_chat_translator_mock(translated_text="예약 가능합니다")
+        handler = _make_handler(call=call, chat_translator=chat_mock, use_local_vad=True)
+
+        handler._pending_stt_count = 2
+        handler._stt_ready_event.clear()
+
+        # Seg1: 노이즈 (blocked)
+        await handler._handle_input_transcription_completed({"transcript": "ㅋ"})
+        assert not handler._stt_ready_event.is_set()
+        assert handler._stt_texts == []  # 노이즈는 누적 안됨
+
+        # Seg2: 정상 텍스트
+        await handler._handle_input_transcription_completed({"transcript": "Yes, it is available"})
+        assert handler._stt_ready_event.is_set()
+        assert handler._stt_texts == ["Yes, it is available"]
+
+    @pytest.mark.asyncio
+    async def test_translate_clears_accumulator_on_success(self):
+        """번역 성공 후 누적 데이터가 초기화된다."""
+        call = _make_call()
+        chat_mock = _make_chat_translator_mock(translated_text="OK")
+        handler = _make_handler(call=call, chat_translator=chat_mock, use_local_vad=True)
+
+        handler._stt_texts = ["확인"]
+        handler._stt_ready_event.set()
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._translate_via_chat_api()
+
+        assert handler._stt_texts == []
+        assert handler._pending_stt_count == 0
+
+    @pytest.mark.asyncio
+    async def test_translate_clears_accumulator_on_timeout(self):
+        """STT 타임아웃 시에도 누적 데이터가 초기화된다."""
+        chat_mock = _make_chat_translator_mock()
+        handler = _make_handler(chat_translator=chat_mock, use_local_vad=True)
+
+        handler._stt_texts = ["stale text"]
+        handler._pending_stt_count = 1
+
+        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+            await handler._translate_via_chat_api()
+
+        assert handler._stt_texts == []
+        assert handler._pending_stt_count == 0

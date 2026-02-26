@@ -457,7 +457,11 @@ class TextToVoicePipeline(BasePipeline):
         )
 
     async def _on_session_b_original_caption(self, role: str, text: str) -> None:
-        self._last_recipient_stt = text  # 원본 STT 캐시 (컨텍스트 주입용)
+        # 원본 STT 누적 (연속 발화 시 세그먼트별 STT를 결합하여 컨텍스트 주입)
+        if self._last_recipient_stt:
+            self._last_recipient_stt += " " + text
+        else:
+            self._last_recipient_stt = text
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.CAPTION_ORIGINAL,
