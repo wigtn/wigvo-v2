@@ -6,8 +6,8 @@
     height=6.5cm,
     xlabel={Utterance Length (characters)},
     ylabel={Session B E2E Latency (ms)},
-    xmin=0, xmax=130,
-    ymin=0, ymax=11000,
+    xmin=0, xmax=550,
+    ymin=0, ymax=17000,
     grid=major,
     grid style={gray!30},
     tick label style={font=\footnotesize},
@@ -21,21 +21,21 @@
 % Scatter points
 \addplot[only marks, mark=*, mark size=1.5pt,
     green!60, fill opacity=0.5, draw opacity=0.3]
-    table[col sep=comma, x=char_len, y=latency_ms] {data/figure4_scatter.csv};
+    table[col sep=comma, x=char_len, y=latency_ms] {data/figure4_scatter_feb23_26.csv};
 \addlegendentry{Individual turns}
 
 % Regression line
-\addplot[red, thick, no markers, domain=0:130, samples=2]
+\addplot[red, thick, no markers, domain=0:550, samples=2]
     {\FigFourSlope*x + \FigFourIntercept};
 \addlegendentry{Linear regression}
 
 % 95% CI upper bound (named path)
-\addplot[name path=upper, draw=none, domain=0:130, samples=50]
+\addplot[name path=upper, draw=none, domain=0:550, samples=50]
     {\FigFourSlope*x + \FigFourIntercept
      + 1.96*\FigFourSE*sqrt(1/\FigFourN + (x-\FigFourXMean)^2/\FigFourSSXX)};
 
 % 95% CI lower bound (named path)
-\addplot[name path=lower, draw=none, domain=0:130, samples=50]
+\addplot[name path=lower, draw=none, domain=0:550, samples=50]
     {max(0, \FigFourSlope*x + \FigFourIntercept
      - 1.96*\FigFourSE*sqrt(1/\FigFourN + (x-\FigFourXMean)^2/\FigFourSSXX))};
 
