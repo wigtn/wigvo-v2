@@ -48,15 +48,18 @@ class FullAgentPipeline(TextToVoicePipeline):
 
     # --- Agent Mode 피드백 루프 ---
 
-    async def _on_turn_complete(self, role: str, text: str) -> None:
-        """번역 완료 시 컨텍스트 추가 + Agent 피드백 루프.
+    async def _on_recipient_turn_complete(self, role: str, text: str) -> None:
+        """Recipient turn 완료 → 원본 STT 컨텍스트 추가 + Agent 피드백 루프.
 
-        수신자 발화가 번역되면 Session A에 전달하여
+        컨텍스트에는 원본 STT(target language)를 저장하고,
+        Session A에는 번역된 텍스트(source language)를 전달하여
         AI가 대화를 이어갈 수 있도록 한다.
         """
-        self.context_manager.add_turn(role, text)
-        if role == "recipient":
-            await self._forward_recipient_to_session_a(text)
+        original = self._last_recipient_stt or text
+        self.context_manager.add_turn(role, original)
+        self._last_recipient_stt = ""
+        # Agent 피드백: 번역된 텍스트를 Session A에 전달 (AI가 이해할 수 있는 언어)
+        await self._forward_recipient_to_session_a(text)
         await self._send_metrics_snapshot()
 
     async def _forward_recipient_to_session_a(self, text: str) -> None:

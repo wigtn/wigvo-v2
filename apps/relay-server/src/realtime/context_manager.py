@@ -35,7 +35,7 @@ class ConversationContextManager:
 
         Args:
             role: "user" 또는 "recipient"
-            text: 번역된 텍스트
+            text: 원본 언어 텍스트 (user=source language, recipient=target language)
         """
         text = text.strip()
         if not text:

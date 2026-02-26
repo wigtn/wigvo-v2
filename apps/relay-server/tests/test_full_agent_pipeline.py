@@ -106,7 +106,7 @@ class TestFullAgentFeedbackLoop:
         router.session_a.is_generating = False
         router.session_a.send_user_text = AsyncMock()
 
-        await router._on_turn_complete("recipient", "네, 예약 가능합니다")
+        await router._on_recipient_turn_complete("recipient", "네, 예약 가능합니다")
 
         router.session_a.send_user_text.assert_called_once()
         sent = router.session_a.send_user_text.call_args[0][0]
@@ -121,7 +121,7 @@ class TestFullAgentFeedbackLoop:
         router.session_a.is_generating = False
         router.session_a.send_user_text = AsyncMock()
 
-        await router._on_turn_complete("user", "Hello")
+        await router._on_user_turn_complete("user", "Hello")
 
         router.session_a.send_user_text.assert_not_called()
 
@@ -134,7 +134,7 @@ class TestFullAgentFeedbackLoop:
         router.session_a.wait_for_done = AsyncMock()
         router.session_a.send_user_text = AsyncMock()
 
-        await router._on_turn_complete("recipient", "test reply")
+        await router._on_recipient_turn_complete("recipient", "test reply")
 
         router.session_a.wait_for_done.assert_called_once_with(timeout=5.0)
 
@@ -146,7 +146,7 @@ class TestFullAgentFeedbackLoop:
         router.session_a.is_generating = False
         router.session_a.send_user_text = AsyncMock()
 
-        await router._on_turn_complete("recipient", "네, 도와드릴게요")
+        await router._on_recipient_turn_complete("recipient", "네, 도와드릴게요")
 
         assert any(
             h["role"] == "recipient" and "네, 도와드릴게요" in h["text"]
@@ -193,7 +193,7 @@ class TestFullAgentFeedbackIntegration:
         router.session_a.send_user_text = AsyncMock()
         router.session_a.mark_generating = MagicMock()
 
-        await router._on_turn_complete("recipient", "Yes, we have a table available")
+        await router._on_recipient_turn_complete("recipient", "Yes, we have a table available")
 
         sent = router.session_a.send_user_text.call_args[0][0]
         assert sent == "[Recipient says]: Yes, we have a table available"
@@ -207,7 +207,7 @@ class TestFullAgentFeedbackIntegration:
         router.session_a.send_user_text = AsyncMock()
         router.session_a.mark_generating = MagicMock()
 
-        await router._on_turn_complete("user", "Make a reservation for 4 people")
+        await router._on_user_turn_complete("user", "Make a reservation for 4 people")
 
         router.session_a.send_user_text.assert_not_called()
         router.session_a.mark_generating.assert_not_called()
@@ -221,7 +221,7 @@ class TestFullAgentFeedbackIntegration:
         router.session_a.send_user_text = AsyncMock()
         router.session_a.mark_generating = MagicMock()
 
-        await router._on_turn_complete("recipient", "test reply")
+        await router._on_recipient_turn_complete("recipient", "test reply")
 
         router.session_a.mark_generating.assert_called_once()
 
@@ -236,9 +236,33 @@ class TestFullAgentFeedbackIntegration:
         router.context_manager = MagicMock()
         router.context_manager.add_turn = MagicMock()
 
-        await router._on_turn_complete("recipient", "some text")
+        await router._on_recipient_turn_complete("recipient", "some text")
 
         router.context_manager.add_turn.assert_called_once_with("recipient", "some text")
+
+    @pytest.mark.asyncio
+    async def test_context_uses_original_stt_not_translated(self):
+        """컨텍스트에는 원본 STT가 저장되고, Session A에는 번역된 텍스트가 전달된다."""
+        router = _make_router()
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.send_user_text = AsyncMock()
+        router.session_a.mark_generating = MagicMock()
+        router.context_manager = MagicMock()
+        router.context_manager.add_turn = MagicMock()
+
+        # 원본 STT 캐시 설정 (수신자가 영어로 말함)
+        router._last_recipient_stt = "Yes, we have a table"
+        # 번역된 텍스트 (Chat API가 한국어로 번역)
+        await router._on_recipient_turn_complete("recipient", "네, 테이블이 있습니다")
+
+        # 컨텍스트: 원본 STT (영어)
+        router.context_manager.add_turn.assert_called_once_with(
+            "recipient", "Yes, we have a table"
+        )
+        # Session A 전달: 번역된 텍스트 (한국어) — Agent가 이해할 수 있도록
+        sent = router.session_a.send_user_text.call_args[0][0]
+        assert "네, 테이블이 있습니다" in sent
 
     def test_echo_gate_max_capped_inherited_from_t2v(self):
         """FullAgent는 T2V를 상속하므로 echo gate max=5.0이다."""

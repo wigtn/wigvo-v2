@@ -77,6 +77,11 @@ class TextToVoicePipeline(BasePipeline):
         # 타이핑 필러: 통화당 1회만 전송
         self._typing_filler_sent = False
 
+        # 원본 텍스트 캐시 (컨텍스트 주입용)
+        # 번역된 텍스트 대신 원본 언어 텍스트를 저장하여 Session A/B 언어 혼선 방지
+        self._last_user_text: str = ""
+        self._last_recipient_stt: str = ""
+
         # Per-response instruction override (hskim 이식)
         self._strict_relay_instruction = (
             f"Translate the user's message from {call.source_language} to "
@@ -109,7 +114,7 @@ class TextToVoicePipeline(BasePipeline):
             on_guardrail_corrected_tts=self._on_guardrail_corrected_tts,
             on_guardrail_event=self._on_guardrail_event,
             on_function_call_result=self._on_function_call_result,
-            on_transcript_complete=self._on_turn_complete,
+            on_transcript_complete=self._on_user_turn_complete,
         )
 
         # Session B Chat API 번역 (할루시네이션 방지: Realtime STT + Chat API 번역 분리)
@@ -132,7 +137,7 @@ class TextToVoicePipeline(BasePipeline):
             on_original_caption=self._on_session_b_original_caption,
             on_recipient_speech_started=self._on_recipient_started,
             on_recipient_speech_stopped=self._on_recipient_stopped,
-            on_transcript_complete=self._on_turn_complete,
+            on_transcript_complete=self._on_recipient_turn_complete,
             on_caption_done=self._on_session_b_caption_done,
             use_local_vad=settings.local_vad_enabled,
             context_prune_keep=0,
@@ -298,6 +303,7 @@ class TextToVoicePipeline(BasePipeline):
         race condition (conversation_already_has_active_response)을 방지한다.
         """
         self._typing_filler_sent = False
+        self._last_user_text = text  # 원본 캐시 (컨텍스트 주입용)
         async with self._text_send_lock:
             self.call.transcript_history.append({"role": "user", "text": text})
             self.session_a.mark_user_input()
@@ -451,6 +457,7 @@ class TextToVoicePipeline(BasePipeline):
         )
 
     async def _on_session_b_original_caption(self, role: str, text: str) -> None:
+        self._last_recipient_stt = text  # 원본 STT 캐시 (컨텍스트 주입용)
         await self._app_ws_send(
             WsMessage(
                 type=WsMessageType.CAPTION_ORIGINAL,
@@ -499,8 +506,26 @@ class TextToVoicePipeline(BasePipeline):
 
     # --- 대화 컨텍스트 ---
 
-    async def _on_turn_complete(self, role: str, text: str) -> None:
-        self.context_manager.add_turn(role, text)
+    async def _on_user_turn_complete(self, role: str, text: str) -> None:
+        """User turn 완료 → 원본 텍스트(source language)를 컨텍스트에 추가.
+
+        Session A는 번역된 텍스트(target language)를 전달하지만,
+        컨텍스트에는 원본 텍스트(source language)를 저장하여 언어 혼선을 방지한다.
+        """
+        original = self._last_user_text or text
+        self.context_manager.add_turn(role, original)
+        self._last_user_text = ""
+        await self._send_metrics_snapshot()
+
+    async def _on_recipient_turn_complete(self, role: str, text: str) -> None:
+        """Recipient turn 완료 → 원본 STT(target language)를 컨텍스트에 추가.
+
+        Session B는 번역된 텍스트(source language)를 전달하지만,
+        컨텍스트에는 원본 STT(target language)를 저장하여 언어 혼선을 방지한다.
+        """
+        original = self._last_recipient_stt or text
+        self.context_manager.add_turn(role, original)
+        self._last_recipient_stt = ""
         await self._send_metrics_snapshot()
 
     # --- Guardrail 콜백 ---
