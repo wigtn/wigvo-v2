@@ -87,7 +87,9 @@ class TextToVoicePipeline(BasePipeline):
             f"Translate the user's message from {call.source_language} to "
             f"{call.target_language} and speak ONLY that translated sentence. "
             f"Do NOT answer the question, do NOT add any extra words, "
-            f"do NOT ask follow-up questions."
+            f"do NOT ask follow-up questions. "
+            f"Even for single words or very short phrases, translate them literally. "
+            f"NEVER generate greetings, introductions, or system descriptions."
         )
 
         # Guardrail (PRD Phase 4 / M-2)
@@ -103,6 +105,8 @@ class TextToVoicePipeline(BasePipeline):
         self.context_manager = ConversationContextManager(max_turns=2)
 
         # Session A 핸들러: User text → 번역 TTS → Twilio
+        # Relay: context_prune_keep=0 — 매 턴 이전 아이템 전부 삭제 (첫 인사 리크 + 컨텍스트 할루시네이션 방지)
+        # Agent: context_prune_keep=1 — AI가 대화 연속성을 유지해야 함
         self.session_a = SessionAHandler(
             session=dual_session.session_a,
             call=call,
@@ -115,6 +119,7 @@ class TextToVoicePipeline(BasePipeline):
             on_guardrail_event=self._on_guardrail_event,
             on_function_call_result=self._on_function_call_result,
             on_transcript_complete=self._on_user_turn_complete,
+            context_prune_keep=0 if call.mode == CallMode.RELAY else 1,
         )
 
         # Session B Chat API 번역 (할루시네이션 방지: Realtime STT + Chat API 번역 분리)
@@ -318,6 +323,10 @@ class TextToVoicePipeline(BasePipeline):
                     data={"state": "processing"},
                 )
             )
+
+            # 이전 턴의 대화 아이템 삭제 → 첫 인사 리크 + 컨텍스트 할루시네이션 방지
+            # Relay: keep=0 (전부 삭제), Agent: keep=1 (최신 1개 유지)
+            await self.session_a.prune_before_response()
 
             await self.context_manager.inject_context(self.dual_session.session_a)
 

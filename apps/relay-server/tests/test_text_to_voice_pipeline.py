@@ -219,6 +219,7 @@ class TestTextToVoiceTextHandling:
         router = _make_router(mode=CallMode.RELAY)
         router.session_a = MagicMock()
         router.session_a.is_generating = False
+        router.session_a.prune_before_response = AsyncMock()
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = False
         router.context_manager = MagicMock()
@@ -241,6 +242,7 @@ class TestTextToVoiceTextHandling:
         router.session_a = MagicMock()
         router.session_a.is_generating = False
         router.session_a.send_user_text = AsyncMock()
+        router.session_a.prune_before_response = AsyncMock()
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = False
         router.context_manager = MagicMock()
@@ -258,6 +260,7 @@ class TestTextToVoiceTextHandling:
         router = _make_router()
         router.session_a = MagicMock()
         router.session_a.is_generating = False
+        router.session_a.prune_before_response = AsyncMock()
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = True
         router.context_manager = MagicMock()
@@ -429,6 +432,63 @@ class TestTextToVoiceInterruptGuard:
         assert router.echo_gate._max_echo_window_s == 5.0
 
 
+class TestTextToVoiceContextHallucination:
+    """Session A 컨텍스트 할루시네이션 방지 검증."""
+
+    def test_relay_mode_context_prune_keep_zero(self):
+        """Relay 모드에서 context_prune_keep=0 (매 턴 이전 아이템 전부 삭제)."""
+        router = _make_router(mode=CallMode.RELAY)
+        assert router.session_a._context_prune_keep == 0
+
+    def test_agent_mode_context_prune_keep_one(self):
+        """Agent 모드에서 context_prune_keep=1 (대화 연속성 유지)."""
+        router = _make_router(mode=CallMode.AGENT)
+        assert router.session_a._context_prune_keep == 1
+
+    @pytest.mark.asyncio
+    async def test_prune_called_before_inject_context(self):
+        """handle_user_text()에서 prune_before_response가 inject_context 전에 호출된다."""
+        router = _make_router(mode=CallMode.RELAY)
+        call_order = []
+        router.session_a = MagicMock()
+        router.session_a.is_generating = False
+        router.session_a.mark_generating = MagicMock()
+
+        async def mock_prune():
+            call_order.append("prune")
+
+        async def mock_inject(session):
+            call_order.append("inject")
+
+        router.session_a.prune_before_response = mock_prune
+        router.context_manager = MagicMock()
+        router.context_manager.inject_context = mock_inject
+
+        await router.handle_user_text("Go.")
+
+        assert call_order == ["prune", "inject"]
+
+    @pytest.mark.asyncio
+    async def test_prune_removes_first_message_items(self):
+        """prune_before_response가 첫 인사 메시지 아이템을 삭제한다."""
+        router = _make_router(mode=CallMode.RELAY)
+        sa = router._pipeline.session_a
+        # 첫 인사 메시지로 생성된 아이템 시뮬레이션
+        sa._conversation_item_ids = ["item_greeting_1", "item_greeting_2", "item_greeting_3"]
+
+        await sa.prune_before_response()
+
+        # context_prune_keep=0이므로 모든 아이템 삭제 시도
+        assert sa._conversation_item_ids == []
+
+    def test_strict_relay_instruction_anti_hallucination(self):
+        """per-response instruction에 anti-hallucination 규칙이 포함된다."""
+        router = _make_router(mode=CallMode.RELAY)
+        instruction = router._pipeline._strict_relay_instruction
+        assert "literally" in instruction
+        assert "NEVER generate greetings" in instruction
+
+
 class TestTextToVoiceTypingFiller:
     """타이핑 필러 1회 제한 + 리셋 검증."""
 
@@ -455,6 +515,7 @@ class TestTextToVoiceTypingFiller:
         router.session_a.is_generating = False
         router.session_a.wait_for_done = AsyncMock()
         router.session_a.mark_generating = MagicMock()
+        router.session_a.prune_before_response = AsyncMock()
         router.context_manager = MagicMock()
         router.context_manager.inject_context = AsyncMock()
 

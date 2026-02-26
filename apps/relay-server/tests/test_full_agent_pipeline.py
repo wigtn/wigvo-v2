@@ -164,6 +164,7 @@ class TestFullAgentTextHandling:
         router.session_a = MagicMock()
         router.session_a.is_generating = False
         router.session_a.send_user_text = AsyncMock()
+        router.session_a.prune_before_response = AsyncMock()
         router.interrupt = MagicMock()
         router.interrupt.is_recipient_speaking = False
         router.context_manager = MagicMock()
