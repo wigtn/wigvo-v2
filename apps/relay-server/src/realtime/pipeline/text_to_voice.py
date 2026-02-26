@@ -309,6 +309,7 @@ class TextToVoicePipeline(BasePipeline):
         """
         self._typing_filler_sent = False
         self._last_user_text = text  # 원본 캐시 (컨텍스트 주입용)
+        self.session_a.set_last_user_stt(text)  # T2V: 원본 텍스트를 transcript_bilingual에 보존
         async with self._text_send_lock:
             self.call.transcript_history.append({"role": "user", "text": text})
             self.session_a.mark_user_input()
@@ -548,6 +549,7 @@ class TextToVoicePipeline(BasePipeline):
     async def _on_guardrail_corrected_tts(self, corrected_text: str) -> None:
         logger.info("Guardrail: re-generating TTS with corrected text: '%s'", corrected_text[:60])
         await self.dual_session.session_a.send_text(corrected_text)
+        self.session_a.mark_generating()
 
     async def _on_guardrail_event(self, event_data: dict) -> None:
         self.call.guardrail_events_log.append(event_data)

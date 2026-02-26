@@ -251,6 +251,10 @@ class SessionBHandler:
         self._last_recipient_stt: str = ""
         # STT 블록리스트/노이즈 매칭 시 대응하는 번역도 차단하기 위한 플래그
         self._stt_blocked: bool = False
+        # STT↔번역 순서 경쟁 방지: create_response() 전 clear, STT 완료 시 set
+        # _save_transcript_and_notify()가 _stt_blocked 체크 전 이 이벤트를 대기
+        self._stt_check_done = asyncio.Event()
+        self._stt_check_done.set()  # 초기 상태: 대기 불필요
         # STT latency 임시 저장: E2E와 동시에 기록하여 리스트 정합성 보장
         self._pending_stt_ms: float = 0.0
 
@@ -586,6 +590,12 @@ class SessionBHandler:
 
     async def _save_transcript_and_notify(self, transcript: str) -> None:
         """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
+        # STT↔번역 순서 경쟁 방지: STT 블록리스트 판정 완료까지 대기
+        # (번역이 STT보다 먼저 도착하면 _stt_blocked가 아직 설정되지 않아 우회됨)
+        try:
+            await asyncio.wait_for(self._stt_check_done.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            logger.warning("[SessionB] STT check wait timeout (2s) — proceeding without blocklist gate")
         # STT 블록리스트/노이즈 매칭 시 대응하는 번역도 차단
         if self._stt_blocked:
             self._stt_blocked = False
@@ -719,6 +729,7 @@ class SessionBHandler:
         self._is_response_active = False
         self._response_done_event.set()
         self._stt_blocked = False  # 안전 리셋
+        self._stt_check_done.set()  # 안전 리셋 (STT 이벤트 누락 시 대비)
 
         if self._call:
             response = event.get("response", {})
@@ -901,6 +912,7 @@ class SessionBHandler:
                         self._response_debounce_s * 1000,
                     )
 
+                self._stt_check_done.clear()  # STT 블록리스트 판정 완료까지 번역 대기
                 self._is_response_active = True
                 self._response_done_event.clear()
                 await self.session.create_response(instructions=self._translation_instruction)
@@ -1069,6 +1081,7 @@ class SessionBHandler:
                     await self.session.clear_input_buffer()
                     await self.session.commit_audio_only()
 
+                self._stt_check_done.clear()  # STT 블록리스트 판정 완료까지 번역 대기
                 self._is_response_active = True
                 self._response_done_event.clear()
                 await self.session.create_response(instructions=self._translation_instruction)
@@ -1092,87 +1105,93 @@ class SessionBHandler:
 
         Chat API 모드: STT 텍스트를 _stt_texts에 누적하고 _pending_stt_count가 0이 되면
         _stt_ready_event를 set하여 _translate_via_chat_api()의 대기를 해제한다.
+
+        V2V 모드: _stt_check_done을 set하여 _save_transcript_and_notify()의 대기를 해제.
+        번역(response.audio_transcript.done)이 STT보다 먼저 도착해도 블록리스트 판정을 보장.
         """
-        transcript = event.get("transcript", "")
-        if not transcript:
-            if self._chat_translator:
-                self._decrement_pending_stt()
-            return
-        # Whisper STT 할루시네이션 필터링 (구두점 정규화: "감사합니다!" → "감사합니다")
-        if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST:
-            logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
-            self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
-            if self._call:
-                self._call.call_metrics.hallucinations_blocked += 1
-            if self._chat_translator:
-                self._decrement_pending_stt()  # blocked STT는 누적하지 않되, 카운터는 감소
-            return
-        # 구조적 노이즈 필터 (자음 스팸, 반복 패턴, 단일 문자)
-        if _is_noise_stt(transcript):
-            logger.warning("[SessionB] Noise STT filtered: %s", transcript[:80])
-            self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
-            if self._call:
-                self._call.call_metrics.hallucinations_blocked += 1
-            if self._chat_translator:
-                self._decrement_pending_stt()
-            return
-        # 영어 할루시네이션 필터 (수신자가 영어가 아닐 때만 적용)
-        # target_language=en이면 수신자가 영어를 말하므로 영어 STT는 정상 → 필터 스킵
-        # target_language=ko/ja/zh 등이면 영어 STT는 Whisper 할루시네이션 → 차단
-        if self._call and not self._call.target_language.startswith("en"):
-            if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST_EN:
-                logger.warning("[SessionB] EN STT hallucination blocked: %s", transcript[:80])
-                self._stt_blocked = True
+        try:
+            transcript = event.get("transcript", "")
+            if not transcript:
+                if self._chat_translator:
+                    self._decrement_pending_stt()
+                return
+            # Whisper STT 할루시네이션 필터링 (구두점 정규화: "감사합니다!" → "감사합니다")
+            if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST:
+                logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
+                self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                if self._chat_translator:
+                    self._decrement_pending_stt()  # blocked STT는 누적하지 않되, 카운터는 감소
+                return
+            # 구조적 노이즈 필터 (자음 스팸, 반복 패턴, 단일 문자)
+            if _is_noise_stt(transcript):
+                logger.warning("[SessionB] Noise STT filtered: %s", transcript[:80])
+                self._stt_blocked = True  # 대응하는 번역도 차단 (V2V용)
                 if self._call:
                     self._call.call_metrics.hallucinations_blocked += 1
                 if self._chat_translator:
                     self._decrement_pending_stt()
                 return
-            if _is_english_short_hallucination(transcript):
-                logger.warning("[SessionB] EN short hallucination blocked: %s", transcript[:80])
-                self._stt_blocked = True
-                if self._call:
-                    self._call.call_metrics.hallucinations_blocked += 1
-                if self._chat_translator:
-                    self._decrement_pending_stt()
-                return
-        # Post-echo settling 보호: settling 직후 ≤2단어 STT → 노이즈 할루시네이션
-        if self._post_echo:
-            words = transcript.strip().split()
-            if len(words) <= 2:
-                logger.warning("[SessionB] Post-echo STT filtered (≤2 words): %s", transcript[:80])
-                self._stt_blocked = True
-                if self._call:
-                    self._call.call_metrics.hallucinations_blocked += 1
-                if self._chat_translator:
-                    self._decrement_pending_stt()
-                return
-            # 유효한 STT (>2단어) 통과 → post_echo 리셋
-            self._post_echo = False
-        self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
+            # 영어 할루시네이션 필터 (수신자가 영어가 아닐 때만 적용)
+            # target_language=en이면 수신자가 영어를 말하므로 영어 STT는 정상 → 필터 스킵
+            # target_language=ko/ja/zh 등이면 영어 STT는 Whisper 할루시네이션 → 차단
+            if self._call and not self._call.target_language.startswith("en"):
+                if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST_EN:
+                    logger.warning("[SessionB] EN STT hallucination blocked: %s", transcript[:80])
+                    self._stt_blocked = True
+                    if self._call:
+                        self._call.call_metrics.hallucinations_blocked += 1
+                    if self._chat_translator:
+                        self._decrement_pending_stt()
+                    return
+                if _is_english_short_hallucination(transcript):
+                    logger.warning("[SessionB] EN short hallucination blocked: %s", transcript[:80])
+                    self._stt_blocked = True
+                    if self._call:
+                        self._call.call_metrics.hallucinations_blocked += 1
+                    if self._chat_translator:
+                        self._decrement_pending_stt()
+                    return
+            # Post-echo settling 보호: settling 직후 ≤2단어 STT → 노이즈 할루시네이션
+            if self._post_echo:
+                words = transcript.strip().split()
+                if len(words) <= 2:
+                    logger.warning("[SessionB] Post-echo STT filtered (≤2 words): %s", transcript[:80])
+                    self._stt_blocked = True
+                    if self._call:
+                        self._call.call_metrics.hallucinations_blocked += 1
+                    if self._chat_translator:
+                        self._decrement_pending_stt()
+                    return
+                # 유효한 STT (>2단어) 통과 → post_echo 리셋
+                self._post_echo = False
+            self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
 
-        # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제
-        if self._chat_translator:
-            self._stt_texts.append(transcript)
-            self._decrement_pending_stt()
-            logger.debug(
-                "[SessionB] STT accumulated (%d texts, %d pending): %s",
-                len(self._stt_texts), self._pending_stt_count, transcript[:60],
-            )
+            # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제
+            if self._chat_translator:
+                self._stt_texts.append(transcript)
+                self._decrement_pending_stt()
+                logger.debug(
+                    "[SessionB] STT accumulated (%d texts, %d pending): %s",
+                    len(self._stt_texts), self._pending_stt_count, transcript[:60],
+                )
 
-        if self._output_suppressed:
-            self._pending_output.append(("original_caption", ("recipient", transcript)))
-            return
-        if self._committed_speech_started_at > 0:
-            stt_ms = (time.time() - self._committed_speech_started_at) * 1000
-            logger.info("[SessionB] Original STT (Stage 1, stt=%.0fms): %s", stt_ms, transcript[:80])
-            # STT latency를 임시 저장 — E2E 기록 시 함께 append하여 리스트 정합성 보장
-            self._pending_stt_ms = stt_ms
-            if self._call and self._committed_speech_stopped_at > 0:
-                after_stop_ms = (time.time() - self._committed_speech_stopped_at) * 1000
-                if after_stop_ms > 0:
-                    self._call.call_metrics.session_b_stt_after_stop_ms.append(after_stop_ms)
-        else:
-            logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
-        if self._on_original_caption:
-            await self._on_original_caption("recipient", transcript)
+            if self._output_suppressed:
+                self._pending_output.append(("original_caption", ("recipient", transcript)))
+                return
+            if self._committed_speech_started_at > 0:
+                stt_ms = (time.time() - self._committed_speech_started_at) * 1000
+                logger.info("[SessionB] Original STT (Stage 1, stt=%.0fms): %s", stt_ms, transcript[:80])
+                # STT latency를 임시 저장 — E2E 기록 시 함께 append하여 리스트 정합성 보장
+                self._pending_stt_ms = stt_ms
+                if self._call and self._committed_speech_stopped_at > 0:
+                    after_stop_ms = (time.time() - self._committed_speech_stopped_at) * 1000
+                    if after_stop_ms > 0:
+                        self._call.call_metrics.session_b_stt_after_stop_ms.append(after_stop_ms)
+            else:
+                logger.info("[SessionB] Original STT (Stage 1): %s", transcript[:80])
+            if self._on_original_caption:
+                await self._on_original_caption("recipient", transcript)
+        finally:
+            self._stt_check_done.set()

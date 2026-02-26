@@ -68,6 +68,7 @@ class SessionAHandler:
         self._on_guardrail_corrected_tts = on_guardrail_corrected_tts
         self._on_guardrail_event = on_guardrail_event
         self._is_generating = False
+        self._response_expected = False  # 명시적 create_response 호출 시만 True
         self._done_event = asyncio.Event()
         self._done_event.set()  # 초기 상태: 생성 중 아님
 
@@ -144,6 +145,7 @@ class SessionAHandler:
         (conversation_already_has_active_response race condition 방지)
         """
         self._is_generating = True
+        self._response_expected = True
         self._done_event.clear()
 
     # --- User 음성/텍스트 입력 ---
@@ -153,21 +155,33 @@ class SessionAHandler:
         await self.session.send_audio(audio_b64)
 
     async def commit_user_audio(self) -> None:
-        """Client VAD가 발화 종료를 감지하면 오디오를 커밋한다."""
+        """Client VAD가 발화 종료를 감지하면 오디오를 커밋한다.
+
+        commit_audio()가 내부적으로 response.create를 호출하므로 mark_generating() 처리.
+        """
         self._user_input_at = time.time()
         self._audio_committed_at = time.time()
         # 이전 턴의 대화 아이템 삭제 → GPT-4o가 현재 오디오에만 집중
         await self._prune_conversation_items(keep_last=self._context_prune_keep)
         await self.session.commit_audio()
+        self.mark_generating()
 
     async def send_user_text(self, text: str) -> None:
-        """User 텍스트를 Session A에 전달 (Agent Mode / Push-to-Talk)."""
+        """User 텍스트를 Session A에 전달 (Agent Mode / Push-to-Talk).
+
+        send_text()가 내부적으로 response.create를 호출하므로 mark_generating() 처리.
+        """
         self._user_input_at = time.time()
         await self.session.send_text(text)
+        self.mark_generating()
 
     def mark_user_input(self) -> None:
         """User 입력 시점을 기록한다 (Text 모드에서 파이프라인이 호출)."""
         self._user_input_at = time.time()
+
+    def set_last_user_stt(self, text: str) -> None:
+        """T2V: 사용자 입력 원문을 설정한다 (transcript_bilingual original_text 보존)."""
+        self._last_user_stt = text
 
     async def wait_for_done(self, timeout: float = 5.0) -> bool:
         """응답 생성 완료를 대기한다. 이미 완료 상태면 즉시 반환."""
@@ -180,6 +194,7 @@ class SessionAHandler:
     async def cancel(self) -> None:
         """진행 중인 TTS를 중단한다 (Interrupt)."""
         self._is_generating = False
+        self._response_expected = False
         self._done_event.set()
         if self._guardrail:
             self._guardrail.reset()
@@ -192,7 +207,16 @@ class SessionAHandler:
         """Session A TTS 오디오 청크 -> Twilio로 전달.
 
         PRD M-2: Level 3인 경우 오디오를 Twilio로 전달하지 않음.
+        예상치 못한 응답(OpenAI 자발적 생성)은 즉시 취소하여 할루시네이션 방지.
         """
+        # 예상치 못한 응답 가드: 명시적 create_response 없이 도착한 응답은 즉시 취소
+        if not self._response_expected:
+            logger.warning("[SessionA] Unexpected response detected — cancelling to prevent hallucination")
+            await self.session.cancel_response()
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
+            return
+
         # 성능 계측: 응답의 첫 번째 TTS 청크 → 번역 레이턴시 기록
         if not self._first_audio_received:
             self._first_audio_received = True
@@ -302,6 +326,7 @@ class SessionAHandler:
     async def _handle_response_done(self, event: dict[str, Any]) -> None:
         """Session A 응답 완료 + cost token 추적."""
         self._is_generating = False
+        self._response_expected = False
         self._done_event.set()
 
         # Cost token 추적

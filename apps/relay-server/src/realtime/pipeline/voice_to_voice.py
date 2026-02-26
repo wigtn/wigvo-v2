@@ -545,6 +545,7 @@ class VoiceToVoicePipeline(BasePipeline):
     async def _on_guardrail_corrected_tts(self, corrected_text: str) -> None:
         logger.info("Guardrail: re-generating TTS with corrected text: '%s'", corrected_text[:60])
         await self.dual_session.session_a.send_text(corrected_text)
+        self.session_a.mark_generating()
 
     async def _on_guardrail_event(self, event_data: dict) -> None:
         self.call.guardrail_events_log.append(event_data)
