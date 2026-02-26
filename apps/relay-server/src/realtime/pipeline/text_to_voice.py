@@ -162,9 +162,10 @@ class TextToVoicePipeline(BasePipeline):
             session_b=self.session_b,
             local_vad=self.local_vad,
             call_metrics=self.call.call_metrics,
-            echo_margin_s=0.3,
+            echo_margin_s=0.5,  # 0.3→0.5: echo gate breakthrough 감소
             max_echo_window_s=5.0,
             settling_s=settings.echo_post_settling_s,
+            on_breakthrough=self._on_echo_breakthrough,
         )
 
         # Interrupt debounce: 노이즈에 의한 즉시 TTS 취소 방지 (400ms 대기 후 확인)
@@ -219,6 +220,17 @@ class TextToVoicePipeline(BasePipeline):
         await self.recovery_a.stop()
         await self.recovery_b.stop()
         logger.info("TextToVoicePipeline stopped for call %s", self.call.call_id)
+
+    # --- Echo Gate Breakthrough 콜백 ---
+
+    async def _on_echo_breakthrough(self) -> None:
+        """Echo gate breakthrough 감지 — 에코 오염 버퍼 폐기."""
+        try:
+            logger.warning("Echo gate breakthrough — discarding contaminated buffers")
+            await self.session_b.clear_input_buffer()
+            self.session_b.clear_pending_output()
+        except Exception:
+            logger.exception("Error handling echo gate breakthrough")
 
     # --- User App -> Session A (텍스트 입력) ---
 

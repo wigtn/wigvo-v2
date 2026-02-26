@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Coroutine
 
 from src.config import settings
 from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
@@ -41,9 +41,10 @@ class EchoGateManager:
         session_b: SessionBHandler,
         local_vad: LocalVAD | None,
         call_metrics: CallMetrics,
-        echo_margin_s: float = 0.3,
+        echo_margin_s: float = 0.5,
         max_echo_window_s: float | None = 1.2,
-        settling_s: float = 2.0,
+        settling_s: float = 3.0,
+        on_breakthrough: Callable[[], Coroutine] | None = None,
     ):
         self._session_b = session_b
         self._local_vad = local_vad
@@ -51,6 +52,7 @@ class EchoGateManager:
         self._echo_margin_s = echo_margin_s
         self._max_echo_window_s = max_echo_window_s
         self._settling_s = settling_s
+        self._on_breakthrough = on_breakthrough
 
         self._in_echo_window = False
         self._settling_until: float = 0.0
@@ -115,6 +117,9 @@ class EchoGateManager:
                 )
                 self._call_metrics.echo_gate_breakthroughs += 1
                 self._deactivate()
+                # Breakthrough 콜백: 에코 오염 버퍼 폐기
+                if self._on_breakthrough is not None:
+                    asyncio.create_task(self._on_breakthrough())
                 return audio_bytes
             return b"\xff" * len(audio_bytes)
         return audio_bytes

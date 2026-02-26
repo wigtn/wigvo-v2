@@ -13,6 +13,7 @@ import logging
 import time
 from typing import Any, Callable, Coroutine
 
+from src.config import settings
 from src.guardrail.checker import GuardrailChecker, GuardrailLevel
 from src.realtime.sessions.session_manager import RealtimeSession
 from src.tools.executor import FunctionExecutor
@@ -38,6 +39,7 @@ class SessionAHandler:
         on_function_call_result: Callable[[str, dict], Coroutine] | None = None,
         on_transcript_complete: Callable[[str, str], Coroutine] | None = None,
         on_user_transcription: Callable[[str], Coroutine] | None = None,
+        context_prune_keep: int = 1,
     ):
         """
         Args:
@@ -52,6 +54,7 @@ class SessionAHandler:
             on_guardrail_event: Guardrail 이벤트 로그 콜백 (App에 디버그 알림)
             on_function_call_result: Function Call 결과 콜백 (Agent Mode, result + args)
             on_transcript_complete: 번역 완료 콜백 (role, text → 대화 컨텍스트 추적)
+            context_prune_keep: 유지할 최근 대화 아이템 수 (컨텍스트 프루닝)
         """
         self.session = session
         self._call = call
@@ -90,6 +93,14 @@ class SessionAHandler:
         # 번역 품질 평가용: User STT 원문 임시 저장
         self._last_user_stt: str = ""
 
+        # Anti-Hallucination: 대화 아이템 트래킹 + 프루닝
+        # 매 턴 시작 전 이전 턴의 아이템을 삭제하여 GPT-4o가 오디오에만 집중하도록 함
+        self._context_prune_keep = context_prune_keep
+        self._conversation_item_ids: list[str] = []
+
+        # Anti-Hallucination: 발화 길이 대비 번역 비율 검증 (chars/sec)
+        self._audio_committed_at: float = 0.0
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -107,6 +118,9 @@ class SessionAHandler:
             "conversation.item.input_audio_transcription.completed",
             self._handle_user_transcription,
         )
+
+        # 대화 아이템 트래킹 (프루닝용)
+        self.session.on("conversation.item.created", self._handle_item_created)
 
         # Function Calling 이벤트 (Agent Mode)
         self.session.on(
@@ -141,6 +155,9 @@ class SessionAHandler:
     async def commit_user_audio(self) -> None:
         """Client VAD가 발화 종료를 감지하면 오디오를 커밋한다."""
         self._user_input_at = time.time()
+        self._audio_committed_at = time.time()
+        # 이전 턴의 대화 아이템 삭제 → GPT-4o가 현재 오디오에만 집중
+        await self._prune_conversation_items(keep_last=self._context_prune_keep)
         await self.session.commit_audio()
 
     async def send_user_text(self, text: str) -> None:
@@ -235,6 +252,20 @@ class SessionAHandler:
         if not transcript:
             return
 
+        # Anti-Hallucination: 발화 길이 대비 번역 비율 검증 (chars/sec)
+        if self._audio_committed_at > 0:
+            speech_s = time.time() - self._audio_committed_at
+            if speech_s > 0 and len(transcript) / speech_s > settings.hallucination_max_chars_per_sec:
+                logger.warning(
+                    "[SessionA] Suspicious translation rate (%.1f chars/%.1fs = %.1f c/s): %s",
+                    len(transcript), speech_s, len(transcript) / speech_s, transcript[:80],
+                )
+                self._audio_committed_at = 0.0
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                return
+            self._audio_committed_at = 0.0
+
         logger.info("[SessionA] Translation complete: %s", transcript[:80])
 
         # 양방향 transcript 저장 (Session A: user 발화 → 번역)
@@ -309,6 +340,9 @@ class SessionAHandler:
     async def _handle_user_speech_stopped(self, event: dict[str, Any]) -> None:
         """Server VAD가 User 발화 종료를 감지."""
         self._user_input_at = time.time()
+        self._audio_committed_at = time.time()
+        # Server VAD 모드: 이전 턴 아이템 삭제 (response.create 자동 호출 전)
+        await self._prune_conversation_items(keep_last=self._context_prune_keep)
         logger.debug("[SessionA] User speech stopped")
 
     async def _handle_user_transcription(self, event: dict[str, Any]) -> None:
@@ -320,6 +354,44 @@ class SessionAHandler:
         logger.info("[SessionA] User STT: %s", transcript[:80])
         if self._on_user_transcription:
             await self._on_user_transcription(transcript)
+
+    # --- 대화 아이템 트래킹 + 프루닝 ---
+
+    async def _handle_item_created(self, event: dict[str, Any]) -> None:
+        """대화 아이템 생성 이벤트 → ID 추적."""
+        item = event.get("item", {})
+        item_id = item.get("id", "")
+        if item_id:
+            self._conversation_item_ids.append(item_id)
+
+    async def _prune_conversation_items(self, keep_last: int = 1) -> None:
+        """이전 턴의 대화 아이템을 삭제하여 컨텍스트 기반 할루시네이션을 방지한다.
+
+        GPT-4o Realtime은 세션 내 대화 아이템이 누적되면 오디오 대신
+        대화 흐름에서 "논리적으로 맞는" 번역을 생성하는 문제가 있다.
+        매 턴 시작 전 이전 아이템을 삭제하여 모델이 현재 오디오에만 집중하도록 한다.
+
+        Args:
+            keep_last: 유지할 최근 아이템 수 (1 = 최신 컨텍스트 주입 아이템만 유지)
+        """
+        if len(self._conversation_item_ids) <= keep_last:
+            return
+        if keep_last > 0:
+            to_delete = self._conversation_item_ids[:-keep_last]
+            self._conversation_item_ids = self._conversation_item_ids[-keep_last:]
+        else:
+            to_delete = self._conversation_item_ids[:]
+            self._conversation_item_ids = []
+        for item_id in to_delete:
+            try:
+                await self.session.delete_item(item_id)
+            except Exception:
+                logger.debug("[SessionA] Failed to delete item %s", item_id)
+        logger.info("[SessionA] Pruned %d old conversation items (kept %d)", len(to_delete), keep_last)
+
+    async def prune_before_response(self) -> None:
+        """T2V/Agent 파이프라인이 create_response 호출 전에 프루닝을 수행한다."""
+        await self._prune_conversation_items(keep_last=self._context_prune_keep)
 
     # --- Function Calling 핸들러 (Agent Mode) ---
 

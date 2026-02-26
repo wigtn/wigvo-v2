@@ -56,6 +56,33 @@ def _normalize_for_blocklist(text: str) -> str:
     """블록리스트 비교용 정규화: strip + 구두점 제거."""
     return text.strip().translate(_PUNCT_STRIP)
 
+
+def _is_noise_stt(text: str) -> bool:
+    """STT 결과가 구조적 노이즈(자음 스팸, 반복 패턴, 단일 문자)인지 판별한다."""
+    stripped = text.strip()
+    if not stripped:
+        return True
+
+    non_space = stripped.replace(" ", "")
+
+    # 1. 자음만 (Korean Jamo consonants U+3131~U+314E)
+    if non_space and all("\u3131" <= c <= "\u314E" for c in non_space):
+        return True
+
+    # 2. 짧은 패턴 반복 (패턴 길이 1~6자, 3회 이상)
+    for plen in range(1, min(7, len(non_space) // 2 + 1)):
+        pat = non_space[:plen]
+        reps = len(non_space) // plen
+        if reps >= 3 and pat * reps == non_space[:plen * reps]:
+            return True
+
+    # 3. 단일 문자
+    if len(non_space) <= 1:
+        return True
+
+    return False
+
+
 # 최소 E2E 임계값 (ms): 네트워크 RTT + STT + 번역 처리 최소 시간
 # debounce(300ms) + speech(250ms) + 처리 → 이보다 빠른 응답은 할루시네이션
 _MIN_E2E_MS = 500
@@ -136,6 +163,8 @@ class SessionBHandler:
 
         # 번역 품질 평가용: Recipient STT 원문 임시 저장
         self._last_recipient_stt: str = ""
+        # STT 블록리스트/노이즈 매칭 시 대응하는 번역도 차단하기 위한 플래그
+        self._stt_blocked: bool = False
         # STT latency 임시 저장: E2E와 동시에 기록하여 리스트 정합성 보장
         self._pending_stt_ms: float = 0.0
 
@@ -430,6 +459,15 @@ class SessionBHandler:
 
     async def _save_transcript_and_notify(self, transcript: str) -> None:
         """번역 완료 텍스트를 저장하고 컨텍스트 콜백을 호출한다."""
+        # STT 블록리스트/노이즈 매칭 시 대응하는 번역도 차단
+        if self._stt_blocked:
+            self._stt_blocked = False
+            logger.info("[SessionB] Translation discarded (STT was blocklist-matched)")
+            self._pending_stt_ms = 0.0
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
+            return
+
         # --- Stage 2 Anti-Hallucination 필터 ---
 
         # 1) [unclear] 변형 패턴 필터링 (모델이 다양한 표현으로 "못 알아들었다"를 출력)
@@ -537,6 +575,7 @@ class SessionBHandler:
         """Session B 응답 완료 + cost token 추적."""
         self._is_response_active = False
         self._response_done_event.set()
+        self._stt_blocked = False  # 안전 리셋
 
         if self._call:
             response = event.get("response", {})
@@ -745,13 +784,21 @@ class SessionBHandler:
         transcript = event.get("transcript", "")
         if not transcript:
             return
-        self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장
         # Whisper STT 할루시네이션 필터링 (구두점 정규화: "감사합니다!" → "감사합니다")
         if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST:
             logger.warning("[SessionB] STT hallucination blocked: %s", transcript[:80])
+            self._stt_blocked = True  # 대응하는 번역도 차단
             if self._call:
                 self._call.call_metrics.hallucinations_blocked += 1
             return
+        # 구조적 노이즈 필터 (자음 스팸, 반복 패턴, 단일 문자)
+        if _is_noise_stt(transcript):
+            logger.warning("[SessionB] Noise STT filtered: %s", transcript[:80])
+            self._stt_blocked = True  # 대응하는 번역도 차단
+            if self._call:
+                self._call.call_metrics.hallucinations_blocked += 1
+            return
+        self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
         if self._output_suppressed:
             self._pending_output.append(("original_caption", ("recipient", transcript)))
             return
