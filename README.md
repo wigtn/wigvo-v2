@@ -146,7 +146,7 @@ Three communication modes are implemented as independent pipeline strategies, sh
 AudioRouter (thin delegator, ~160 lines)
     │
     ├── VoiceToVoicePipeline  ← Echo Gate + Silence Injection + full audio path
-    ├── TextToVoicePipeline   ← Per-response instruction override + text-only Session B
+    ├── TextToVoicePipeline   ← Chat API translation (Session B) + per-response instruction (Session A)
     └── FullAgentPipeline     ← Function calling + autonomous AI conversation
 ```
 
@@ -158,7 +158,7 @@ To be explicit about our technical boundaries:
 
 | Layer | Who Built It | WIGVO's Role |
 |-------|-------------|--------------|
-| STT + Translation + TTS | **OpenAI** (GPT-4o Realtime API) | Consumer — we call the API |
+| STT + Translation + TTS | **OpenAI** (GPT-4o Realtime API + GPT-4o-mini Chat API) | Consumer — we call the API |
 | Phone network bridging | **Twilio** (Media Streams) | Consumer — we use their SIP trunking |
 | PSTN echo cancellation | **WIGVO** | Built from scratch (Silence Injection + Dynamic Cooldown) |
 | Local VAD for PSTN | **WIGVO** | Built from scratch (Silero integration + 2-stage pipeline) |
@@ -485,7 +485,7 @@ Session B runs a local Silero neural VAD on incoming Twilio audio, replacing Ope
 | **Web App** | Next.js 16, React 19, shadcn/ui, Zustand | SSR, real-time UI updates |
 | **Mobile App** | React Native, Expo SDK 54 | Cross-platform, expo-av for audio |
 | **Realtime AI** | OpenAI Realtime API (GPT-4o) | Sub-second STT + Translation + TTS |
-| **Chat AI** | GPT-4o-mini | Cost-efficient data collection |
+| **Chat AI** | GPT-4o-mini | Cost-efficient data collection + T2V/Agent translation |
 | **Local VAD** | Silero VAD (lightweight RNN) | PSTN-grade speech detection |
 | **Telephony** | Twilio (REST + Media Streams) | Reliable phone call infrastructure |
 | **Database** | Supabase (PostgreSQL + Auth + RLS) | Real-time subscriptions, row-level security |
@@ -516,8 +516,9 @@ apps/
 │   │   │   ├── pipeline/            # Strategy pattern — mode-specific pipelines
 │   │   │   │   ├── base.py          # BasePipeline ABC
 │   │   │   │   ├── voice_to_voice.py # V2V (Echo Gate + Silence Injection)
-│   │   │   │   ├── text_to_voice.py  # T2V (per-response instruction, text-only B)
+│   │   │   │   ├── text_to_voice.py  # T2V (Chat API translation + per-response instruction)
 │   │   │   │   └── full_agent.py     # Agent (function calling, autonomous)
+│   │   │   ├── chat_translator.py    # Chat API translator (GPT-4o-mini, T2V/Agent Session B)
 │   │   │   ├── audio_router.py      # Thin delegator → pipeline selection
 │   │   │   ├── local_vad.py         # Silero neural VAD + RMS energy gate
 │   │   │   ├── audio_utils.py       # Shared mu-law audio utilities

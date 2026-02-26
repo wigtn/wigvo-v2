@@ -38,10 +38,11 @@ src/
 │   │   ├── __init__.py      # Pipeline module documentation + mode mapping
 │   │   ├── base.py          # BasePipeline ABC (common interface)
 │   │   ├── voice_to_voice.py # VoiceToVoicePipeline (Echo Gate + full audio)
-│   │   ├── text_to_voice.py  # TextToVoicePipeline (Echo Gate + per-response instruction + text-only B)
+│   │   ├── text_to_voice.py  # TextToVoicePipeline (Chat API translation + per-response instruction)
 │   │   ├── full_agent.py     # FullAgentPipeline (Function Calling + autonomous AI)
 │   │   └── echo_gate.py      # EchoGateManager (V2V/T2V shared echo prevention)
 │   │
+│   ├── chat_translator.py   # ChatTranslator — GPT-4o-mini Chat API translation (T2V/Agent Session B)
 │   ├── audio_router.py      # AudioRouter — thin delegator (Pipeline selection + common lifecycle)
 │   ├── local_vad.py         # Local VAD — Silero + RMS server-side voice detection
 │   ├── audio_utils.py       # Shared mu-law -> linear PCM conversion + RMS calculation
@@ -126,6 +127,7 @@ class BasePipeline(ABC):
 | **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
 | **Session A turn_detection** | client/server VAD | `null` (manual) | `null` (manual) |
 | **Session B modalities** | `['text', 'audio']` | **`['text']`** | **`['text']`** |
+| **Session B translation** | Realtime API (gpt-4o-realtime) | **Chat API (gpt-4o-mini)** | **Chat API (gpt-4o-mini)** |
 | **Session B -> App audio** | Sent | N/A (text only) | N/A (text only) |
 | **Silence Injection** | **Active** | **Active** | Not needed |
 | **Echo Gate** | Active | **Active** | Not needed |
@@ -146,7 +148,9 @@ Session A: User -> Recipient (source -> target translation)
 
 Session B: Recipient -> User (target -> source translation)
   - Input: g711_ulaw (from Twilio)
-  - Output: pcm16 (to App) or text-only (T2V/Agent)
+  - STT: Realtime API (Whisper) for all modes
+  - Translation: Realtime API (V2V) or Chat API/gpt-4o-mini (T2V/Agent)
+  - Output: pcm16 (to App, V2V) or text-only caption (T2V/Agent)
 ```
 
 The reason for separating the two sessions: to prevent confusion of translation direction. If merged into a single session, source/target languages get mixed up.
@@ -257,17 +261,23 @@ Twilio                    Relay Server                      App
  │                      v                                     │
  │              OpenAI Session B                               │
  │                      │                                     │
- │  ┌── Voice mode ─────┼──── Text mode ──────────┐           │
+ │  ┌── V2V mode ──────┼──── T2V/Agent mode ─────┐           │
  │  │                   │                         │           │
- │  │ response.audio_   │  response.text.delta    │           │
- │  │ transcript.done   │  response.text.done     │           │
- │  │ + audio.delta     │  (no audio)             │           │
+ │  │ Realtime API      │  Realtime API           │           │
+ │  │ STT + Translation │  STT only               │           │
+ │  │ + TTS audio       │  (input_audio_trans-     │           │
+ │  │                   │   cription.completed)    │           │
+ │  │ response.audio_   │         │                │           │
+ │  │ transcript.done   │         ▼                │           │
+ │  │ + audio.delta     │  Chat API (gpt-4o-mini) │           │
+ │  │                   │  Translation only        │           │
+ │  │                   │  (no audio)              │           │
  │  │                   │                         │           │
  │  └───────────────────┼─────────────────────────┘           │
  │                      │                                     │
  │        ──────────────────────────────────────────────────> │
- │                   caption + audio (Voice)                   │
- │                   caption only   (Text)                     │
+ │                   caption + audio (V2V)                     │
+ │                   caption only   (T2V/Agent)                │
 ```
 
 ### Core Mechanisms
@@ -352,13 +362,28 @@ await session_a.send_text_item(
 )
 ```
 
-#### Session B Text-Only Modality
+#### Session B Chat API Translation (T2V/Agent)
 
-In TextToVoice/FullAgent, Session B is set to `modalities=['text']`:
-- **0 audio output tokens** (cost savings)
-- Receives translated text via `response.text.delta` / `response.text.done` events
-- Uses `response.text.*` handlers instead of `response.audio_transcript.*`
-- Note: `response.text.done` uses the `text` field (not `transcript`)
+In TextToVoice/FullAgent, Session B uses a **split STT + Chat API** architecture to prevent Realtime API hallucination:
+
+1. **STT**: Realtime API (Whisper) with `modalities=['text']` — audio transcription only
+   - `input_audio_transcription.completed` → raw STT text
+   - Blocklist/noise filtering applied before translation
+2. **Translation**: Chat API (`gpt-4o-mini`) via `ChatTranslator` class
+   - System prompt: "Translate only, no extra words"
+   - 2-turn sliding context window for consistency
+   - `context_prune_keep=0` — all Realtime context items pruned (prevents Realtime from generating its own translation)
+3. **Output**: Translated text → caption only (no audio tokens consumed)
+
+```
+Twilio audio → Realtime API (Whisper STT) → stt_text → ChatTranslator.translate()
+                                                              ↓
+                                               Chat API (gpt-4o-mini) → translated caption
+```
+
+**Why not Realtime API for translation?** Realtime API is a "generative" model — it adds context-based sentences even when instructed to translate only. Chat API with `temperature=0` strictly outputs the translation and nothing else.
+
+Config: `session_b_use_chat_translation=True`, `session_b_chat_translation_model=gpt-4o-mini`, `session_b_chat_translation_timeout_ms=3000`
 
 #### Interrupt (Turn Overlap Handling)
 
@@ -405,6 +430,8 @@ Text delta arrives (ahead of audio)
 |---|---|---|---|
 | Session A role | Voice translation | Text translation (strict) | AI autonomous conversation |
 | User input | Voice | Text | Text instructions |
+| Session B STT | Realtime (Whisper) | Realtime (Whisper) | Realtime (Whisper) |
+| Session B translation | **Realtime API** | **Chat API (gpt-4o-mini)** | **Chat API (gpt-4o-mini)** |
 | Session B output | Voice + text | Text only | Text only |
 | Session B -> A feedback | None | None | Recipient translation auto-forwarded |
 | Function Calling | Disabled | Disabled | Active |
@@ -475,6 +502,10 @@ Call sites: App WS disconnect, Twilio disconnect, status-callback, manual end, s
 | `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat timeout (seconds) |
 | **STT Model** | | |
 | `STT_MODEL` | `whisper-1` | STT model (unified for all modes, hallucination blocklist compatible) |
+| **Session B Chat Translation** | | |
+| `SESSION_B_USE_CHAT_TRANSLATION` | `true` | Enable Chat API translation for T2V/Agent Session B |
+| `SESSION_B_CHAT_TRANSLATION_MODEL` | `gpt-4o-mini` | Chat API model for Session B translation |
+| `SESSION_B_CHAT_TRANSLATION_TIMEOUT_MS` | `3000` | Chat API request timeout (ms) |
 | **Echo Prevention** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate cooldown (seconds, for fallback) |
 | `AUDIO_ENERGY_GATE_ENABLED` | `true` | Enable PSTN noise energy gate |
@@ -530,10 +561,11 @@ src/
 │   │   ├── __init__.py      # Pipeline 모듈 문서화 + 모드 매핑
 │   │   ├── base.py          # BasePipeline ABC (공통 인터페이스)
 │   │   ├── voice_to_voice.py # VoiceToVoicePipeline (Echo Gate + 전체 오디오)
-│   │   ├── text_to_voice.py  # TextToVoicePipeline (Echo Gate + per-response instruction + 텍스트 전용 B)
+│   │   ├── text_to_voice.py  # TextToVoicePipeline (Chat API 번역 + per-response instruction)
 │   │   ├── full_agent.py     # FullAgentPipeline (Function Calling + 자율 AI)
 │   │   └── echo_gate.py      # EchoGateManager (V2V/T2V 공유 에코 방지)
 │   │
+│   ├── chat_translator.py   # ChatTranslator — GPT-4o-mini Chat API 번역 (T2V/Agent Session B)
 │   ├── audio_router.py      # AudioRouter — 얇은 위임자 (Pipeline 선택 + 공통 생명주기)
 │   ├── local_vad.py         # Local VAD — Silero + RMS 서버 측 음성 감지
 │   ├── audio_utils.py       # 공유 mu-law → linear PCM 변환 + RMS 계산
@@ -618,6 +650,7 @@ class BasePipeline(ABC):
 | **Session A modalities** | `['text', 'audio']` | `['text', 'audio']` | `['text', 'audio']` |
 | **Session A turn_detection** | client/server VAD | `null` (manual) | `null` (manual) |
 | **Session B modalities** | `['text', 'audio']` | **`['text']`** | **`['text']`** |
+| **Session B 번역** | Realtime API (gpt-4o-realtime) | **Chat API (gpt-4o-mini)** | **Chat API (gpt-4o-mini)** |
 | **Session B → App 오디오** | 전송 | N/A (텍스트만) | N/A (텍스트만) |
 | **Silence Injection** | **활성** | **활성** | 불필요 |
 | **Echo Gate** | 활성 | **활성** | 불필요 |
@@ -638,7 +671,9 @@ Session A: User → 수신자 (source → target 번역)
 
 Session B: 수신자 → User (target → source 번역)
   - 입력: g711_ulaw (Twilio에서)
-  - 출력: pcm16 (App으로) 또는 text-only (T2V/Agent)
+  - STT: Realtime API (Whisper) 전 모드 동일
+  - 번역: Realtime API (V2V) 또는 Chat API/gpt-4o-mini (T2V/Agent)
+  - 출력: pcm16 (App, V2V) 또는 텍스트 자막만 (T2V/Agent)
 ```
 
 두 세션을 분리하는 이유: 번역 방향을 혼동하지 않기 위함. 단일 세션으로 합치면 source/target 언어가 뒤섞인다.
@@ -749,17 +784,22 @@ Twilio                    Relay Server                      App
  │                      ▼                                     │
  │              OpenAI Session B                               │
  │                      │                                     │
- │  ┌── Voice 모드 ─────┼──── Text 모드 ──────────┐           │
+ │  ┌── V2V 모드 ──────┼──── T2V/Agent 모드 ─────┐           │
  │  │                   │                         │           │
- │  │ response.audio_   │  response.text.delta    │           │
- │  │ transcript.done   │  response.text.done     │           │
- │  │ + audio.delta     │  (audio 없음)           │           │
+ │  │ Realtime API      │  Realtime API           │           │
+ │  │ STT + 번역        │  STT만                   │           │
+ │  │ + TTS 오디오      │  (input_audio_trans-     │           │
+ │  │                   │   cription.completed)    │           │
+ │  │ response.audio_   │         │                │           │
+ │  │ transcript.done   │         ▼                │           │
+ │  │ + audio.delta     │  Chat API (gpt-4o-mini) │           │
+ │  │                   │  번역만 (audio 없음)     │           │
  │  │                   │                         │           │
  │  └───────────────────┼─────────────────────────┘           │
  │                      │                                     │
  │        ────────────────────────────────────────────────────►│
- │                   caption + audio (Voice)                   │
- │                   caption only   (Text)                     │
+ │                   caption + audio (V2V)                     │
+ │                   caption only   (T2V/Agent)                │
 ```
 
 ### 핵심 메커니즘
@@ -844,13 +884,28 @@ await session_a.send_text_item(
 )
 ```
 
-#### Session B Text-Only Modality
+#### Session B Chat API 번역 (T2V/Agent)
 
-TextToVoice/FullAgent에서 Session B는 `modalities=['text']`로 설정되어:
-- **audio output 토큰 0** (비용 절약)
-- `response.text.delta` / `response.text.done` 이벤트로 번역 텍스트 수신
-- `response.audio_transcript.*` 대신 `response.text.*` 핸들러 사용
-- 주의: `response.text.done`은 `text` 필드 사용 (`transcript` 아님)
+TextToVoice/FullAgent에서 Session B는 Realtime API 할루시네이션 방지를 위해 **STT + Chat API 분리** 아키텍처를 사용한다:
+
+1. **STT**: Realtime API (Whisper), `modalities=['text']` — 음성 전사만
+   - `input_audio_transcription.completed` → 원문 STT 텍스트
+   - 블록리스트/노이즈 필터링 후 번역 단계 진입
+2. **번역**: Chat API (`gpt-4o-mini`) — `ChatTranslator` 클래스
+   - 시스템 프롬프트: "번역만, 추가 단어 없이"
+   - 2턴 슬라이딩 컨텍스트 윈도우로 번역 일관성 유지
+   - `context_prune_keep=0` — Realtime 컨텍스트 아이템 전부 삭제 (Realtime 자체 번역 생성 방지)
+3. **출력**: 번역 텍스트 → 자막만 (audio 토큰 0)
+
+```
+Twilio 오디오 → Realtime API (Whisper STT) → stt_text → ChatTranslator.translate()
+                                                              ↓
+                                               Chat API (gpt-4o-mini) → 번역 자막
+```
+
+**Realtime API 번역을 안 쓰는 이유**: Realtime API는 "생성" 모델 — 번역만 지시해도 맥락에 맞다고 판단하면 추가 문장을 생성한다. Chat API는 `temperature=0`으로 입력 텍스트만 번역하고 다른 내용을 추가하지 않는다.
+
+설정: `session_b_use_chat_translation=True`, `session_b_chat_translation_model=gpt-4o-mini`, `session_b_chat_translation_timeout_ms=3000`
 
 #### Interrupt (턴 겹침 처리)
 
@@ -897,6 +952,8 @@ TextToVoice/FullAgent에서 Session B는 `modalities=['text']`로 설정되어:
 |---|---|---|---|
 | Session A 역할 | 음성 번역 | 텍스트 번역 (strict) | AI 자율 대화 |
 | User 입력 | 음성 | 텍스트 | 텍스트 지시 |
+| Session B STT | Realtime (Whisper) | Realtime (Whisper) | Realtime (Whisper) |
+| Session B 번역 | **Realtime API** | **Chat API (gpt-4o-mini)** | **Chat API (gpt-4o-mini)** |
 | Session B 출력 | 음성 + 텍스트 | 텍스트만 | 텍스트만 |
 | Session B → A 피드백 | 없음 | 없음 | 수신자 번역 자동 전달 |
 | Function Calling | 비활성 | 비활성 | 활성 |
@@ -967,6 +1024,10 @@ _listen_tasks: dict[str, asyncio.Task]         # 세션 리스닝 태스크
 | `HEARTBEAT_TIMEOUT_S` | `120` | Heartbeat 타임아웃 (초) |
 | **STT 모델** | | |
 | `STT_MODEL` | `whisper-1` | STT 모델 (전 모드 통일, 할루시네이션 블록리스트 호환) |
+| **Session B Chat 번역** | | |
+| `SESSION_B_USE_CHAT_TRANSLATION` | `true` | T2V/Agent Session B Chat API 번역 활성화 |
+| `SESSION_B_CHAT_TRANSLATION_MODEL` | `gpt-4o-mini` | Session B 번역 Chat API 모델 |
+| `SESSION_B_CHAT_TRANSLATION_TIMEOUT_MS` | `3000` | Chat API 요청 타임아웃 (ms) |
 | **에코 방지** | | |
 | `ECHO_GATE_COOLDOWN_S` | `2.5` | Legacy Echo Gate 쿨다운 (초, 폴백용) |
 | `AUDIO_ENERGY_GATE_ENABLED` | `true` | PSTN 소음 에너지 게이트 활성화 |
