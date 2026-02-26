@@ -107,17 +107,20 @@ def setup_logging(
     # Clear any pre-existing handlers (e.g. basicConfig defaults)
     root.handlers.clear()
 
-    # CallContextFilter — 모든 LogRecord에 call_id/call_mode 자동 주입
-    root.addFilter(CallContextFilter())
+    # CallContextFilter — handler에 추가해야 propagation된 레코드에도 적용됨
+    # (root logger의 filter는 자식 로거에서 propagate된 레코드에 적용되지 않음)
+    ctx_filter = CallContextFilter()
 
     if is_cloud_run:
         handler = logging.StreamHandler()
         handler.setFormatter(CloudRunJsonFormatter())
+        handler.addFilter(ctx_filter)
         root.addHandler(handler)
     else:
         # Color console
         console = logging.StreamHandler()
         console.setFormatter(ColorConsoleFormatter(datefmt="%Y-%m-%d %H:%M:%S"))
+        console.addFilter(ctx_filter)
         root.addHandler(console)
 
         # File handlers
@@ -133,6 +136,7 @@ def setup_logging(
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         )
+        file_handler.addFilter(ctx_filter)
         root.addHandler(file_handler)
 
         error_handler = RotatingFileHandler(
@@ -145,6 +149,7 @@ def setup_logging(
         error_handler.setFormatter(
             logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         )
+        error_handler.addFilter(ctx_filter)
         root.addHandler(error_handler)
 
     # Propagate uvicorn loggers through root so they use our formatters

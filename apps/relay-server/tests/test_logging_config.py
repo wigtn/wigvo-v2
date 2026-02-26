@@ -155,8 +155,8 @@ class TestSetupLogging:
             root = logging.getLogger()
             assert len(root.handlers) == 1
             assert isinstance(root.handlers[0].formatter, CloudRunJsonFormatter)
-            # CallContextFilter on root
-            assert any(isinstance(f, CallContextFilter) for f in root.filters)
+            # CallContextFilter on handler (not root logger)
+            assert any(isinstance(f, CallContextFilter) for f in root.handlers[0].filters)
         # Cleanup
         setup_logging(log_level="INFO")
 
@@ -169,6 +169,34 @@ class TestSetupLogging:
             assert any(
                 isinstance(h.formatter, ColorConsoleFormatter) for h in root.handlers
             )
-            assert any(isinstance(f, CallContextFilter) for f in root.filters)
+            # CallContextFilter on handlers
+            assert any(
+                isinstance(f, CallContextFilter)
+                for h in root.handlers
+                for f in h.filters
+            )
+        # Cleanup
+        setup_logging(log_level="INFO")
+
+    def test_propagated_record_gets_call_id(self):
+        """자식 로거에서 propagate된 레코드에도 call_id가 주입되는지 확인."""
+        env = os.environ.copy()
+        env.pop("K_SERVICE", None)
+        with patch.dict(os.environ, env, clear=True):
+            setup_logging(log_level="INFO", log_dir="/tmp/test_logging_wigvo")
+
+            call_id_var.set("call_propagation_test")
+            call_mode_var.set("voice_to_voice")
+
+            child_logger = logging.getLogger("src.routes.test_child")
+            # Child logger should propagate to root → handler filter injects call_id
+            with patch.object(
+                logging.getLogger().handlers[0], "emit", wraps=logging.getLogger().handlers[0].emit
+            ) as mock_emit:
+                child_logger.info("test message from child")
+                assert mock_emit.called
+                record = mock_emit.call_args[0][0]
+                assert record.call_id == "call_propagation_test"
+                assert record.call_mode == "voice_to_voice"
         # Cleanup
         setup_logging(log_level="INFO")
