@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     # Local VAD (Silero VAD + RMS Energy Gate)
     local_vad_enabled: bool = True
     local_vad_rms_threshold: float = 200.0  # PSTN 배경 소음(50-200) 위로 설정하여 오감지 방지
-    local_vad_speech_threshold: float = 0.8  # 0.5→0.8: PSTN 최적화 (Server VAD와 동일)
+    local_vad_speech_threshold: float = 0.5  # 0.5→0.8→0.5: 작은 목소리 감지 개선 (RMS 500~1000 + Silero 0.5~0.7 구간)
     local_vad_silence_threshold: float = 0.35
     local_vad_min_speech_frames: int = 3    # 3 × 32ms = 96ms (할루시네이션 방지: 짧은 노이즈 무시)
     local_vad_min_silence_frames: int = 15  # 15 × 32ms = 480ms
