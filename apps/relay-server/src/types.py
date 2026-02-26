@@ -76,8 +76,8 @@ class CallStartRequest(BaseModel):
     call_id: str
     phone_number: str
     mode: CallMode = CallMode.RELAY
-    source_language: str = "en"
-    target_language: str = "ko"
+    source_language: str
+    target_language: str
     collected_data: dict[str, Any] | None = None
     vad_mode: VadMode = VadMode.CLIENT
     system_prompt_override: str | None = None

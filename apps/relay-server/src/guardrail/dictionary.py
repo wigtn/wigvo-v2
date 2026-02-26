@@ -95,5 +95,8 @@ def get_correction_map(language: str) -> dict[str, str]:
 
 
 def get_filler_text(language: str) -> str:
-    """특정 언어의 필러 텍스트를 반환한다."""
-    return FILLER_TEXT.get(language, FILLER_TEXT["ko"])
+    """특정 언어의 필러 텍스트를 반환한다.
+
+    미지원 언어는 영어로 fallback (한국어보다 범용적).
+    """
+    return FILLER_TEXT.get(language, FILLER_TEXT["en"])

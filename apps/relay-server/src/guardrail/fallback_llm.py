@@ -67,7 +67,7 @@ class FallbackLLM:
         self._model = model or settings.guardrail_fallback_model
         self._timeout_s = (timeout_ms or settings.guardrail_fallback_timeout_ms) / 1000
 
-    async def correct(self, text: str, language: str = "ko") -> str:
+    async def correct(self, text: str, language: str = "en") -> str:
         """텍스트를 교정한다.
 
         Args:
@@ -77,7 +77,7 @@ class FallbackLLM:
         Returns:
             교정된 텍스트. 타임아웃 또는 에러 시 원문 반환.
         """
-        system_prompt = _CORRECTION_PROMPTS.get(language, _CORRECTION_SYSTEM_PROMPT)
+        system_prompt = _CORRECTION_PROMPTS.get(language, _CORRECTION_PROMPTS["en"])
 
         start = time.monotonic()
         try:

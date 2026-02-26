@@ -89,3 +89,8 @@ class TestDictionary:
         assert get_filler_text("ko") == "잠시만요."
         assert get_filler_text("en") == "One moment, please."
         assert get_filler_text("ja") == "少々お待ちください。"
+
+    def test_filler_text_unknown_language_falls_back_to_english(self):
+        """Unknown language falls back to English (not Korean)."""
+        assert get_filler_text("xx") == "One moment, please."
+        assert get_filler_text("vi") == "One moment, please."
