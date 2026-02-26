@@ -492,9 +492,10 @@ class VoiceToVoicePipeline(BasePipeline):
 
     async def _on_local_vad_speech_start(self) -> None:
         """Local VAD가 수신자 발화 시작을 감지."""
+        post_echo = self.echo_gate.is_suppressing and not self.echo_gate.in_echo_window
         await self.echo_gate.break_settling()  # Settling 해제 (Silero 확인)
         self._pre_speech_buf.clear()  # settling breakthrough 시 오염 버퍼 폐기
-        await self.session_b.notify_speech_started()
+        await self.session_b.notify_speech_started(post_echo=post_echo)
 
     async def _on_local_vad_speech_end(self) -> None:
         """Local VAD가 수신자 발화 종료를 감지."""

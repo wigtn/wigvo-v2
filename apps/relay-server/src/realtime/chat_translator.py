@@ -69,7 +69,9 @@ class ChatTranslator:
             f"Translate the following text from {source_language} to {target_language}. "
             f"Output ONLY the translated sentence. "
             f"Do NOT add explanations, commentary, or extra words. "
-            f"If the input is unclear or meaningless, output [unclear]."
+            f"If the input is a single filler word, interjection, or very short phrase "
+            f"with no real meaning (e.g. 'So', 'Oh', 'Hmm', 'Yeah'), output [unclear]. "
+            f"If the input is garbled, meaningless, or unclear, output [unclear]."
         )
 
     async def translate(self, stt_text: str) -> ChatTranslationResult | None:

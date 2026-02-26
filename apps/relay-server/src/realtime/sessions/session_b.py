@@ -58,6 +58,76 @@ def _normalize_for_blocklist(text: str) -> str:
     return text.strip().translate(_PUNCT_STRIP)
 
 
+# Whisper 영어 할루시네이션 블록리스트
+# YouTube/팟캐스트 아웃트로 + 단일 단어 필러 (target_language=en일 때만 적용)
+_STT_HALLUCINATION_BLOCKLIST_EN = frozenset({
+    # YouTube / podcast outros
+    "Thank you.",
+    "Thank you",
+    "Thanks for watching.",
+    "Thanks for watching",
+    "Thanks for listening.",
+    "Thanks for listening",
+    "Please subscribe.",
+    "Please subscribe",
+    "Like and subscribe.",
+    "Like and subscribe",
+    "See you next time.",
+    "See you next time",
+    "See you in the next video.",
+    "See you in the next video",
+    # Single-word fillers (무음에서 자주 생성)
+    "you",
+    "You",
+    "So.",
+    "So",
+    "Bye.",
+    "Bye",
+    "Bye-bye.",
+    "Bye-bye",
+})
+
+# "Hi, [Name]" 패턴 — Whisper가 무음에서 생성하는 인사+이름 할루시네이션
+_EN_HI_NAME_RE = re.compile(r'^Hi,?\s+[A-Z][a-z]+\.?$')
+
+# 짧은 영어 공손 표현/인사/필러 (≤3단어, 소문자 비교)
+_EN_SHORT_POLITE = frozenset({
+    "thank you", "thanks", "yes", "no", "okay", "ok",
+    "bye", "goodbye", "hello", "hi", "sure", "right",
+    "yeah", "yep", "nope", "alright", "great",
+    "oh", "hmm", "uh", "um", "ah", "wow", "well",
+    "you too", "me too", "i see", "got it", "of course",
+})
+
+
+def _is_english_short_hallucination(text: str) -> bool:
+    """짧은 영어 할루시네이션 감지 (≤3단어 공손 표현/인사/필러 + Hi [Name] 패턴).
+
+    Whisper가 무음/저에너지 구간에서 자주 생성하는 짧은 영어 표현을 차단.
+    target_language가 영어일 때만 적용.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return False
+
+    # Remove trailing period for comparison
+    core = stripped.rstrip(".")
+    words = core.split()
+
+    if len(words) > 3:
+        return False
+
+    # "Hi, [Name]" pattern
+    if _EN_HI_NAME_RE.match(stripped):
+        return True
+
+    # Short polite/filler expressions
+    if core.lower() in _EN_SHORT_POLITE:
+        return True
+
+    return False
+
+
 def _is_noise_stt(text: str) -> bool:
     """STT 결과가 구조적 노이즈(자음 스팸, 반복 패턴, 단일 문자)인지 판별한다."""
     stripped = text.strip()
@@ -197,6 +267,8 @@ class SessionBHandler:
         self._stt_ready_event = asyncio.Event()
         # STT 누적 버퍼: 연속 발화 시 세그먼트별 STT를 누적하여 완전한 문장으로 번역
         self._stt_texts: list[str] = []
+        # Post-echo settling 보호: settling 직후 speech는 노이즈 할루시네이션 가능성 높음
+        self._post_echo: bool = False
         # commit_audio_only() 호출 횟수 대비 STT 도착 추적 (모든 STT 수신 후 번역 시작)
         self._pending_stt_count: int = 0
 
@@ -300,7 +372,7 @@ class SessionBHandler:
 
     # --- Local VAD 콜백 (외부에서 호출) ---
 
-    async def notify_speech_started(self, skip_clear: bool = False) -> None:
+    async def notify_speech_started(self, skip_clear: bool = False, post_echo: bool = False) -> None:
         """Local VAD가 수신자 발화 시작을 감지했을 때 호출한다.
 
         Server VAD의 _handle_speech_started와 동일한 로직을 수행하되,
@@ -310,11 +382,14 @@ class SessionBHandler:
             skip_clear: True면 입력 버퍼 클리어를 건너뛴다.
                 post-echo settling breakthrough 시 이미 버퍼를 클리어하고
                 큐잉된 오디오를 flush한 뒤 호출하므로 재클리어 방지.
+            post_echo: True면 post-echo settling 직후 발화.
+                ≤2단어 STT는 노이즈 할루시네이션으로 간주하여 차단.
         """
         # 축적된 무음/노이즈 제거 → Whisper 할루시네이션 방지
         if not skip_clear:
             await self.session.clear_input_buffer()
 
+        self._post_echo = post_echo
         self._speech_started_count += 1
         self._is_recipient_speaking = True
         self._speech_started_at = time.time()
@@ -509,6 +584,22 @@ class SessionBHandler:
             if self._call:
                 self._call.call_metrics.hallucinations_blocked += 1
             return
+
+        # 2b) 영어 번역 할루시네이션 필터 (target_language=en)
+        if self._call and self._call.target_language.startswith("en"):
+            normalized = _normalize_for_blocklist(transcript)
+            if normalized in _STT_HALLUCINATION_BLOCKLIST_EN:
+                logger.warning("[SessionB] EN translation hallucination blocked: %s", transcript[:80])
+                self._pending_stt_ms = 0.0
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                return
+            if _is_english_short_hallucination(transcript):
+                logger.warning("[SessionB] EN short translation blocked: %s", transcript[:80])
+                self._pending_stt_ms = 0.0
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                return
 
         # 3) 반복 패턴 감지 (동일 토큰 3회 이상 연속 반복)
         if _REPETITION_RE.search(transcript):
@@ -782,19 +873,22 @@ class SessionBHandler:
 
         # 누적된 STT 텍스트를 결합하여 완전한 문장으로 번역
         stt_text = " ".join(self._stt_texts).strip()
-        self._stt_texts.clear()
-        self._pending_stt_count = 0
         self._stt_blocked = False  # Chat API 경로: blocking은 누적 필터가 처리
 
         if not stt_text:
+            self._stt_texts.clear()
+            self._pending_stt_count = 0
             logger.info("[SessionB] Chat API: empty STT (all filtered) — skipping turn")
             return
 
         # 누적 원본 텍스트를 bilingual transcript용으로 저장
         self._last_recipient_stt = stt_text
 
-        # Chat API 번역
+        # Chat API 번역 — clear는 translate 완료 후 (취소 시 데이터 보존)
         result = await self._chat_translator.translate(stt_text)
+        self._stt_texts.clear()
+        self._pending_stt_count = 0
+
         if result is None:
             logger.error("[SessionB] Chat API translation failed — skipping turn")
             return
@@ -919,6 +1013,37 @@ class SessionBHandler:
             if self._chat_translator:
                 self._decrement_pending_stt()
             return
+        # 영어 할루시네이션 필터 (target_language=en일 때만 적용)
+        if self._call and self._call.target_language.startswith("en"):
+            if _normalize_for_blocklist(transcript) in _STT_HALLUCINATION_BLOCKLIST_EN:
+                logger.warning("[SessionB] EN STT hallucination blocked: %s", transcript[:80])
+                self._stt_blocked = True
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                if self._chat_translator:
+                    self._decrement_pending_stt()
+                return
+            if _is_english_short_hallucination(transcript):
+                logger.warning("[SessionB] EN short hallucination blocked: %s", transcript[:80])
+                self._stt_blocked = True
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                if self._chat_translator:
+                    self._decrement_pending_stt()
+                return
+        # Post-echo settling 보호: settling 직후 ≤2단어 STT → 노이즈 할루시네이션
+        if self._post_echo:
+            words = transcript.strip().split()
+            if len(words) <= 2:
+                logger.warning("[SessionB] Post-echo STT filtered (≤2 words): %s", transcript[:80])
+                self._stt_blocked = True
+                if self._call:
+                    self._call.call_metrics.hallucinations_blocked += 1
+                if self._chat_translator:
+                    self._decrement_pending_stt()
+                return
+            # 유효한 STT (>2단어) 통과 → post_echo 리셋
+            self._post_echo = False
         self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
 
         # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제

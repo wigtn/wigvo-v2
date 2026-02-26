@@ -353,6 +353,86 @@ class TestTimestampReset:
         assert handler._committed_speech_stopped_at == 0.0
 
 
+class TestPostEchoSettlingFilter:
+    """P3: Post-echo settling 직후 ≤2단어 STT 차단 검증."""
+
+    @pytest.mark.asyncio
+    async def test_post_echo_blocks_short_stt(self):
+        """post_echo=True 시 ≤2단어 STT가 차단된다."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "Oh yes"}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
+    @pytest.mark.asyncio
+    async def test_post_echo_allows_longer_stt(self):
+        """post_echo=True이어도 >2단어 STT는 통과한다."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "I need a reservation for three"}
+        )
+
+        assert handler._stt_blocked is False
+        assert handler._post_echo is False  # 유효 STT 통과 후 리셋
+
+    @pytest.mark.asyncio
+    async def test_post_echo_not_set_by_default(self):
+        """post_echo 미지정 시 기본값 False — 필터 미적용."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started()  # post_echo=False (default)
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "Oh yes"}
+        )
+
+        # post_echo=False이므로 ≤2단어여도 통과 (EN 필터는 target_language에 의존)
+        assert handler._post_echo is False
+
+    @pytest.mark.asyncio
+    async def test_post_echo_single_word_blocked(self):
+        """post_echo=True 시 단일 단어 STT가 차단된다."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "네"}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
+    @pytest.mark.asyncio
+    async def test_post_echo_resets_on_valid_stt(self):
+        """유효한 STT(>2단어)가 통과하면 _post_echo가 False로 리셋된다."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+        assert handler._post_echo is True
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "예약을 하고 싶습니다 내일 저녁"}
+        )
+
+        assert handler._post_echo is False
+        assert handler._stt_blocked is False
+
+
 class TestCallMetricsFields:
     """CallMetrics 새 필드 존재 확인."""
 

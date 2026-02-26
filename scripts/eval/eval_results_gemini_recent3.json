@@ -1,0 +1,156 @@
+{
+  "meta": {
+    "ref_model": "gemini-2.5-flash"
+  },
+  "system_metrics": {
+    "num_calls": 3,
+    "total_turns": 35,
+    "session_a_latency_ms": {
+      "p50": 688,
+      "p95": 1251,
+      "mean": 758,
+      "n": 25
+    },
+    "session_b_latency_ms": {
+      "p50": 2263,
+      "p95": 10828,
+      "mean": 3891,
+      "n": 10
+    },
+    "echo_suppressions": 21,
+    "echo_gate_breakthroughs": 4,
+    "interrupt_count": 2,
+    "guardrail_level2": 4,
+    "guardrail_level3": 0
+  },
+  "translation_quality": [
+    {
+      "direction": "en→ko",
+      "num_segments": 18,
+      "bleu": 14.27,
+      "chrf": 29.48,
+      "comet": 0.7287,
+      "pairs": [
+        {
+          "original": "Nice meeting you.",
+          "hypothesis": "반갑습니다.",
+          "reference": "만나서 반갑습니다."
+        },
+        {
+          "original": "is your name.",
+          "hypothesis": "성함이 어떻게 되시죠?",
+          "reference": "이름이세요?"
+        },
+        {
+          "original": "My name is James.",
+          "hypothesis": "오늘 예약을 하고 싶은데요.",
+          "reference": "제 이름은 제임스입니다."
+        },
+        {
+          "original": "Five people.",
+          "hypothesis": "오늘 오후 4시에 가능할까요?",
+          "reference": "다섯 명"
+        },
+        {
+          "original": "Ah, really? So...",
+          "hypothesis": "아, 정말요? 그러면…",
+          "reference": "아, 정말요? 그래서..."
+        },
+        {
+          "original": "then when is the available time.",
+          "hypothesis": "그럼 언제가 가능한 시간일까요?",
+          "reference": "그럼 언제 시간이 되세요?"
+        },
+        {
+          "original": "seven o'clock.",
+          "hypothesis": "7시요?",
+          "reference": "일곱 시."
+        },
+        {
+          "original": "I don't like it.",
+          "hypothesis": "그건 마음에 안 드네요.",
+          "reference": "마음에 안 들어요."
+        },
+        {
+          "original": "Maybe I will take it next time.",
+          "hypothesis": "그럼 다음번에 다시 연락드리겠습니다.",
+          "reference": "아마 다음에 할게요."
+        },
+        {
+          "original": "Thank you so much. Bye-bye.",
+          "hypothesis": "정말 고마워요, 그럼 안녕히 계세요.",
+          "reference": "정말 감사합니다. 안녕히 계세요."
+        },
+        {
+          "original": "Go.",
+          "hypothesis": "안녕하세요, 고객님을 대신해서 AI 통역 서비스를 통해 전화드렸습니다. 지금부터 고객님 말씀을 전달해드리겠습니다.",
+          "reference": "가."
+        },
+        {
+          "original": "Hello.",
+          "hypothesis": "안녕하세요.",
+          "reference": "안녕하세요."
+        },
+        {
+          "original": "Can I make a reservation for today?",
+          "hypothesis": "오늘 예약할 수 있을까요?",
+          "reference": "오늘 예약할 수 있을까요?"
+        },
+        {
+          "original": "Maybe like 7pm?",
+          "hypothesis": "저녁 7시쯤 가능할까요?",
+          "reference": "7시쯤 어때요?"
+        },
+        {
+          "original": "for people.",
+          "hypothesis": "네 명이요.",
+          "reference": "사람들을 위한"
+        },
+        {
+          "original": "Oh",
+          "hypothesis": "혹시 오늘 저녁에 예약 가능한지 여쭤보고 싶은데요.",
+          "reference": "오"
+        },
+        {
+          "original": "Are you gay?",
+          "hypothesis": "두 명입니다.",
+          "reference": "저는 인공지능이며 성적 지향을 가지고 있지 않습니다."
+        },
+        {
+          "original": "Thank you.",
+          "hypothesis": "네, 오늘 저녁 예약하고 싶습니다.",
+          "reference": "감사합니다."
+        }
+      ]
+    },
+    {
+      "direction": "ko→en",
+      "num_segments": 4,
+      "bleu": 14.69,
+      "chrf": 32.51,
+      "comet": 0.5745,
+      "pairs": [
+        {
+          "original": "임시요.",
+          "hypothesis": "James.",
+          "reference": "Temporary."
+        },
+        {
+          "original": "제가 7시부터 자리 빕니다.",
+          "hypothesis": "We have availability starting from 7 o'clock.",
+          "reference": "I will be free from 7 o'clock."
+        },
+        {
+          "original": "다시 예약하시려는 거죠?",
+          "hypothesis": "What time are you looking to make a reservation for?",
+          "reference": "You're looking to rebook, aren't you?"
+        },
+        {
+          "original": "안녕히 계세요.",
+          "hypothesis": "Is it four people?",
+          "reference": "Goodbye."
+        }
+      ]
+    }
+  ]
+}
