@@ -8,6 +8,7 @@ Usage:
     cd apps/relay-server
     uv run python ../../scripts/eval/extract_paper_metrics.py
     uv run python ../../scripts/eval/extract_paper_metrics.py --output paper_metrics.json
+    uv run python ../../scripts/eval/extract_paper_metrics.py --since 2026-02-25 --output recent.json
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ── Supabase ─────────────────────────────────────────────────
 
-def fetch_all_calls() -> list[dict]:
+def fetch_all_calls(since: str | None = None) -> list[dict]:
     try:
         from supabase import create_client
     except ImportError:
@@ -42,14 +43,17 @@ def fetch_all_calls() -> list[dict]:
         sys.exit(1)
 
     client = create_client(url, key)
-    result = (
+    query = (
         client.table("calls")
         .select("id, status, communication_mode, source_language, target_language, "
                 "transcript_bilingual, call_result_data, duration_s, created_at")
         .order("created_at", desc=True)
         .limit(1000)
-        .execute()
     )
+    if since:
+        query = query.gte("created_at", since)
+        logger.info("Filtering calls since %s", since)
+    result = query.execute()
     return result.data
 
 
@@ -535,10 +539,11 @@ def save_json(data: dict, path: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="WIGVO ACL 2026 Paper Metrics")
     parser.add_argument("--output", default="paper_metrics.json", help="JSON output path")
+    parser.add_argument("--since", default=None, help="ISO date filter (e.g. 2026-02-25)")
     args = parser.parse_args()
 
     logger.info("Fetching all calls from Supabase...")
-    calls = fetch_all_calls()
+    calls = fetch_all_calls(since=args.since)
     logger.info("Fetched %d calls", len(calls))
 
     if not calls:
