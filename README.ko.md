@@ -286,6 +286,74 @@ uv run python -m tests.run --test call --phone +82... --scenario restaurant --au
 
 논문 평가 데이터를 넘어서는 확장 프로덕션 지표. `scripts/eval/`로 Supabase에서 수집.
 
+### 최신 단일 통화 벤치마크 (2026-02-27)
+
+실제 V2V 통화 — 영어 사용자가 한국 출입국관리사무소에 비자 연장 서류 문의. 116초, 11발화 (사용자 5, 수신자 5, AI 인사 1).
+
+| 지표 | 논문 (148건) | 최신 통화 | 비고 |
+|------|------------:|----------:|------|
+| **Session A P50** | 555 ms | 611 ms | 분산 범위 내 |
+| **Session A P95** | 1169 ms | 751 ms | 더 좁은 분포 (6턴) |
+| **Session B E2E P50** | 2868 ms | 7823 ms | 긴 한국어 발화 (STT = E2E의 97.8%) |
+| **Session B STT P50** | 2675 ms | 6959 ms | V2V 모드 — Realtime API가 STT+번역+TTS 처리 |
+| **첫 메시지** | 1215 ms | 787 ms | 더 빠른 콜드 스타트 |
+| **분당 비용** | $0.27 | **$0.18** | 33% 절감 |
+| **에코 루프** | 0 / 148건 | 0 | 제로 톨러런스 유지 |
+| **에코 게이트 활성화** | 7.0/건 | 5 | |
+| **VAD 오탐** | 1.8/건 | 1 | |
+| **할루시네이션 차단** | 0.7/건 | 1 | |
+| **가드레일 L2 / L3** | 148 / 0 전체 | 2 / 0 | |
+
+Session B 레이턴시가 높은 이유는 발화 길이 — 수신자의 한국어 응답이 평균 40자 이상으로 상위 구간에 해당. 이 통화의 Pearson r = 0.887로 길이–레이턴시 상관관계 확인.
+
+<details>
+<summary><b>전체 전사: 비자 연장 서류 문의 (en → ko)</b></summary>
+
+```
+[AI]        안녕하세요, 고객을 대신한 AI 번역 서비스로 전화드렸습니다.
+            이제 고객님의 말씀을 전달해드리겠습니다.
+
+[User]      Hi, I received a message saying there is a problem with
+            my visa extension documents.
+         → 안녕하세요, 제가 비자 연장 서류에 문제가 있다는 메시지를 받았는데요.
+
+[User]      Can you tell me what's missing?
+         → 어떤 서류가 빠졌는지 알려주실 수 있을까요?
+
+[Recipient] Just a moment.
+
+[Recipient] 고용계약서에 회사 직인이 누락되어 있고 거주지 증명서의 유효기간이
+            만료된 상태네요.
+         → It looks like the employer's signature is missing from the
+            employment contract, and the proof of residence document
+            has expired.
+
+[User]      Can I submit the corrected documents by email or fax?
+         → 수정된 서류를 이메일이나 팩스로 보내드려도 될까요?
+
+[Recipient] Email is not possible, but you can submit it via fax,
+            through the Hi Korea website upload, or by visiting
+            in person.
+
+[User]      그럼 팩스로 보내겠습니다. 팩스 번호를 알려주시고, 보낸 뒤에
+            확인 전화가 필요한지도 말씀해 주시겠어요?
+
+[Recipient] 번호는 02-123-4567 이구요. 발송 후 담당자에게 확인 전화를
+            주시면 처리가 더 빨리 진행됩니다.
+         → The number is 02-123-4567, and after sending, if you give
+            the person in charge a confirmation call, it will be
+            processed more quickly.
+
+[User]      Okay, thanks a lot. Have a nice day.
+         → 네, 감사합니다. 좋은 하루 되세요.
+
+[Recipient] Thank you.
+```
+
+*Call ID: `e2b35f79` | 소요 시간: 116초 | 비용: $0.35 ($0.18/분)*
+
+</details>
+
 ### 모드별 분포
 
 | 모드 | 통화 수 | 비율 | SA P50 | SB P50 |
