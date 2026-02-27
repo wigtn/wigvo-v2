@@ -56,6 +56,8 @@ plt.rcParams.update({
     "grid.color": "#888888",
     "savefig.facecolor": "white",
     "savefig.dpi": 300,
+    "pdf.fonttype": 42,  # TrueType embedding (Type 3 방지 — ACL 요구사항)
+    "ps.fonttype": 42,
 })
 
 
@@ -150,7 +152,7 @@ def figure2() -> None:
 
     fig.suptitle("End-to-End Latency Distribution over Live PSTN Calls", fontsize=13, y=1.02)
     fig.tight_layout()
-    _save(fig, "figure2_latency_histogram")
+    _save(fig, "figure3_latency_histogram")
     plt.close(fig)
 
 
@@ -236,7 +238,7 @@ def figure3() -> None:
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
 
     fig.tight_layout()
-    _save(fig, "figure3_utterance_scatter")
+    _save(fig, "figure4_utterance_scatter")
     plt.close(fig)
 
 
@@ -323,7 +325,7 @@ def figure4() -> None:
     )
 
     fig.tight_layout()
-    _save(fig, "figure4_latency_breakdown")
+    _save(fig, "figure5_latency_breakdown")
     plt.close(fig)
 
 
