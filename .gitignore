@@ -42,6 +42,25 @@ node_modules/
 .next/
 next-env.d.ts
 
+# Deployment configs
+cloudbuild-*.yaml
+apps/*/.trigger
+
+# Internal docs (not for reviewers)
+apps/docs/
+docs/architecture/
+docs/paper/references/
+docs/paper/data/
+docs/paper/acl2026_wigvo.pdf
+docs/paper/*_korea.md
+docs/paper/*_ssw.tex
+scripts/migrations/
+
+# Eval intermediate results
+scripts/eval/eval_results_*.json
+scripts/eval/paper_metrics_*.json
+!scripts/eval/paper_metrics.json
+
 # LaTeX build artifacts
 *.aux
 *.bbl
