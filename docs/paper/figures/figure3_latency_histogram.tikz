@@ -33,7 +33,7 @@
 
 \addplot[fill=blue!70, draw=white, line width=0.3pt,
     postaction={pattern=north east lines, pattern color=blue!40}]
-    table[col sep=comma, x=bin_center, y=count] {data/figure3_sa_hist_feb23_26.csv};
+    table[col sep=comma, x=bin_center, y=count] {data/figure3_sa_hist_feb23_27.csv};
 
 % P50 line
 \draw[black, dashed, thick]
@@ -63,7 +63,7 @@
 
 \addplot[fill=green!60!black, draw=white, line width=0.3pt,
     postaction={pattern=north west lines, pattern color=green!30!black}]
-    table[col sep=comma, x=bin_center, y=count] {data/figure3_sb_hist_feb23_26.csv};
+    table[col sep=comma, x=bin_center, y=count] {data/figure3_sb_hist_feb23_27.csv};
 
 % P50 line
 \draw[black, dashed, thick]

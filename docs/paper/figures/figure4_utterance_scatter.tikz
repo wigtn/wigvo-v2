@@ -7,7 +7,7 @@
     xlabel={Utterance Length (characters)},
     ylabel={Session B E2E Latency (ms)},
     xmin=0, xmax=550,
-    ymin=0, ymax=17000,
+    ymin=0, ymax=19000,
     grid=major,
     grid style={gray!30},
     tick label style={font=\footnotesize},
@@ -21,7 +21,7 @@
 % Scatter points
 \addplot[only marks, mark=*, mark size=1.5pt,
     green!60, fill opacity=0.5, draw opacity=0.3]
-    table[col sep=comma, x=char_len, y=latency_ms] {data/figure4_scatter_feb23_26.csv};
+    table[col sep=comma, x=char_len, y=latency_ms] {data/figure4_scatter_feb23_27.csv};
 \addlegendentry{Individual turns}
 
 % Regression line
