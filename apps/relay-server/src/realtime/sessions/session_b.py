@@ -45,6 +45,18 @@ _STT_HALLUCINATION_BLOCKLIST = frozenset({
     "전해드립니다",
     "전해드립니다.",
     "플러스포어 픽업",
+    # 짧은 한국어 공손/인사 표현 (무음/저에너지 구간에서 Whisper가 단독 생성)
+    # NOTE: "네"/"예" 등 정상 응답과 구분 불가능한 단어는 의도적으로 제외 — false-positive 위험
+    "감사합니다",
+    "감사합니다.",
+    "고맙습니다",
+    "고맙습니다.",
+    "수고하셨습니다",
+    "수고하셨습니다.",
+    "수고 하셨습니다",
+    "수고하십니다",
+    "안녕하세요",
+    "안녕하세요.",
 })
 
 # 동일 토큰 3회 이상 연속 반복 감지 (whisper/gpt-4o 공통 할루시네이션)
@@ -194,6 +206,15 @@ _KO_WHISPER_APPEND_SUBSTRINGS = frozenset({
     # 방송 클로징
     "제작지원", "제작 지원",
     "방송통신위원회",
+    # YouTube 아웃트로/CTA (실제 발화 뒤에 append되는 패턴)
+    "시청해주셔서", "시청해 주셔서",
+    "구독 해주세요", "구독해주세요", "구독해 주세요",
+    "구독과 좋아요", "좋아요와 구독", "좋아요 구독",
+    # 방송/전화 종료 인사 (실제 발화 뒤에 append)
+    # NOTE: _STT_HALLUCINATION_BLOCKLIST에도 등록됨 — standalone은 정확 매칭 차단,
+    #        여기서는 "실제발화 수고하셨습니다" 같은 append 패턴을 trim 처리
+    "수고하셨습니다", "수고 하셨습니다",
+    "수고하십니다", "수고 하십니다",
 })
 
 # 문장 종결(?.!) 후 한국어 동사 어미 없이 끝나는 짧은 꼬리 감지
@@ -1275,24 +1296,28 @@ class SessionBHandler:
                     self._post_echo = False
             # Korean Whisper append-hallucination 감지
             if self._call and self._call.target_language.startswith("ko"):
-                # 부분 문자열 매칭: YouTube/방송 콘텐츠 잔재
+                # 부분 문자열 매칭: 가장 빠른 위치의 매칭을 찾아 trim
+                earliest_idx = len(transcript)
+                earliest_sub = ""
                 for sub in _KO_WHISPER_APPEND_SUBSTRINGS:
                     idx = transcript.find(sub)
-                    if idx >= 0:
-                        trimmed = transcript[:idx].rstrip()
-                        if trimmed:
-                            logger.warning("[SessionB] Whisper append trimmed at '%s': ...%s", sub, trimmed[-30:])
-                            transcript = trimmed
-                        else:
-                            # 전체가 할루시네이션
-                            logger.warning("[SessionB] Whisper append blocked: %s", transcript[:80])
-                            self._stt_blocked = True
-                            if self._call:
-                                self._call.call_metrics.hallucinations_blocked += 1
-                            if self._chat_translator:
-                                self._decrement_pending_stt()
-                            return
-                        break
+                    if 0 <= idx < earliest_idx:
+                        earliest_idx = idx
+                        earliest_sub = sub
+                if earliest_sub:
+                    trimmed = transcript[:earliest_idx].rstrip()
+                    if trimmed:
+                        logger.warning("[SessionB] Whisper append trimmed at '%s': ...%s", earliest_sub, trimmed[-30:])
+                        transcript = trimmed
+                    else:
+                        # 전체가 할루시네이션
+                        logger.warning("[SessionB] Whisper append blocked: %s", transcript[:80])
+                        self._stt_blocked = True
+                        if self._call:
+                            self._call.call_metrics.hallucinations_blocked += 1
+                        if self._chat_translator:
+                            self._decrement_pending_stt()
+                        return
 
                 # Trailing fragment 감지: 문장 종결 후 동사 어미 없는 짧은 꼬리
                 m = _KO_TRAILING_FRAGMENT_RE.search(transcript)

@@ -717,6 +717,84 @@ class TestWhisperAppendFilter:
         # "확인해드리겠습니다"는 종결 어미 "습니다"로 끝남 → 정상 통과
         assert "확인해드리겠습니다" in handler._last_recipient_stt
 
+    @pytest.mark.asyncio
+    async def test_youtube_outro_appended_trimmed(self):
+        """'여보세요? 누구시죠? 시청해 주셔서 감사합니다! 구독 해주세요!' → 아웃트로 제거."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 3.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "여보세요? 누구시죠? 시청해 주셔서 감사합니다! 구독 해주세요!"}
+        )
+
+        assert "시청해" not in handler._last_recipient_stt
+        assert "구독" not in handler._last_recipient_stt
+        assert "누구시죠" in handler._last_recipient_stt
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_broadcast_closing_appended_trimmed(self):
+        """'저분 성함이 어떻게 되세요? 수고하셨습니다.' → 수고하셨습니다 제거."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "저분 성함이 어떻게 되세요? 수고하셨습니다."}
+        )
+
+        assert "수고하셨습니다" not in handler._last_recipient_stt
+        assert "성함" in handler._last_recipient_stt
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_standalone_gomap_blocked(self):
+        """'고맙습니다' 단독 → 블록리스트에 의해 차단."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 1.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "고맙습니다"}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
+    @pytest.mark.asyncio
+    async def test_standalone_gamsa_blocked(self):
+        """'감사합니다' 단독 → 블록리스트에 의해 차단."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 1.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "감사합니다"}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
+    @pytest.mark.asyncio
+    async def test_standalone_sugohasyeoss_blocked(self):
+        """'수고하셨습니다' 단독 → 블록리스트에 의해 차단."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 1.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "수고하셨습니다."}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
     def test_ko_sentence_endings_regex(self):
         """한국어 종결 어미 정규식 검증."""
         # 정상 종결 어미

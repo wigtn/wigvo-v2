@@ -383,10 +383,10 @@ class TestHandleInputTranscriptionForChatApi:
 
         assert not handler._stt_ready_event.is_set()
 
-        await handler._handle_input_transcription_completed({"transcript": "안녕하세요"})
+        await handler._handle_input_transcription_completed({"transcript": "예약하고 싶습니다"})
 
         assert handler._stt_ready_event.is_set()
-        assert handler._stt_texts == ["안녕하세요"]
+        assert handler._stt_texts == ["예약하고 싶습니다"]
 
     @pytest.mark.asyncio
     async def test_accumulates_multiple_stt_segments(self):
@@ -395,10 +395,10 @@ class TestHandleInputTranscriptionForChatApi:
         handler = _make_handler(chat_translator=chat_mock)
 
         # 2개의 연속 세그먼트 STT
-        await handler._handle_input_transcription_completed({"transcript": "안녕하세요"})
+        await handler._handle_input_transcription_completed({"transcript": "예약하고 싶습니다"})
         await handler._handle_input_transcription_completed({"transcript": "반갑습니다"})
 
-        assert handler._stt_texts == ["안녕하세요", "반갑습니다"]
+        assert handler._stt_texts == ["예약하고 싶습니다", "반갑습니다"]
 
     @pytest.mark.asyncio
     async def test_sets_event_only_when_all_pending_commits_done(self):
