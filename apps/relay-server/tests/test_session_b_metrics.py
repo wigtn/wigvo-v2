@@ -1,10 +1,13 @@
-"""Session B 새 메트릭 필드 단위 테스트.
+"""Session B 메트릭 + Whisper anti-hallucination 단위 테스트.
 
 session_b_speech_durations_ms, session_b_processing_latencies_ms,
 session_b_stt_after_stop_ms 기록 검증.
+Speech-only audio commit 검증.
+Korean Whisper append-hallucination 필터 검증.
 """
 
 import asyncio
+import base64
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +17,9 @@ from src.realtime.sessions.session_b import (
     SessionBHandler,
     _normalize_for_blocklist,
     _STT_HALLUCINATION_BLOCKLIST,
+    _KO_WHISPER_APPEND_SUBSTRINGS,
+    _KO_TRAILING_FRAGMENT_RE,
+    _KO_SENTENCE_ENDINGS,
     _MIN_E2E_MS,
 )
 from src.types import ActiveCall, CallMetrics, CallMode, CommunicationMode
@@ -485,3 +491,256 @@ class TestCallMetricsFields:
         assert "session_b_speech_durations_ms" in d
         assert "session_b_processing_latencies_ms" in d
         assert "session_b_stt_after_stop_ms" in d
+
+
+# ─── Fix 1: Speech-Only Audio Commit ───────────────────────────────
+
+
+class TestSpeechOnlyCommit:
+    """Fix 1: Speech-only audio commit 검증."""
+
+    @pytest.mark.asyncio
+    async def test_commit_clears_and_resends_speech_only(self):
+        """speech_end 시 clear → speech 구간만 재전송 → commit."""
+        handler = _make_handler(use_local_vad=True)
+
+        # 로컬 버퍼 시뮬레이션: 100 frames (2초), speech는 0.5~1.5초 구간
+        now = time.time()
+        handler._local_audio_start_time = now - 2.0
+        for i in range(100):
+            frame_b64 = base64.b64encode(bytes([0x10] * 160)).decode()
+            handler._local_audio_frames.append(frame_b64)
+
+        handler._speech_started_at = now - 1.5  # 1.5초 전 speech start
+        handler._speech_stopped_at = now - 0.5  # 0.5초 전 speech stop
+
+        call_order = []
+        handler.session.clear_input_buffer = AsyncMock(
+            side_effect=lambda: call_order.append("clear")
+        )
+        handler.session.send_audio = AsyncMock(
+            side_effect=lambda x: call_order.append("send")
+        )
+        handler.session.commit_audio_only = AsyncMock(
+            side_effect=lambda: call_order.append("commit")
+        )
+
+        await handler._commit_speech_only_audio()
+
+        assert call_order == ["clear", "send", "commit"]
+        # send_audio가 한 번 호출되어야 함 (단일 blob)
+        handler.session.send_audio.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_commit_fallback_when_no_timestamps(self):
+        """타임스탬프 없으면 기존 commit 방식 fallback."""
+        handler = _make_handler(use_local_vad=True)
+        handler._speech_started_at = 0.0
+        handler._speech_stopped_at = 0.0
+
+        await handler._commit_speech_only_audio()
+
+        handler.session.commit_audio_only.assert_called_once()
+        handler.session.clear_input_buffer.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_commit_fallback_when_stop_before_start(self):
+        """speech_stop이 speech_start보다 이전이면 fallback."""
+        handler = _make_handler(use_local_vad=True)
+        now = time.time()
+        handler._speech_started_at = now
+        handler._speech_stopped_at = now - 1.0  # stop이 start보다 이전
+
+        await handler._commit_speech_only_audio()
+
+        handler.session.commit_audio_only.assert_called_once()
+        handler.session.clear_input_buffer.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_speculative_uses_commit_time_as_start(self):
+        """speculative 경로: speculative_commit_time부터 speech_stop까지만 전송."""
+        handler = _make_handler(use_local_vad=True)
+
+        now = time.time()
+        handler._local_audio_start_time = now - 3.0
+        for i in range(150):  # 3초 분량
+            frame_b64 = base64.b64encode(bytes([0x10] * 160)).decode()
+            handler._local_audio_frames.append(frame_b64)
+
+        handler._speech_started_at = now - 2.5
+        handler._speech_stopped_at = now - 0.5
+        handler._speculative_committed = True
+        handler._speculative_commit_time = now - 1.5  # 1.5초 전 speculative commit
+
+        await handler._commit_speech_only_audio()
+
+        # clear → send → commit 순서
+        handler.session.clear_input_buffer.assert_called_once()
+        handler.session.send_audio.assert_called_once()
+        handler.session.commit_audio_only.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_local_audio_buffer_max_size(self):
+        """로컬 버퍼가 500 프레임을 초과하면 오래된 프레임이 제거된다."""
+        handler = _make_handler()
+
+        for i in range(510):
+            frame_b64 = base64.b64encode(bytes([0x10] * 160)).decode()
+            await handler.send_recipient_audio(frame_b64)
+
+        assert len(handler._local_audio_frames) == 500
+
+    @pytest.mark.asyncio
+    async def test_buffer_start_time_initialized(self):
+        """첫 프레임에서 _local_audio_start_time이 초기화된다."""
+        handler = _make_handler()
+        assert handler._local_audio_start_time == 0.0
+
+        frame_b64 = base64.b64encode(bytes([0x10] * 160)).decode()
+        await handler.send_recipient_audio(frame_b64)
+
+        assert handler._local_audio_start_time > 0
+
+
+# ─── Fix 2: Korean Whisper Append-Hallucination Filter ──────────────
+
+
+class TestWhisperAppendFilter:
+    """Fix 2: Korean Whisper append-hallucination 패턴 필터."""
+
+    @pytest.mark.asyncio
+    async def test_youtube_creator_name_trimmed(self):
+        """'왜 바꾸고 싶으시죠? 영상편집 배혜지' → 할루시네이션 부분 제거."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "왜 바꾸고 싶으시죠? 영상편집 배혜지"}
+        )
+
+        # 원문이 트리밍된 텍스트로 저장됨
+        assert "영상편집" not in handler._last_recipient_stt
+        assert "바꾸고" in handler._last_recipient_stt
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_broadcast_program_trimmed(self):
+        """'안녕하세요 재택 플러스' → 프로그램명 이후 제거."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "안녕하세요 재택 플러스"}
+        )
+
+        assert "재택" not in handler._last_recipient_stt
+        assert handler._last_recipient_stt == "안녕하세요"
+
+    @pytest.mark.asyncio
+    async def test_full_hallucination_blocked(self):
+        """할루시네이션이 전체 텍스트인 경우 완전 차단."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "영상편집 배혜지"}
+        )
+
+        assert handler._stt_blocked is True
+        assert call.call_metrics.hallucinations_blocked == 1
+
+    @pytest.mark.asyncio
+    async def test_trailing_fragment_no_verb_trimmed(self):
+        """문장 종결 후 동사 어미 없는 짧은 꼬리 제거."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "왜 바꾸고 싶으시죠? 배혜지 감독"}
+        )
+
+        # 꼬리 "배혜지 감독"이 제거됨 (동사 어미 없음)
+        assert "배혜지" not in handler._last_recipient_stt
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_normal_multi_sentence_passes(self):
+        """'네, 안녕하세요. 도와드리겠습니다.' → 정상 통과."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "네, 안녕하세요. 도와드리겠습니다."}
+        )
+
+        assert handler._last_recipient_stt == "네, 안녕하세요. 도와드리겠습니다."
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_non_korean_skips_filter(self):
+        """target_language=en일 때 한국어 필터 스킵."""
+        call = _make_call(target_language="en")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        # 영어 수신자 → 한국어 필터 미적용
+        await handler._handle_input_transcription_completed(
+            {"transcript": "Hello 영상편집 test"}
+        )
+
+        assert handler._last_recipient_stt == "Hello 영상편집 test"
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_normal_sentence_ending_passes_trailing_check(self):
+        """정상 종결 어미 문장은 trailing fragment 필터를 통과한다."""
+        call = _make_call(target_language="ko")
+        handler = _make_handler(call=call, use_local_vad=True)
+        handler._committed_speech_started_at = time.time() - 2.0
+        handler._committed_speech_stopped_at = time.time() - 0.5
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "네 알겠습니다. 확인해드리겠습니다"}
+        )
+
+        # "확인해드리겠습니다"는 종결 어미 "습니다"로 끝남 → 정상 통과
+        assert "확인해드리겠습니다" in handler._last_recipient_stt
+
+    def test_ko_sentence_endings_regex(self):
+        """한국어 종결 어미 정규식 검증."""
+        # 정상 종결 어미
+        assert _KO_SENTENCE_ENDINGS.search("도와드리겠습니다")
+        assert _KO_SENTENCE_ENDINGS.search("감사합니다")
+        assert _KO_SENTENCE_ENDINGS.search("예약하겠습니다.")
+        assert _KO_SENTENCE_ENDINGS.search("그러시죠")
+        assert _KO_SENTENCE_ENDINGS.search("말씀해주세요")
+
+        # 종결 어미 아님 (이름/명사)
+        assert not _KO_SENTENCE_ENDINGS.search("배혜지")
+        assert not _KO_SENTENCE_ENDINGS.search("영상편집")
+        assert not _KO_SENTENCE_ENDINGS.search("방송통신위원회")
+
+    def test_ko_trailing_fragment_regex(self):
+        """Trailing fragment 정규식 매칭 검증."""
+        # 매칭되어야 하는 케이스
+        m = _KO_TRAILING_FRAGMENT_RE.search("그러시죠? 영상편집 배혜지")
+        assert m is not None
+        assert m.group(1).strip() == "영상편집 배혜지"
+
+        m = _KO_TRAILING_FRAGMENT_RE.search("안녕하세요. 지금까지 재택 플러스")
+        assert m is not None
+
+        # 매칭 안 되는 케이스 (문장 종결 부호 없음)
+        m = _KO_TRAILING_FRAGMENT_RE.search("안녕하세요 영상편집")
+        assert m is None

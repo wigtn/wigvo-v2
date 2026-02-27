@@ -150,6 +150,9 @@ class VoiceToVoicePipeline(BasePipeline):
         # Pre-speech buffer: SPEAKING 전환 전 오디오 프레임 보존 (200ms = 20ms × 10)
         self._pre_speech_buf: deque[bytes] = deque(maxlen=10)
 
+        # Energy Gate 상태 추적 (이벤트 전환 감지용)
+        self._energy_gate_passed: bool = False
+
         # Echo Gate Manager (TTS 에코 차단)
         self.echo_gate = EchoGateManager(
             session_b=self.session_b,
@@ -158,6 +161,7 @@ class VoiceToVoicePipeline(BasePipeline):
             echo_margin_s=0.5,  # 0.3→0.5: echo gate breakthrough 감소
             max_echo_window_s=1.2,
             on_breakthrough=self._on_echo_breakthrough,
+            on_event=lambda stage, event, data: self._send_pipeline_event(stage, event, **data),
         )
 
         # Interrupt debounce: 노이즈에 의한 즉시 TTS 취소 방지 (400ms 대기 후 확인)
@@ -312,6 +316,14 @@ class VoiceToVoicePipeline(BasePipeline):
         if self.local_vad is not None:
             audio_rms = _ulaw_rms(effective_audio)
             can_process_vad = self.echo_gate.should_process_vad(audio_rms)
+            # Energy Gate 상태 전환 이벤트
+            if can_process_vad != self._energy_gate_passed:
+                self._energy_gate_passed = can_process_vad
+                await self._send_pipeline_event(
+                    "energy_gate",
+                    "accept" if can_process_vad else "reject",
+                    rms=round(audio_rms),
+                )
             if can_process_vad:
                 await self.local_vad.process(effective_audio)
             if self.local_vad.is_speaking and not self.echo_gate.is_suppressing:
@@ -496,11 +508,14 @@ class VoiceToVoicePipeline(BasePipeline):
         await self.echo_gate.break_settling()  # Settling 해제 (Silero 확인)
         if post_echo:
             self._pre_speech_buf.clear()  # settling 시에만 에코 오염 버퍼 폐기
+        peak_rms = self.local_vad.peak_rms if self.local_vad else 0.0
+        await self._send_pipeline_event("silero_vad", "speech_start", peak_rms=round(peak_rms))
         await self.session_b.notify_speech_started(post_echo=post_echo)
 
     async def _on_local_vad_speech_end(self) -> None:
         """Local VAD가 수신자 발화 종료를 감지."""
         peak_rms = self.local_vad.peak_rms if self.local_vad else 0.0
+        await self._send_pipeline_event("silero_vad", "speech_end", peak_rms=round(peak_rms))
         await self.session_b.notify_speech_stopped(peak_rms=peak_rms)
 
     # --- 수신자 발화 감지 ---

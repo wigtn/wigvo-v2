@@ -106,6 +106,16 @@ class BasePipeline(ABC):
             self._db_save_task.cancel()
             self._db_save_task = None
 
+    async def _send_pipeline_event(self, stage: str, event: str, **kwargs: Any) -> None:
+        """3-Stage Filter 이벤트를 클라이언트에 전송."""
+        if self._app_ws_send:
+            await self._app_ws_send(
+                WsMessage(
+                    type=WsMessageType.PIPELINE_EVENT,
+                    data={"stage": stage, "event": event, **kwargs},
+                )
+            )
+
     @abstractmethod
     async def start(self) -> None:
         """파이프라인을 시작한다."""

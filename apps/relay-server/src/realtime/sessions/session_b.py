@@ -9,9 +9,11 @@ PRD 3.2:
 
 import asyncio
 import base64
+import itertools
 import logging
 import re
 import time
+from collections import deque
 from typing import Any, Callable, Coroutine
 
 from src.config import settings
@@ -179,6 +181,35 @@ _UNCLEAR_PHRASES = (
 )
 
 
+# --- Fix 2: Korean Whisper Append-Hallucination Patterns ---
+# YouTube/방송 콘텐츠 잔재 — STT 결과에 부분 매칭
+_KO_WHISPER_APPEND_SUBSTRINGS = frozenset({
+    # 유튜브/방송 크리에이터 크레딧
+    "영상편집", "영상 편집",
+    "자막 제공", "자막 편집", "자막제공",
+    "촬영 편집", "촬영편집",
+    # 유튜브/방송 프로그램명 패턴
+    "재택 플러스", "재택플러스",
+    "플러스포어",
+    # 방송 클로징
+    "제작지원", "제작 지원",
+    "방송통신위원회",
+})
+
+# 문장 종결(?.!) 후 한국어 동사 어미 없이 끝나는 짧은 꼬리 감지
+# "왜 바꾸고 싶으시죠? 영상편집 배혜지" → "영상편집 배혜지" 감지
+_KO_TRAILING_FRAGMENT_RE = re.compile(
+    r'[.?!]\s*'           # 문장 종결 부호
+    r'([가-힣\s]{2,15})'  # 한국어 2-15자 꼬리
+    r'$'                   # 문자열 끝
+)
+
+# 한국어 문장 종결 어미 (이것이 있으면 정상 문장)
+_KO_SENTENCE_ENDINGS = re.compile(
+    r'(?:요|다|까|죠|세요|니다|습니다|됩니다|겠습니다|드립니다|합니다|입니다|습니까|네요|데요|ㅂ니다)\.?$'
+)
+
+
 class SessionBHandler:
     """Session B의 이벤트를 처리한다."""
 
@@ -297,6 +328,11 @@ class SessionBHandler:
         # 변경 시 전체 증감 사이트를 확인할 것.
         self._pending_stt_count: int = 0
 
+        # Fix 1: 로컬 오디오 버퍼 (speech-only commit용)
+        self._local_audio_frames: deque[str] = deque()  # base64 g711_ulaw frames
+        self._local_audio_start_time: float = 0.0  # 버퍼 시작 시점
+        self._speculative_commit_time: float = 0.0  # speculative commit 시점
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -393,8 +429,64 @@ class SessionBHandler:
     # --- 수신자 오디오 입력 (Twilio → Session B) ---
 
     async def send_recipient_audio(self, audio_b64: str) -> None:
-        """Twilio에서 받은 수신자 오디오를 Session B에 전달 (g711_ulaw)."""
+        """Twilio에서 받은 수신자 오디오를 Session B에 전달 + 로컬 버퍼링."""
+        # 로컬 버퍼에 기록 (speech-only commit용, 최대 10초 = 500 frames @ 8kHz/20ms)
+        self._local_audio_frames.append(audio_b64)
+        while len(self._local_audio_frames) > 500:
+            self._local_audio_frames.popleft()
+            self._local_audio_start_time += 0.02
+        if not self._local_audio_start_time:
+            self._local_audio_start_time = time.time()
+        # OpenAI에도 실시간 전달 (기존 동작 유지)
         await self.session.send_audio(audio_b64)
+
+    async def _commit_speech_only_audio(self) -> None:
+        """발화 구간 오디오만 OpenAI에 commit한다 (후행 무음 제거).
+
+        1. clear_input_buffer() — 후행 무음 포함된 기존 버퍼 제거
+        2. 로컬 버퍼에서 speech_start~speech_stop 구간 추출
+        3. 단일 input_audio_buffer.append로 재전송
+        4. commit_audio_only()
+        """
+        speech_start = self._speech_started_at
+        speech_stop = self._speech_stopped_at
+
+        # Speculative: Part 2만 재전송 (Part 1은 이미 committed)
+        if self._speculative_committed and self._speculative_commit_time > 0:
+            speech_start = self._speculative_commit_time
+
+        if speech_start <= 0 or speech_stop <= 0 or speech_stop <= speech_start:
+            # fallback: 기존 방식
+            await self.session.commit_audio_only()
+            return
+
+        # 발화 구간 프레임 추출 (20ms per frame, 50ms onset margin)
+        buf_start = self._local_audio_start_time
+        start_idx = max(0, int((speech_start - buf_start - 0.05) / 0.02))
+        end_idx = min(len(self._local_audio_frames), int((speech_stop - buf_start) / 0.02))
+
+        if end_idx <= start_idx:
+            await self.session.commit_audio_only()
+            return
+
+        frames = list(itertools.islice(self._local_audio_frames, start_idx, end_idx))
+
+        # 1. 기존 버퍼 제거
+        await self.session.clear_input_buffer()
+
+        # 2. 발화 구간만 단일 blob으로 재전송
+        speech_bytes = b"".join(base64.b64decode(f) for f in frames)
+        speech_b64 = base64.b64encode(speech_bytes).decode()
+        await self.session.send_audio(speech_b64)
+
+        # 3. commit
+        await self.session.commit_audio_only()
+
+        trimmed_ms = (len(self._local_audio_frames) - end_idx + start_idx) * 20
+        logger.info(
+            "[SessionB] Speech-only commit: %d frames (%.1fs), trimmed %dms trailing silence",
+            end_idx - start_idx, (end_idx - start_idx) * 0.02, trimmed_ms,
+        )
 
     # --- Local VAD 콜백 (외부에서 호출) ---
 
@@ -420,6 +512,11 @@ class SessionBHandler:
         self._is_recipient_speaking = True
         self._speech_started_at = time.time()
         self._timeout_forced = False
+
+        # 로컬 버퍼 타임스탬프 보정 (drift 방지)
+        if self._local_audio_frames:
+            self._local_audio_start_time = time.time() - len(self._local_audio_frames) * 0.02
+        self._speculative_commit_time = 0.0
 
         # Chat API: 연속 발화 누적 — _stt_texts는 클리어하지 않음
         # (이전 세그먼트 STT가 이미 누적되어 있을 수 있음)
@@ -765,6 +862,11 @@ class SessionBHandler:
         self._speech_started_at = time.time()
         self._timeout_forced = False  # 새 발화 시작 → timeout 플래그 초기화
 
+        # 로컬 버퍼 타임스탬프 보정 (drift 방지)
+        if self._local_audio_frames:
+            self._local_audio_start_time = time.time() - len(self._local_audio_frames) * 0.02
+        self._speculative_commit_time = 0.0
+
         # Chat API: 연속 발화 누적 — _stt_texts는 클리어하지 않음
         if self._chat_translator:
             self._stt_blocked = False  # 이전 턴에서 stuck 방지
@@ -873,8 +975,8 @@ class SessionBHandler:
                 if self._speculative_committed:
                     # Part 1은 speculative commit이 이미 처리 중
                     if self._use_local_vad:
-                        # Local VAD: Part 2 수동 commit + STT 추적
-                        await self.session.commit_audio_only()
+                        # Local VAD: Part 2 수동 commit + STT 추적 (speech-only)
+                        await self._commit_speech_only_audio()
                         self._pending_stt_count += 1
                         self._stt_ready_event.clear()
                     # Server VAD: speech_stopped에서 이미 auto-commit + count 증가됨
@@ -888,7 +990,7 @@ class SessionBHandler:
                         "[SessionB] Debounce complete (%.0fms) — committing audio for STT (Chat API path, local VAD)",
                         self._response_debounce_s * 1000,
                     )
-                    await self.session.commit_audio_only()
+                    await self._commit_speech_only_audio()
                     self._pending_stt_count += 1
                     self._stt_ready_event.clear()
                 else:
@@ -1002,6 +1104,7 @@ class SessionBHandler:
             self._pending_stt_count += 1
             self._stt_ready_event.clear()
             self._speculative_committed = True
+            self._speculative_commit_time = time.time()
             if self._call:
                 self._call.call_metrics.speculative_stt_count += 1
             logger.info("[SessionB] Speculative STT: mid-speech commit (pending=%d)", self._pending_stt_count)
@@ -1170,6 +1273,35 @@ class SessionBHandler:
                 else:
                     # 유효한 STT (>1단어) 통과 → post_echo 리셋
                     self._post_echo = False
+            # Korean Whisper append-hallucination 감지
+            if self._call and self._call.target_language.startswith("ko"):
+                # 부분 문자열 매칭: YouTube/방송 콘텐츠 잔재
+                for sub in _KO_WHISPER_APPEND_SUBSTRINGS:
+                    idx = transcript.find(sub)
+                    if idx >= 0:
+                        trimmed = transcript[:idx].rstrip()
+                        if trimmed:
+                            logger.warning("[SessionB] Whisper append trimmed at '%s': ...%s", sub, trimmed[-30:])
+                            transcript = trimmed
+                        else:
+                            # 전체가 할루시네이션
+                            logger.warning("[SessionB] Whisper append blocked: %s", transcript[:80])
+                            self._stt_blocked = True
+                            if self._call:
+                                self._call.call_metrics.hallucinations_blocked += 1
+                            if self._chat_translator:
+                                self._decrement_pending_stt()
+                            return
+                        break
+
+                # Trailing fragment 감지: 문장 종결 후 동사 어미 없는 짧은 꼬리
+                m = _KO_TRAILING_FRAGMENT_RE.search(transcript)
+                if m and not _KO_SENTENCE_ENDINGS.search(m.group(1).strip()):
+                    trimmed = transcript[:m.start() + 1].rstrip()
+                    if trimmed:
+                        logger.warning("[SessionB] Trailing fragment removed: '%s'", m.group(1).strip())
+                        transcript = trimmed
+
             self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
 
             # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
 from src.config import settings
 from src.realtime.audio_utils import ulaw_rms as _ulaw_rms
@@ -44,6 +44,7 @@ class EchoGateManager:
         echo_margin_s: float = 0.5,
         max_echo_window_s: float | None = 1.2,
         on_breakthrough: Callable[[], Coroutine] | None = None,
+        on_event: Callable[[str, str, dict], Any] | None = None,
     ):
         self._session_b = session_b
         self._local_vad = local_vad
@@ -51,6 +52,7 @@ class EchoGateManager:
         self._echo_margin_s = echo_margin_s
         self._max_echo_window_s = max_echo_window_s
         self._on_breakthrough = on_breakthrough
+        self._on_event = on_event
 
         self._in_echo_window = False
         self._settling_until: float = 0.0
@@ -111,6 +113,7 @@ class EchoGateManager:
                 elapsed,
             )
             self._settling_broken = True
+            self._fire_event("settling_break")
             self._settling_until = now + 0.1  # 100ms grace period
             self._call_metrics.settling_breakthroughs += 1
             # 에코 오염 버퍼 폐기
@@ -156,6 +159,7 @@ class EchoGateManager:
                     rms,
                 )
                 self._call_metrics.echo_gate_breakthroughs += 1
+                self._fire_event("breakthrough", rms=round(rms))
                 self._deactivate()
                 # Breakthrough 콜백: 에코 오염 버퍼 폐기
                 if self._on_breakthrough is not None:
@@ -175,11 +179,22 @@ class EchoGateManager:
 
     # --- Internal ---
 
+    def _fire_event(self, event: str, **kwargs: Any) -> None:
+        """on_event 콜백 호출 (동기 메서드에서 비동기 콜백)."""
+        if self._on_event is not None:
+            coro = self._on_event("echo_gate", event, kwargs)
+            try:
+                asyncio.create_task(coro)
+            except RuntimeError:
+                logger.debug("_fire_event called outside event loop — skipping %s", event)
+                coro.close()
+
     def _activate(self) -> None:
         """Echo window를 활성화한다."""
         if not self._in_echo_window:
             logger.info("Echo window activated — silence injection for Session B input")
             self._call_metrics.echo_suppressions += 1
+            self._fire_event("activate")
         self._in_echo_window = True
         if self._echo_cooldown_task and not self._echo_cooldown_task.done():
             self._echo_cooldown_task.cancel()
@@ -187,6 +202,7 @@ class EchoGateManager:
 
     def _deactivate(self) -> None:
         """Echo window를 즉시 해제한다."""
+        was_active = self._in_echo_window
         self._in_echo_window = False
         self._settling_until = 0.0
         self._settling_broken = False
@@ -195,6 +211,8 @@ class EchoGateManager:
             self._echo_cooldown_task = None
         self._tts_first_chunk_at = 0.0
         self._tts_total_bytes = 0
+        if was_active:
+            self._fire_event("deactivate")
 
     def _start_cooldown(self) -> None:
         """동적 cooldown 타이머를 시작한다."""
@@ -249,5 +267,10 @@ class EchoGateManager:
                 remaining_playback,
                 self._echo_margin_s,
             )
+            self._fire_event("settling_start", duration_s=round(settling_duration, 1))
+            # Settling 완료 대기 (break_settling 또는 _deactivate 시 중단/스킵)
+            await asyncio.sleep(settling_duration)
+            if not self._settling_broken:
+                self._fire_event("deactivate", total_s=round(cooldown + settling_duration, 1))
         except asyncio.CancelledError:
             pass

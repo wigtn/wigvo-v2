@@ -23,8 +23,9 @@ import pytest
 
 from src.realtime.audio_router import AudioRouter
 from src.realtime.audio_utils import _ULAW_TO_LINEAR, ulaw_rms as _ulaw_rms
+from src.realtime.pipeline.echo_gate import EchoGateManager
 from src.realtime.sessions.session_b import SessionBHandler
-from src.types import ActiveCall, CallMode
+from src.types import ActiveCall, CallMetrics, CallMode
 
 
 def _make_call(**overrides) -> ActiveCall:
@@ -456,3 +457,143 @@ class TestUlawRmsAndEnergyGate:
             await router.handle_twilio_audio(silence)
 
         router.session_b.send_recipient_audio.assert_called_once()
+
+
+class TestEchoGateOnEvent:
+    """EchoGateManager on_event 콜백 테스트 — PIPELINE_EVENT 전송 검증."""
+
+    def _make_gate(self) -> tuple[EchoGateManager, list[tuple[str, str, dict]]]:
+        """on_event 콜백이 연결된 EchoGateManager 생성."""
+        events: list[tuple[str, str, dict]] = []
+
+        async def on_event(stage: str, event: str, data: dict) -> None:
+            events.append((stage, event, data))
+
+        session_b = MagicMock()
+        session_b.clear_input_buffer = AsyncMock()
+        gate = EchoGateManager(
+            session_b=session_b,
+            local_vad=None,
+            call_metrics=CallMetrics(),
+            echo_margin_s=0.3,
+            max_echo_window_s=1.0,
+            on_event=on_event,
+        )
+        return gate, events
+
+    @pytest.mark.asyncio
+    async def test_activate_fires_event(self):
+        """Echo window 활성화 시 'activate' 이벤트 발생."""
+        gate, events = self._make_gate()
+        gate._activate()
+        await asyncio.sleep(0)  # let create_task run
+        assert len(events) == 1
+        assert events[0] == ("echo_gate", "activate", {})
+
+    @pytest.mark.asyncio
+    async def test_activate_fires_only_once(self):
+        """이미 활성 상태에서 _activate() 재호출 시 이벤트 중복 발생하지 않음."""
+        gate, events = self._make_gate()
+        gate._activate()
+        gate._activate()  # 중복 호출
+        await asyncio.sleep(0)
+        assert len(events) == 1
+
+    @pytest.mark.asyncio
+    async def test_deactivate_fires_event(self):
+        """Echo window 즉시 해제 시 'deactivate' 이벤트 발생."""
+        gate, events = self._make_gate()
+        gate._activate()
+        await asyncio.sleep(0)
+        events.clear()
+
+        gate._deactivate()
+        await asyncio.sleep(0)
+        assert len(events) == 1
+        assert events[0] == ("echo_gate", "deactivate", {})
+
+    @pytest.mark.asyncio
+    async def test_deactivate_not_fired_when_not_active(self):
+        """비활성 상태에서 _deactivate() 호출 시 이벤트 발생하지 않음."""
+        gate, events = self._make_gate()
+        gate._deactivate()
+        await asyncio.sleep(0)
+        assert len(events) == 0
+
+    @pytest.mark.asyncio
+    async def test_breakthrough_fires_event(self):
+        """Echo window 중 고에너지 오디오 → 'breakthrough' 이벤트 발생."""
+        gate, events = self._make_gate()
+        gate._activate()
+        await asyncio.sleep(0)
+        events.clear()
+
+        # 고에너지 오디오 (0x00 = max amplitude in mu-law)
+        loud_audio = bytes([0x00] * 160)
+        with patch("src.realtime.pipeline.echo_gate.settings") as mock_settings:
+            mock_settings.echo_energy_threshold_rms = 400.0
+            result = gate.filter_audio(loud_audio)
+        await asyncio.sleep(0)
+
+        # breakthrough 이벤트 + deactivate 이벤트 발생
+        stage_events = [e[1] for e in events]
+        assert "breakthrough" in stage_events
+        assert "deactivate" in stage_events
+        # breakthrough 데이터에 rms 포함
+        bt_event = next(e for e in events if e[1] == "breakthrough")
+        assert "rms" in bt_event[2]
+        # 원본 오디오 반환 (무음 아님)
+        assert result == loud_audio
+
+    @pytest.mark.asyncio
+    async def test_settling_start_fires_event(self):
+        """Cooldown 완료 후 settling 시작 시 'settling_start' 이벤트 발생."""
+        gate, events = self._make_gate()
+        gate._tts_first_chunk_at = time.time()
+        gate._tts_total_bytes = 160  # 짧은 TTS (0.02s)
+        gate._activate()
+        await asyncio.sleep(0)
+        events.clear()
+
+        with patch("src.realtime.pipeline.echo_gate.settings") as mock_settings:
+            mock_settings.echo_settling_min_s = 0.1
+            mock_settings.echo_settling_max_s = 0.5
+            mock_settings.echo_settling_tts_ratio = 0.5
+            gate._start_cooldown()
+            # Cooldown: remaining(~0) + margin(0.3) = 0.3s, capped at 1.0
+            await asyncio.sleep(0.5)
+
+        stage_events = [e[1] for e in events]
+        assert "settling_start" in stage_events
+        settling_event = next(e for e in events if e[1] == "settling_start")
+        assert "duration_s" in settling_event[2]
+
+    @pytest.mark.asyncio
+    async def test_settling_break_fires_event(self):
+        """Settling 중 발화 감지 시 'settling_break' 이벤트 발생."""
+        gate, events = self._make_gate()
+        # settling 상태 강제 설정
+        gate._settling_until = time.time() + 5.0
+        gate._settling_started_at = time.time()
+        gate._settling_broken = False
+
+        await gate.break_settling()
+        await asyncio.sleep(0)
+
+        stage_events = [e[1] for e in events]
+        assert "settling_break" in stage_events
+
+    @pytest.mark.asyncio
+    async def test_no_event_when_callback_is_none(self):
+        """on_event=None일 때 이벤트 발생하지 않음 (기존 동작 보장)."""
+        session_b = MagicMock()
+        session_b.clear_input_buffer = AsyncMock()
+        gate = EchoGateManager(
+            session_b=session_b,
+            local_vad=None,
+            call_metrics=CallMetrics(),
+        )
+        # 에러 없이 실행되어야 함
+        gate._activate()
+        gate._deactivate()
+        await asyncio.sleep(0)

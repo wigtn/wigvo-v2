@@ -25,6 +25,7 @@ export enum WsMessageType {
   GUARDRAIL_TRIGGERED = 'guardrail.triggered',
   TRANSLATION_STATE = 'translation.state',
   METRICS = 'metrics',
+  PIPELINE_EVENT = 'pipeline.event',
   ERROR = 'error',
 }
 

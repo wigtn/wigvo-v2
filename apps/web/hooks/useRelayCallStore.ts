@@ -4,6 +4,14 @@ import { create } from 'zustand';
 import type { CallMode, CaptionEntry, CommunicationMode } from '@/shared/call-types';
 import type { Call } from '@/shared/types';
 
+export interface EventLogEntry {
+  id: number;
+  timestamp: number;
+  tag: string;
+  message: string;
+  color: string;
+}
+
 export interface CallMetrics {
   session_a_latencies_ms: number[];
   session_b_e2e_latencies_ms: number[];
@@ -31,6 +39,7 @@ interface RelayCallStoreState {
   isPlaying: boolean;
   error: string | null;
   metrics: CallMetrics | null;
+  eventLog: EventLogEntry[];
 
   // Call 메타데이터 (Provider가 동기화)
   callData: Call | null;
@@ -44,6 +53,9 @@ interface RelayCallStoreState {
   sendText: ((text: string) => void) | null;
   sendTypingState: (() => void) | null;
   toggleMute: (() => void) | null;
+
+  // 액션 (Event Log)
+  addEventLog: (entry: Omit<EventLogEntry, 'id' | 'timestamp'>) => void;
 
   // 동기화
   syncState: (partial: Partial<RelayCallStoreState>) => void;
@@ -61,6 +73,7 @@ const initialState = {
   isPlaying: false,
   error: null as string | null,
   metrics: null as CallMetrics | null,
+  eventLog: [] as EventLogEntry[],
   callData: null as Call | null,
   callDataLoading: true,
   callDataError: null as string | null,
@@ -72,8 +85,20 @@ const initialState = {
   toggleMute: null as RelayCallStoreState['toggleMute'],
 };
 
+let _eventLogId = 0;
+
 export const useRelayCallStore = create<RelayCallStoreState>((set) => ({
   ...initialState,
+
+  addEventLog: (entry) => {
+    const now = Date.now();
+    set((state) => ({
+      eventLog: [
+        ...state.eventLog.slice(-99),
+        { ...entry, id: ++_eventLogId, timestamp: now },
+      ],
+    }));
+  },
 
   syncState: (partial) => set(partial),
 

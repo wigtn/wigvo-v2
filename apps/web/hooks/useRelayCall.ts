@@ -12,7 +12,18 @@ import {
 import { useRelayWebSocket } from './useRelayWebSocket';
 import { useClientVad } from './useClientVad';
 import { useWebAudioPlayer } from './useWebAudioPlayer';
-import { useRelayCallStore, type CallMetrics } from './useRelayCallStore';
+import { useRelayCallStore, type CallMetrics, type EventLogEntry } from './useRelayCallStore';
+
+// --- Pipeline Event Log helpers (module scope for stable reference) ---
+const PIPELINE_STAGE_TAG_MAP: Record<string, { tag: string; color: string }> = {
+  echo_gate: { tag: 'Echo Gate', color: 'text-orange-400' },
+  energy_gate: { tag: 'Energy Gate', color: 'text-cyan-400' },
+  silero_vad: { tag: 'Silero VAD', color: 'text-violet-400' },
+};
+
+function pushEventLog(entry: Omit<EventLogEntry, 'id' | 'timestamp'>) {
+  useRelayCallStore.getState().addEventLog(entry);
+}
 
 type CallStatus = 'idle' | 'connecting' | 'waiting' | 'connected' | 'ended';
 type TranslationState = 'idle' | 'processing' | 'done';
@@ -171,6 +182,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
 
         case WsMessageType.CALL_STATUS: {
           const status = (msg.data.status as string) ?? (msg.data.message as string);
+          pushEventLog({ tag: 'Call', message: status ?? 'unknown', color: 'text-blue-400' });
           if (status === 'ringing' || status === 'waiting') {
             setCallStatus('waiting');
           } else if (status === 'connected' || status === 'in-progress') {
@@ -194,6 +206,9 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
 
         case WsMessageType.TRANSLATION_STATE: {
           const state = msg.data.state as string;
+          if (state === 'processing' || state === 'done' || state === 'caption_done') {
+            pushEventLog({ tag: 'Session A', message: state, color: 'text-green-400' });
+          }
           if (state === 'caption_done') {
             // Session B 번역 완료 → 스트리밍 컨텍스트 리셋
             // 다음 수신자 발화 delta가 새 캡션 엔트리로 생성됨
@@ -205,6 +220,7 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
         }
 
         case WsMessageType.INTERRUPT_ALERT: {
+          pushEventLog({ tag: 'Interrupt', message: 'Recipient speaking', color: 'text-red-400' });
           // Clear playback queue when recipient is speaking
           player.clearQueue();
           break;
@@ -213,6 +229,30 @@ export function useRelayCall(communicationMode: CommunicationMode = 'voice_to_vo
         case WsMessageType.METRICS:
           useRelayCallStore.getState().syncState({ metrics: msg.data as unknown as CallMetrics });
           break;
+
+        case WsMessageType.GUARDRAIL_TRIGGERED: {
+          const level = (msg.data.level as string) ?? '';
+          pushEventLog({ tag: 'Guardrail', message: `L${level} triggered`, color: 'text-yellow-400' });
+          break;
+        }
+
+        case WsMessageType.SESSION_RECOVERY: {
+          const recoveryType = (msg.data.type as string) ?? 'unknown';
+          pushEventLog({ tag: 'Recovery', message: recoveryType, color: 'text-cyan-400' });
+          break;
+        }
+
+        case WsMessageType.PIPELINE_EVENT: {
+          const stage = msg.data.stage as string;
+          const event = msg.data.event as string;
+          const { tag, color } = PIPELINE_STAGE_TAG_MAP[stage] ?? { tag: stage, color: 'text-gray-400' };
+          const rms = msg.data.rms != null ? ` (RMS: ${msg.data.rms})` : '';
+          const peakRms = msg.data.peak_rms != null ? ` (peak: ${msg.data.peak_rms})` : '';
+          const extra = msg.data.duration_s != null ? ` ${(msg.data.duration_s as number).toFixed(1)}s` : '';
+          const totalS = msg.data.total_s != null ? ` ${(msg.data.total_s as number).toFixed(1)}s` : '';
+          pushEventLog({ tag, message: `${event}${rms}${peakRms}${extra}${totalS}`, color });
+          break;
+        }
 
         case WsMessageType.ERROR: {
           const message = (msg.data.message as string) ?? 'Unknown error';
