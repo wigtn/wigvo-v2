@@ -152,25 +152,6 @@ AudioRouter (thin delegator, ~160 lines)
 
 This isn't just code organization — it enables immediate expansion to new use cases (disability assistance, AI concierge, multi-party calls) without touching existing pipelines.
 
-### 6. What We Built vs. What We Use
-
-To be explicit about our technical boundaries:
-
-| Layer | Who Built It | WIGVO's Role |
-|-------|-------------|--------------|
-| STT + Translation + TTS | **OpenAI** (GPT-4o Realtime API + GPT-4o-mini Chat API) | Consumer — we call the API |
-| Phone network bridging | **Twilio** (Media Streams) | Consumer — we use their SIP trunking |
-| PSTN echo cancellation | **WIGVO** | Built from scratch (Silence Injection + Dynamic Cooldown) |
-| Local VAD for PSTN | **WIGVO** | Built from scratch (Silero integration + 2-stage pipeline) |
-| Dual Session architecture | **WIGVO** | Designed and implemented |
-| Pipeline Strategy system | **WIGVO** | Designed and implemented |
-| Session recovery + degraded mode | **WIGVO** | Built from scratch |
-| Guardrail system | **WIGVO** | Built from scratch |
-| Codec bridging (g711↔pcm16) | **WIGVO** | Built from scratch |
-| Full-stack product (Web + Mobile + Relay) | **WIGVO** | 7 days, 1 developer |
-
-The AI model is not ours. The phone infrastructure is not ours. **Everything between them** — the part that makes the combination actually work — is what we built.
-
 ---
 
 ## Engineering Challenges — The Hard Parts
@@ -395,38 +376,7 @@ Each communication mode is handled by a dedicated **pipeline** (Strategy pattern
 
 > *Figure 1: WIGVO System Architecture — Dual-session relay server bridging web/mobile clients, OpenAI Realtime API, and Twilio PSTN phone calls via Supabase.*
 
-```
-┌──────────────────┐         ┌───────────────────────────────┐         ┌──────────────────┐
-│                  │         │                               │         │                  │
-│   Next.js Web    │◄──WS──►│       Relay Server            │◄──WS──►│  OpenAI Realtime  │
-│   (Chat + Call   │         │       (FastAPI)               │         │  API (GPT-4o)    │
-│    Monitor)      │         │                               │         │                  │
-│                  │         │  ┌───────────┐ ┌───────────┐  │         └──────────────────┘
-└──────────────────┘         │  │ Session A │ │ Session B │  │
-                             │  │ User→Recv │ │ Recv→User │  │         ┌──────────────────┐
-┌──────────────────┐         │  └───────────┘ └───────────┘  │◄──WS──►│  Twilio Media    │
-│                  │         │                               │         │  Streams         │
-│  React Native    │◄──WS──►│  ┌───────────┐ ┌───────────┐  │         │  (Phone Bridge)  │
-│  Mobile App      │         │  │ Echo Gate │ │ Guardrail │  │         │                  │
-│  (VAD + Audio)   │         │  └───────────┘ └───────────┘  │         └──────────────────┘
-│                  │         │                               │
-└──────────────────┘         └───────────────┬───────────────┘
-                                             │
-                                    ┌────────▼────────┐
-                                    │    Supabase     │
-                                    │  PostgreSQL +   │
-                                    │  Auth + RLS     │
-                                    └─────────────────┘
-```
-
-### Why Dual Sessions?
-
-A single translation session can't handle bidirectional conversation — it confuses translation direction. WIGVO runs **two simultaneous OpenAI Realtime sessions**:
-
-- **Session A** (User → Recipient): Translates user speech into recipient's language, outputs via Twilio
-- **Session B** (Recipient → User): Captures recipient speech from Twilio, translates back to user's language
-
-This is the core architectural decision that makes real-time bidirectional phone translation possible.
+Two independent OpenAI Realtime sessions run simultaneously — **Session A** (User → Recipient) and **Session B** (Recipient → User) — because a single session confuses translation direction in bidirectional conversation.
 
 ---
 
@@ -461,27 +411,6 @@ Normal ──► Heartbeat miss ──► Reconnect (exponential backoff)
 - **Ring buffer**: 30-second circular buffer retains undelivered audio chunks
 - **Catch-up**: On reconnect, unsent audio is batch-transcribed via Whisper and re-injected
 - **Degraded mode**: After 10s failure, switches to Whisper STT + GPT-4o-mini translation
-
-### Voice Activity Detection — Multi-Level
-
-**Client-side VAD (Mobile App)**
-
-The mobile app performs Voice Activity Detection locally, sending only speech frames to the server:
-
-- RMS energy-based detection with configurable thresholds
-- State machine: `SILENT -> SPEAKING -> COMMITTED`
-- 300ms pre-speech ring buffer prevents onset clipping
-- Reduces audio data sent to OpenAI by ~40%, directly cutting costs
-
-**Server-side Local VAD (Silero + RMS)**
-
-Session B runs a local Silero neural VAD on incoming Twilio audio, replacing OpenAI's built-in Server VAD which cannot handle PSTN noise:
-
-- 2-stage pipeline: RMS energy gate (CPU-efficient) → Silero RNN (accurate)
-- Hysteresis state machine prevents rapid on/off flicker
-- 300ms debounce handles continuous speech with short inter-sentence pauses
-- Requires mu-law→PCM decoding and 8kHz→16kHz upsampling for Silero compatibility
-- **Result**: speech-end detection improved from 15-72s to 480ms
 
 ### Measured Performance
 
