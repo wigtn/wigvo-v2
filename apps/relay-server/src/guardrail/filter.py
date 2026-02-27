@@ -10,11 +10,12 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.guardrail.dictionary import get_banned_words, get_correction_map
+from src.guardrail.dictionary import get_banned_words, get_correction_map, get_threat_phrases
 
 
 class FilterCategory(str, Enum):
     PROFANITY = "profanity"          # 욕설/비속어 → Level 3
+    THREAT = "threat"                # 위협/협박/차별 → Level 3
     INFORMAL_ENDING = "informal_ending"  # 반말 어미 → Level 2
     IMPERATIVE = "imperative"        # 명령형 → Level 2
     CASUAL = "casual"                # 비격식 표현 → Level 2
@@ -35,6 +36,10 @@ class FilterResult:
     @property
     def has_profanity(self) -> bool:
         return any(m.category == FilterCategory.PROFANITY for m in self.matches)
+
+    @property
+    def has_threat(self) -> bool:
+        return any(m.category == FilterCategory.THREAT for m in self.matches)
 
     @property
     def has_informal(self) -> bool:
@@ -77,6 +82,7 @@ class TextFilter:
     def __init__(self, target_language: str = "ko"):
         self._target_language = target_language
         self._banned_words = get_banned_words(target_language)
+        self._threat_phrases = get_threat_phrases(target_language)
         self._correction_map = get_correction_map(target_language)
 
     def check(self, text: str) -> FilterResult:
@@ -88,6 +94,9 @@ class TextFilter:
 
         # 1. 금지어/욕설 매칭 (Level 3)
         self._check_profanity(text, result)
+
+        # 1b. 위협/차별 매칭 (Level 3)
+        self._check_threats(text, result)
 
         # 2. 반말 어미 매칭 (Level 2)
         if self._target_language == "ko":
@@ -108,6 +117,20 @@ class TextFilter:
                     FilterMatch(
                         category=FilterCategory.PROFANITY,
                         matched_text=word,
+                        position=idx,
+                    )
+                )
+
+    def _check_threats(self, text: str, result: FilterResult) -> None:
+        """위협/협박/차별 표현 매칭 (Level 3)."""
+        text_lower = text.lower()
+        for phrase in self._threat_phrases:
+            idx = text_lower.find(phrase.lower())
+            if idx != -1:
+                result.matches.append(
+                    FilterMatch(
+                        category=FilterCategory.THREAT,
+                        matched_text=phrase,
                         position=idx,
                     )
                 )

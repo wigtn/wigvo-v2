@@ -1153,19 +1153,23 @@ class SessionBHandler:
                     if self._chat_translator:
                         self._decrement_pending_stt()
                     return
-            # Post-echo settling 보호: settling 직후 ≤2단어 STT → 노이즈 할루시네이션
+            # Post-echo settling 보호: settling 직후 ≤1단어 STT → 노이즈 할루시네이션
             if self._post_echo:
-                words = transcript.strip().split()
-                if len(words) <= 2:
-                    logger.warning("[SessionB] Post-echo STT filtered (≤2 words): %s", transcript[:80])
+                # 3초 후 자동 해제: VAD 파편화로 영구 차단 방지
+                if self._speech_started_at > 0 and (time.time() - self._speech_started_at) > 3.0:
+                    logger.info("[SessionB] Post-echo auto-cleared (>3s since speech start)")
+                    self._post_echo = False
+                elif len(transcript.strip().split()) <= 1:
+                    logger.warning("[SessionB] Post-echo STT filtered (<=1 word): %s", transcript[:80])
                     self._stt_blocked = True
                     if self._call:
                         self._call.call_metrics.hallucinations_blocked += 1
                     if self._chat_translator:
                         self._decrement_pending_stt()
                     return
-                # 유효한 STT (>2단어) 통과 → post_echo 리셋
-                self._post_echo = False
+                else:
+                    # 유효한 STT (>1단어) 통과 → post_echo 리셋
+                    self._post_echo = False
             self._last_recipient_stt = transcript  # 번역 품질 평가용 원문 저장 (필터 통과 후)
 
             # Chat API: STT 텍스트 누적 + 모든 pending commit의 STT 수신 시 대기 해제

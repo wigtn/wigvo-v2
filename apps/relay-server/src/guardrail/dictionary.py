@@ -37,6 +37,42 @@ BANNED_WORDS: dict[str, list[str]] = {
 }
 
 
+# --- 위협/차별 사전 (Threat & Discrimination Phrases) ---
+# Level 3 trigger: 협박, 위협, 차별적 비하 표현
+# 번역기를 통해 상대방에게 전달되면 안 되는 수준의 유해 표현
+
+THREAT_PHRASES: dict[str, list[str]] = {
+    "ko": [
+        # 위협/협박
+        "죽이겠", "죽여버", "죽여줄",
+        "패버리", "때리겠", "때려버",
+        "가만 안 두", "가만 안 놔", "가만두지 않",
+        # 신고/고소 위협
+        "경찰 부를", "경찰 불러", "경찰 신고",
+        "신고하겠", "신고해버",
+        "고소하겠", "고소해버", "고발하겠",
+        # 차별적 비하 (인종/지역)
+        "짱깨", "쪽바리", "깜둥이",
+        "홍어",
+        "느금마",
+    ],
+    "en": [
+        "kill you", "beat you up",
+        "call the cops on you", "call the police on you",
+        "report you to immigration",
+        "go back to your country",
+    ],
+    "ja": [
+        "殺す", "ぶっ殺す",
+        "通報する", "警察呼ぶ",
+    ],
+    "zh": [
+        "杀了你", "打死你",
+        "报警", "举报你",
+    ],
+}
+
+
 # --- 교정 매핑 (Correction Mappings) ---
 # Level 2 trigger: 반말/비격식 → 존댓말/격식 변환
 # 이 패턴이 감지되면 비동기 교정 (TTS는 그대로 전달)
@@ -87,6 +123,11 @@ FILLER_TEXT: dict[str, str] = {
 def get_banned_words(language: str) -> list[str]:
     """특정 언어의 금지어 목록을 반환한다."""
     return BANNED_WORDS.get(language, [])
+
+
+def get_threat_phrases(language: str) -> list[str]:
+    """특정 언어의 위협/차별 표현 목록을 반환한다."""
+    return THREAT_PHRASES.get(language, [])
 
 
 def get_correction_map(language: str) -> dict[str, str]:

@@ -239,16 +239,16 @@ class TestLocalVADStateMachine:
 
     @pytest.mark.asyncio
     async def test_silero_reset_after_sustained_rms_silence(self):
-        """충분히 긴 RMS silence(5+ frames) 후 active 전환 시 Silero 리셋."""
+        """충분히 긴 RMS silence(10+ frames) 후 active 전환 시 Silero 리셋."""
         vad = self._make_vad(rms_threshold=150.0)
         vad._model.process.return_value = 0.1
         vad._model.reset = MagicMock()
 
-        # 1) 5프레임(100ms) 이상 무음 → 충분한 RMS silence
+        # 1) 10프레임(200ms) 이상 무음 → 충분한 RMS silence
         silence = bytes([0xFF] * 160)
-        for _ in range(6):
+        for _ in range(11):
             await vad.process(silence)
-        assert vad._rms_silence_frames == 6
+        assert vad._rms_silence_frames == 11
 
         # 2) 큰 소리 오디오 → Silero 리셋됨
         loud = bytes([0x00] * 160)

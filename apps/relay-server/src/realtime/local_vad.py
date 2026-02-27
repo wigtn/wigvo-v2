@@ -54,7 +54,7 @@ class LocalVAD:
     _SILERO_SAMPLE_RATE = 16000  # Silero 모델 입력 sample rate
     _INPUT_SAMPLE_RATE = 8000    # Twilio 입력 sample rate
     # Silero 리셋 전 최소 연속 RMS silence 프레임 수 (음절 간 짧은 무음에서 리셋 방지)
-    _MIN_RMS_SILENCE_FOR_RESET = 5  # 5 × 20ms = 100ms
+    _MIN_RMS_SILENCE_FOR_RESET = 10  # 10 × 20ms = 200ms (100ms 호흡에서 Silero 리셋 방지)
 
     def __init__(
         self,

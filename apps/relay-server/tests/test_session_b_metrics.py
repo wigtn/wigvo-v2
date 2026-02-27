@@ -354,18 +354,18 @@ class TestTimestampReset:
 
 
 class TestPostEchoSettlingFilter:
-    """P3: Post-echo settling 직후 ≤2단어 STT 차단 검증."""
+    """P3: Post-echo settling 직후 ≤1단어 STT 차단 검증."""
 
     @pytest.mark.asyncio
     async def test_post_echo_blocks_short_stt(self):
-        """post_echo=True 시 ≤2단어 STT가 차단된다."""
+        """post_echo=True 시 ≤1단어 STT가 차단된다."""
         call = _make_call()
         handler = _make_handler(call=call, use_local_vad=True)
 
         await handler.notify_speech_started(post_echo=True)
 
         await handler._handle_input_transcription_completed(
-            {"transcript": "Oh yes"}
+            {"transcript": "Oh"}
         )
 
         assert handler._stt_blocked is True
@@ -427,6 +427,38 @@ class TestPostEchoSettlingFilter:
 
         await handler._handle_input_transcription_completed(
             {"transcript": "예약을 하고 싶습니다 내일 저녁"}
+        )
+
+        assert handler._post_echo is False
+        assert handler._stt_blocked is False
+
+    @pytest.mark.asyncio
+    async def test_post_echo_two_words_now_passes(self):
+        """post_echo=True이어도 2단어 STT는 통과한다 (≤1 threshold)."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "Oh yes"}
+        )
+
+        assert handler._stt_blocked is False
+        assert handler._post_echo is False  # 유효 STT → 리셋
+
+    @pytest.mark.asyncio
+    async def test_post_echo_auto_clear_after_3s(self):
+        """3초 경과 후 단일 단어도 post-echo 필터를 통과한다."""
+        call = _make_call()
+        handler = _make_handler(call=call, use_local_vad=True)
+
+        await handler.notify_speech_started(post_echo=True)
+        # speech_started_at을 4초 전으로 조정
+        handler._speech_started_at = time.time() - 4.0
+
+        await handler._handle_input_transcription_completed(
+            {"transcript": "여보세요"}
         )
 
         assert handler._post_echo is False

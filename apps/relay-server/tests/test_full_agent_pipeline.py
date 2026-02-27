@@ -214,8 +214,11 @@ class TestFullAgentFeedbackIntegration:
         router.session_a.mark_generating.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_mark_generating_after_forward(self):
-        """forward 후 session_a.mark_generating()이 호출된다."""
+    async def test_mark_generating_delegated_to_send_user_text(self):
+        """forward 시 mark_generating()은 send_user_text() 내부에서 호출된다.
+
+        full_agent에서 직접 호출하지 않음 — session_a.send_user_text()가 책임.
+        """
         router = _make_router()
         router.session_a = MagicMock()
         router.session_a.is_generating = False
@@ -224,7 +227,10 @@ class TestFullAgentFeedbackIntegration:
 
         await router._on_recipient_turn_complete("recipient", "test reply")
 
-        router.session_a.mark_generating.assert_called_once()
+        router.session_a.send_user_text.assert_called_once()
+        # mark_generating은 send_user_text 내부에서 호출되므로
+        # mock된 send_user_text에서는 호출되지 않음
+        router.session_a.mark_generating.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_context_manager_updated_on_turn(self):

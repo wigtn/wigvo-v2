@@ -158,22 +158,25 @@ class SessionAHandler:
         """Client VAD가 발화 종료를 감지하면 오디오를 커밋한다.
 
         commit_audio()가 내부적으로 response.create를 호출하므로 mark_generating() 처리.
+        mark_generating()을 commit_audio() 전에 호출하여 race condition 방지:
+        OpenAI가 극히 빠르게 응답 시 _response_expected=False 상태에서 delta 도착 차단.
         """
         self._user_input_at = time.time()
         self._audio_committed_at = time.time()
         # 이전 턴의 대화 아이템 삭제 → GPT-4o가 현재 오디오에만 집중
         await self._prune_conversation_items(keep_last=self._context_prune_keep)
-        await self.session.commit_audio()
         self.mark_generating()
+        await self.session.commit_audio()
 
     async def send_user_text(self, text: str) -> None:
         """User 텍스트를 Session A에 전달 (Agent Mode / Push-to-Talk).
 
         send_text()가 내부적으로 response.create를 호출하므로 mark_generating() 처리.
+        mark_generating()을 send_text() 전에 호출하여 race condition 방지.
         """
         self._user_input_at = time.time()
-        await self.session.send_text(text)
         self.mark_generating()
+        await self.session.send_text(text)
 
     def mark_user_input(self) -> None:
         """User 입력 시점을 기록한다 (Text 모드에서 파이프라인이 호출)."""

@@ -136,7 +136,7 @@ class GuardrailChecker:
 
         filter_result = self._text_filter.check(text)
 
-        if filter_result.has_profanity:
+        if filter_result.has_profanity or filter_result.has_threat:
             level = GuardrailLevel.LEVEL_3
         elif filter_result.has_informal:
             level = GuardrailLevel.LEVEL_2
@@ -191,7 +191,7 @@ class GuardrailChecker:
         """텍스트를 분석하여 Guardrail Level을 결정한다."""
         filter_result = self._text_filter.check(text)
 
-        if filter_result.has_profanity:
+        if filter_result.has_profanity or filter_result.has_threat:
             return GuardrailLevel.LEVEL_3
         elif filter_result.has_informal:
             return GuardrailLevel.LEVEL_2

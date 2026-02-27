@@ -58,24 +58,31 @@ class ConversationContextManager:
             lines.append(f"{label}: {turn['text']}")
         return "\n".join(lines)
 
-    async def inject_context(self, session: RealtimeSession) -> None:
+    async def inject_context(
+        self, session: RealtimeSession, input_mode: str = "audio"
+    ) -> None:
         """OpenAI 세션에 컨텍스트를 conversation.item.create로 주입한다.
 
         session.update를 사용하지 않는 이유: 세션 전체 설정을 리셋하기 때문.
         conversation.item.create는 기존 세션 상태를 유지하면서 아이템만 추가한다.
+
+        Args:
+            session: OpenAI Realtime 세션
+            input_mode: 입력 모드 ("audio" 또는 "text")
         """
         context = self.format_context()
         if not context:
             return
 
+        input_label = "audio you hear" if input_mode == "audio" else "text you receive"
         await session.send_context_item(
             f"[Previous conversation for reference ONLY]\n{context}\n"
-            f"[WARNING: Translate ONLY the actual audio you hear next. "
-            f"If the audio is unclear, noisy, or silent, you MUST output [unclear]. "
-            f"Generating a contextually logical response when audio is unclear is STRICTLY FORBIDDEN. "
+            f"[WARNING: Translate ONLY the actual {input_label} next. "
+            f"If the {input_mode} is unclear, noisy, or silent, you MUST output [unclear]. "
+            f"Generating a contextually logical response when {input_mode} is unclear is STRICTLY FORBIDDEN. "
             f"Do NOT guess or infer what was probably said.]"
         )
-        logger.debug("Context injected: %d turns", len(self._turns))
+        logger.debug("Context injected: %d turns (input_mode=%s)", len(self._turns), input_mode)
 
     @property
     def turn_count(self) -> int:

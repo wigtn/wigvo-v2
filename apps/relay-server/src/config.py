@@ -104,8 +104,8 @@ class Settings(BaseSettings):
     local_vad_rms_threshold: float = 200.0  # PSTN 배경 소음(50-200) 위로 설정하여 오감지 방지
     local_vad_speech_threshold: float = 0.5  # 0.5→0.8→0.5: 작은 목소리 감지 개선 (RMS 500~1000 + Silero 0.5~0.7 구간)
     local_vad_silence_threshold: float = 0.35
-    local_vad_min_speech_frames: int = 3    # 3 × 32ms = 96ms (할루시네이션 방지: 짧은 노이즈 무시)
-    local_vad_min_silence_frames: int = 15  # 15 × 32ms = 480ms
+    local_vad_min_speech_frames: int = 5    # 5 × 32ms = 160ms (96ms는 노이즈 버스트 오감지, 160ms로 발화 onset 안정 확보)
+    local_vad_min_silence_frames: int = 25  # 25 × 32ms = 800ms (인트라-문장 쉼 200-500ms 무시, 진짜 발화 종료 1-3s만 감지)
 
     # 클라이언트 측 오디오 에너지 게이트 (무음/소음 필터링)
     # 에너지 게이트: 임계값 이하 오디오를 silence로 교체하여 VAD에 전달

@@ -459,7 +459,7 @@ class TestTextToVoiceContextHallucination:
         async def mock_prune():
             call_order.append("prune")
 
-        async def mock_inject(session):
+        async def mock_inject(session, **kwargs):
             call_order.append("inject")
 
         router.session_a.prune_before_response = mock_prune
