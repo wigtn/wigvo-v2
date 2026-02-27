@@ -50,6 +50,9 @@ class FirstMessageHandler:
             logger.debug("Waiting for Session A to finish before sending greeting...")
             await self.session_a.wait_for_done(timeout=3.0)
 
+        # 시스템 생성 메시지 플래그 — transcript에 role="assistant"로 저장
+        self.session_a._system_message_pending = True
+
         if self.call.mode == CallMode.AGENT:
             # Agent mode: AI가 자연스럽게 대화를 시작하도록 지시
             instruction = (

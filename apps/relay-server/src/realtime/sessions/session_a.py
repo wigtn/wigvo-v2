@@ -93,6 +93,8 @@ class SessionAHandler:
 
         # 번역 품질 평가용: User STT 원문 임시 저장
         self._last_user_stt: str = ""
+        # 시스템 생성 메시지 (첫 인사말 등) — transcript에 role="assistant"로 저장
+        self._system_message_pending: bool = False
 
         # Anti-Hallucination: 대화 아이템 트래킹 + 프루닝
         # 매 턴 시작 전 이전 턴의 아이템을 삭제하여 GPT-4o가 오디오에만 집중하도록 함
@@ -295,18 +297,31 @@ class SessionAHandler:
 
         logger.info("[SessionA] Translation complete: %s", transcript[:80])
 
-        # 양방향 transcript 저장 (Session A: user 발화 → 번역)
-        # original_text: User STT 원문 (source lang), translated_text: 번역 출력 (target lang)
+        # 양방향 transcript 저장
         if self._call:
-            self._call.transcript_bilingual.append(
-                TranscriptEntry(
-                    role="user",
-                    original_text=self._last_user_stt or transcript,
-                    translated_text=transcript,
-                    language=self._call.source_language,
-                    timestamp=time.time(),
+            if self._system_message_pending:
+                # 시스템 생성 메시지 (첫 인사말 등) — user 발화가 아님
+                self._call.transcript_bilingual.append(
+                    TranscriptEntry(
+                        role="assistant",
+                        original_text=transcript,
+                        translated_text=transcript,
+                        language=self._call.target_language,
+                        timestamp=time.time(),
+                    )
                 )
-            )
+                self._system_message_pending = False
+            else:
+                # User 발화 → 번역
+                self._call.transcript_bilingual.append(
+                    TranscriptEntry(
+                        role="user",
+                        original_text=self._last_user_stt or transcript,
+                        translated_text=transcript,
+                        language=self._call.source_language,
+                        timestamp=time.time(),
+                    )
+                )
             self._last_user_stt = ""  # 사용 후 초기화
 
         # 대화 컨텍스트 콜백
