@@ -48,6 +48,7 @@ apps/*/.trigger
 
 # Internal docs (not for reviewers)
 apps/docs/
+docs/
 docs/architecture/
 docs/paper/references/
 docs/paper/data/
