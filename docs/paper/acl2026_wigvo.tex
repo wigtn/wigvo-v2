@@ -76,7 +76,7 @@ Vapi / Bland & \checkmark & $\times$ & $\times$ & N/D & $\times$ \\
 \textbf{WIGVO} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
 \bottomrule
 \end{tabular}
-\caption{Comparison with existing systems. PSTN: works over telephone network; Bidir.: bidirectional translation; S2S: automated speech-to-speech (not human-mediated); Echo: handles telephony echo; A11y: accessibility-oriented modes (e.g., T2V for speech anxiety, captions for hearing impairments). N/D: not disclosed.}
+\caption{\textbf{Comparison with existing systems.} PSTN: works over telephone network; Bidir.: bidirectional translation; S2S: automated speech-to-speech (not human-mediated); Echo: handles telephony echo; A11y: accessibility-oriented modes (e.g., T2V for speech anxiety, captions for hearing impairments). N/D: not disclosed.}
 \label{tab:comparison}
 \end{table}
 
@@ -87,7 +87,7 @@ Figure~\ref{fig:architecture} shows the high-level architecture. A browser clien
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{figures/figure1_architecture}
-  \caption{WIGVO system architecture. Session~A (red) translates user speech and outputs G.711 directly to Twilio; Session~B (blue) receives PSTN audio through a 3-stage filter pipeline (Echo Gate $\to$ Energy Gate $\to$ Silero VAD). A dashed control signal from Session~A activates the Echo Gate in Session~B's filter pipeline, preventing feedback loops by injecting $\mu$-law silence during TTS playback.}
+  \caption{\textbf{WIGVO system architecture.} Session~A (red) translates user speech and outputs G.711 directly to Twilio; Session~B (blue) receives PSTN audio through a 3-stage filter pipeline (Echo Gate $\to$ Energy Gate $\to$ Silero VAD). A dashed control signal from Session~A activates the Echo Gate in Session~B's filter pipeline, preventing feedback loops by injecting $\mu$-law silence during TTS playback.}
   \label{fig:architecture}
 \end{figure*}
 
@@ -105,7 +105,7 @@ PSTN audio entering Session~B passes through a 3-stage filter pipeline (Figure~\
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figures/figure2_pipeline}
-  \caption{PSTN audio processing pipeline. (A)~Three-stage filter between Twilio input and Session~B. (B)~Temporal behavior: during TTS playback, the Echo Gate replaces audio with $\mu$-law silence while Stages~1--2 are suppressed; after settling, Stage~0 becomes transparent and Stages~1--2 filter PSTN noise.}
+  \caption{\textbf{PSTN audio processing pipeline.} (A)~Three-stage filter between Twilio input and Session~B. (B)~Temporal behavior: during TTS playback, the Echo Gate replaces audio with $\mu$-law silence while Stages~1--2 are suppressed; after settling, Stage~0 becomes transparent and Stages~1--2 filter PSTN noise.}
   \label{fig:pipeline}
 \end{figure}
 
@@ -149,7 +149,7 @@ Table~\ref{tab:latency} reports latency statistics across the 148 instrumented c
     First message (ms) & 2{,}081 & 1{,}248 & 5{,}751 & --- & 148 \\
     \bottomrule
   \end{tabular}
-  \caption{Translation latency across 148 instrumented calls (Feb 23--27). Session~A: caller$\to$callee (ASR+translate+TTS). Session~B: callee$\to$caller, decomposed into STT (Whisper) and translation components. $N$ varies by metric scope; $^{*}$STT and Translation $N{=}525$ reflects paired turns with both measurements (139 misaligned turns skipped). Translation latency reflects Chat API (GPT-4o-mini) for T2V/Agent modes and Realtime API for V2V mode.}
+  \caption{\textbf{Translation latency across 148 instrumented calls.} (Feb 23--27). Session~A: caller$\to$callee (ASR+translate+TTS). Session~B: callee$\to$caller, decomposed into STT (Whisper) and translation components. $N$ varies by metric scope; $^{*}$STT and Translation $N{=}525$ reflects paired turns with both measurements (139 misaligned turns skipped). Translation latency reflects Chat API (GPT-4o-mini) for T2V/Agent modes and Realtime API for V2V mode.}
   \label{tab:latency}
 \end{table}
 
@@ -158,7 +158,7 @@ Session~A achieves 555\,ms median latency, within the range for interactive comm
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{figures/figure3_latency_histogram}
-  \caption{End-to-end latency distributions for Session~A (caller$\to$callee, $N{=}739$ turns) and Session~B (callee$\to$caller, $N{=}683$ turns) over live PSTN calls.}
+  \caption{\textbf{End-to-end latency distributions.} Session~A (caller$\to$callee, $N{=}739$ turns) and Session~B (callee$\to$caller, $N{=}683$ turns) over live PSTN calls.}
   \label{fig:latency}
 \end{figure*}
 
@@ -179,7 +179,7 @@ Across the 148 instrumented calls (220.2 minutes total), WIGVO consumed 1{,}870{
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figures/figure4_utterance_scatter}
-  \caption{Utterance length (characters) vs.\ Session~B E2E latency. Pearson $r=0.333$ ($p < 0.001$), indicating that longer recipient utterances incur higher ASR-dominated latency.}
+  \caption{\textbf{Utterance length vs.\ Session~B E2E latency.} Pearson $r=0.333$ ($p < 0.001$), indicating that longer recipient utterances incur higher ASR-dominated latency.}
   \label{fig:scatter}
 \end{figure}
 
@@ -200,7 +200,7 @@ Table~\ref{tab:translation} reports BLEU~\citep{papineni_bleu_2002}, chrF2++~\ci
     ko$\to$en & 521 & 17.4 & 27.8 & 0.6242 \\
     \bottomrule
   \end{tabular}
-  \caption{Translation quality against Gemini~2.5 Flash offline references. COMET (\texttt{wmt22-comet-da}) is a neural metric trained on human judgments; higher is better (max 1.0).}
+  \caption{\textbf{Translation quality against Gemini~2.5 Flash offline references.} COMET (\texttt{wmt22-comet-da}) is a neural metric trained on human judgments; higher is better (max 1.0).}
   \label{tab:translation}
 \end{table}
 
@@ -229,7 +229,7 @@ Table~\ref{tab:baseline} contextualizes WIGVO's latency; no existing system perf
     \textbf{WIGVO} SB & \textbf{PSTN} & \checkmark & \textbf{2{,}684\,ms P50} \\
     \bottomrule
   \end{tabular}
-  \caption{Latency comparison with related systems. AL: Average Lagging; LAAL: Length-Adaptive AL. $\dagger$: full-duplex but monolingual (no translation). $\ddagger$: monolingual voice agent (no cross-lingual). $*$: vendor-reported; independent reviews report higher values. N/D: not disclosed. Bidir.: bidirectional cross-lingual translation.}
+  \caption{\textbf{Latency comparison with related systems.} AL: Average Lagging; LAAL: Length-Adaptive AL. $\dagger$: full-duplex but monolingual (no translation). $\ddagger$: monolingual voice agent (no cross-lingual). $*$: vendor-reported; independent reviews report higher values. N/D: not disclosed. Bidir.: bidirectional cross-lingual translation.}
   \label{tab:baseline}
 \end{table}
 
@@ -244,7 +244,7 @@ The current evaluation covers Korean--English only; the modular cascade architec
 \begin{figure}[t]
   \centering
   \includegraphics[width=\columnwidth]{figures/figure5_screenshot_call}
-  \caption{WIGVO web interface during a V2V call. Left: chat and caption view with bidirectional translations. Right: call status, duration, and mode indicator.}
+  \caption{\textbf{WIGVO web interface during a V2V call.} Left: chat and caption view with bidirectional translations. Right: call status, duration, and mode indicator.}
   \label{fig:screenshot}
 \end{figure}
 

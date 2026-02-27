@@ -11,14 +11,14 @@ Real-time bidirectional voice translation over actual phone calls.
 No apps needed on the recipient's end. Just call.
 
 *From zero to working PSTN bidirectional translation calls in 7 days.*
-*265+ tests. Production-deployed on Google Cloud Run.*
+*430+ tests. Production-deployed on Google Cloud Run.*
 
 <br />
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-wigvo.run-0F172A?style=for-the-badge&logo=google-cloud&logoColor=white)](https://wigvo.run)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#tech-stack)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#tech-stack)
-[![Tests](https://img.shields.io/badge/Tests-265+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-430+_passing-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br />
 
@@ -351,6 +351,14 @@ A Pearson-correlation-based per-chunk echo detector was the first approach attem
 
 ## How It Works
 
+<div align="center">
+<img src="docs/paper/figures/figure5_screenshot_call.png" alt="WIGVO Call Interface" width="80%" />
+<br />
+<em>Active call interface — real-time bilingual captions with chat history and call controls</em>
+</div>
+
+<br />
+
 ### For the User (Web App)
 
 ```
@@ -475,6 +483,38 @@ Session B runs a local Silero neural VAD on incoming Twilio audio, replacing Ope
 - Requires mu-law→PCM decoding and 8kHz→16kHz upsampling for Silero compatibility
 - **Result**: speech-end detection improved from 15-72s to 480ms
 
+### Measured Performance
+
+Production metrics from **208 instrumented calls** (437 total) across Voice-to-Voice, Text-to-Voice, and Agent modes:
+
+<div align="center">
+<img src="docs/paper/figures/figure3_latency_histogram.png" alt="Latency Distribution" width="85%" />
+<br />
+<em>Figure 3: Session A (user→recipient) and Session B (recipient→user) latency distribution. Session A achieves P50=561ms thanks to OpenAI Realtime's integrated STT+Translation+TTS. Session B P50=2532ms reflects the additional VAD processing + PSTN audio pipeline.</em>
+</div>
+
+<br />
+
+<div align="center">
+<img src="docs/paper/figures/figure4_utterance_scatter.png" alt="Utterance Length vs Latency" width="85%" />
+<br />
+<em>Figure 4: Recipient utterance character length vs. end-to-end latency (Pearson r=0.374, N=1009 turns). Short utterances (<=30 chars) achieve P50=2316ms; longer utterances (100+ chars) show P50=10384ms due to increased STT processing time.</em>
+</div>
+
+<br />
+
+| Metric | Value |
+|--------|-------|
+| Session A (User→Recipient) P50 / P95 | **561ms** / 1134ms |
+| Session B (Recipient→User) P50 / P95 | **2532ms** / 10083ms |
+| STT share of Session B E2E | 83.7% |
+| First message latency P50 | 1189ms |
+| Echo gate activations per call | 6.4 |
+| VAD false triggers per call | 1.8 |
+| Hallucinations blocked | 115 total |
+| Call completion rate | 95.3% (recent) |
+| Cost per minute | $0.27–0.30 |
+
 ---
 
 ## Tech Stack
@@ -533,7 +573,7 @@ apps/
 │   │   ├── tools/                   # Agent Mode function calling
 │   │   ├── prompt/                  # System prompt templates + generator
 │   │   └── db/                      # Supabase client
-│   ├── tests/                       # 265+ pytest unit tests
+│   ├── tests/                       # 430+ pytest unit tests
 │   │   ├── component/              # Module benchmarks (cost tracking, ring buffer perf)
 │   │   ├── integration/            # Server-required tests (API, WebSocket)
 │   │   ├── e2e/                    # End-to-end call tests (Twilio + OpenAI required)
@@ -637,7 +677,7 @@ ngrok http 8000               # Copy URL to .env RELAY_SERVER_URL
 ### Testing
 
 ```bash
-# Unit tests (265+ tests, no server needed)
+# Unit tests (430+ tests, no server needed)
 cd apps/relay-server
 uv run pytest -v
 
@@ -667,6 +707,75 @@ gcloud builds submit --config=cloudbuild.yaml
 |---------|-----------|-----------|
 | Relay Server | `apps/relay-server/Dockerfile` | Auto-scaling, WebSocket support |
 | Web App | `apps/web/Dockerfile` | Next.js standalone output |
+
+---
+
+## Appendix: Production Metrics (since 2026-02-23)
+
+Real-world call data from production deployment on Google Cloud Run. Data collected via `scripts/eval/` from Supabase.
+
+### Overview
+
+| Metric | Value |
+|--------|-------|
+| Total calls | 169 |
+| Instrumented (with metrics) | 162 |
+| Completion rate | 95.3% (161/169) |
+| Total duration | 241.4 min |
+| Total cost | $64.71 |
+| Avg cost per call | $0.40 |
+
+### Mode Distribution
+
+| Mode | Calls | % | SA P50 | SB P50 |
+|------|------:|--:|-------:|-------:|
+| **Text-to-Voice** | 116 | 68.6% | 487ms | 2557ms |
+| **Voice-to-Voice** | 52 | 30.8% | 603ms | 2476ms |
+| **Agent** | 1 | 0.6% | — | — |
+
+### Latency Breakdown
+
+| Component | P50 | P95 | Mean | N |
+|-----------|----:|----:|-----:|--:|
+| **Session A** (User→Recipient) | 557ms | 1156ms | 617ms | 814 turns |
+| **Session B E2E** (Recipient→User) | 2868ms | 15482ms | 3997ms | 744 turns |
+| Session B STT only | 2675ms | 15547ms | 3868ms | 744 turns |
+| Session B Translation only | 104ms | 1934ms | 535ms | 585 turns |
+| First message latency | 1215ms | 6890ms | 2081ms | 162 calls |
+| Speech duration | 1640ms | 5073ms | 2168ms | — |
+
+### Utterance Length vs. Latency
+
+| Char Length | N | P50 | P95 | Mean |
+|------------|--:|----:|----:|-----:|
+| ≤30 chars | 565 | 2502ms | 6511ms | 3119ms |
+| 31–60 chars | 132 | 4713ms | 15692ms | 5860ms |
+| 61–100 chars | 32 | 7596ms | 18402ms | 8922ms |
+| 100+ chars | 15 | 11100ms | 18716ms | 10185ms |
+
+*Pearson r = 0.400 (char length vs. SB latency)*
+
+### Echo & VAD Performance
+
+| Metric | Total | Per Call |
+|--------|------:|---------:|
+| Echo gate activations | 1128 | 7.0 |
+| Echo gate breakthroughs (recipient interrupt) | 358 | 2.2 |
+| Settling breakthroughs | 20 | 0.1 |
+| VAD false triggers | 286 | 1.8 |
+| Hallucinations blocked | 109 | 0.7 |
+| Interrupts | 21 | 0.1 |
+| Guardrail L2 / L3 | 148 / 0 | — |
+
+### Cost per Minute (by Mode, Cumulative)
+
+| Mode | Calls | Cost/min |
+|------|------:|---------:|
+| Voice-to-Voice | 67 | $0.3028 |
+| Text-to-Voice | 138 | $0.2943 |
+| Agent | 3 | $0.2991 |
+
+*Cost based on OpenAI Realtime API (audio input $0.06/1K, audio output $0.24/1K) + GPT-4o-mini Chat API for T2V/Agent translation.*
 
 ---
 
