@@ -84,7 +84,7 @@ Vapi / Bland & \checkmark & $\times$ & $\times$ & N/D & $\times$ \\
 
 \section{System Architecture and Echo Gating}
 
-Figure~\ref{fig:architecture} shows the high-level architecture. A browser client connects to the relay server via WebSocket, sending 24\,kHz PCM audio. The relay manages two independent Realtime LLM sessions and a Twilio telephony gateway~\citep{twilio_media_streams_2024}. An \texttt{AudioRouter} dispatches events to one of three pipelines---V2V (streaming ASR+TTS in both directions), T2V (typed text to TTS for the callee, speech-to-captions for the caller), and Full-Agent (autonomous call management)---via the Strategy pattern.
+Figure~\ref{fig:architecture} shows the high-level architecture. A browser client connects to the relay server via WebSocket, sending 16\,kHz PCM audio. The relay manages two independent Realtime LLM sessions and a Twilio telephony gateway~\citep{twilio_media_streams_2024}. An \texttt{AudioRouter} dispatches events to one of three pipelines---V2V (streaming ASR+TTS in both directions), T2V (typed text to TTS for the callee, speech-to-captions for the caller), and Full-Agent (autonomous call management)---via the Strategy pattern.
 
 \begin{figure*}[t]
   \centering
@@ -112,7 +112,7 @@ PSTN audio entering Session~B passes through a 3-stage filter pipeline (Figure~\
 \end{figure}
 
 \paragraph{Stage~0: Echo Gate.}
-When Session~A begins streaming TTS, an \emph{echo window} is activated (duration estimated from byte length, capped at 1.2\,s). Incoming PSTN audio is replaced with $\mu$-law silence (0xFF) before forwarding to Session~B. A 0.3\,s dynamic cooldown (0.5\,s for T2V) accounts for PSTN jitter, followed by a 2.0\,s post-echo settling window that suppresses AGC recovery noise while permitting high-energy breakthrough ($\geq$400 RMS) for genuine callee speech.
+When Session~A begins streaming TTS, an \emph{echo window} is activated (duration estimated from byte length, capped at 1.2\,s). Incoming PSTN audio is replaced with $\mu$-law silence (0xFF) before forwarding to Session~B. A 0.3\,s dynamic cooldown (0.5\,s for T2V) accounts for PSTN jitter, followed by a dynamic post-echo settling window (TTS duration $\times$ 0.3, clamped to 0.5--1.5\,s) that suppresses AGC recovery noise while permitting high-energy breakthrough ($\geq$400 RMS) for genuine callee speech.
 
 \paragraph{Stage~1: RMS Energy Gate.}
 During echo windows (Figure~\ref{fig:pipeline}B), only signals $\geq$400 RMS break through as genuine speech; typical echo energy (100--400 RMS) remains suppressed. Outside echo windows, a 150~RMS threshold filters line noise. A three-level interrupt priority (callee $>$ caller $>$ AI TTS) enables natural turn-taking.
@@ -172,7 +172,7 @@ Figure~\ref{fig:scatter} shows the correlation between utterance length and Sess
 
 \subsection{Echo and Safety}
 
-Across the 148 instrumented calls, the echo gate activated 1{,}046 times (7.1/call), corresponding to TTS playback events. Critically, we observed \textbf{zero echo-induced translation loops}, whereas early prototypes without gating reliably produced such loops. The echo gate permitted 354 callee interruptions during active TTS playback (gate break), confirming that the energy-based override preserves natural turn-taking. Additionally, 17 settling breakthroughs demonstrate that the conditional VAD activation (Section~3.2) successfully detects genuine speech during the post-echo settling period. A minimum speech duration filter (480\,ms hysteresis) mitigated VAD false triggers to 277 total (1.9/call). The guardrail module blocked 100 hallucinated outputs (0.68/call), including broadcast-style phrases from Whisper on low-energy input and structural noise patterns (consonant-only sequences, repetitive tokens).
+Across the 148 instrumented calls, the echo gate activated 1{,}046 times (7.1/call), corresponding to TTS playback events. Critically, we observed zero echo-induced translation loops, whereas early prototypes without gating reliably produced such loops. The echo gate permitted 354 callee interruptions during active TTS playback (gate break), confirming that the energy-based override preserves natural turn-taking. Additionally, 17 settling breakthroughs demonstrate that the conditional VAD activation (Section~3.2) successfully detects genuine speech during the post-echo settling period. A minimum speech duration filter (480\,ms hysteresis) mitigated VAD false triggers to 277 total (1.9/call). The guardrail module blocked 100 hallucinated outputs (0.68/call), including broadcast-style phrases from Whisper on low-energy input and structural noise patterns (consonant-only sequences, repetitive tokens).
 
 \subsection{Cost}
 
