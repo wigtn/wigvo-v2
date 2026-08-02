@@ -1,9 +1,17 @@
-name: wigvo-v2
+# 데모 스택 (v2). 제품 스택(wigvo-product 레포)과 완전히 분리해서 돌린다.
+# 프로젝트명·컨테이너명·포트·볼륨이 전부 달라야 한 머신에서 공존한다.
+#
+#            데모(이 파일)         제품(wigvo-product)
+#   postgres  10211                10201
+#   relay     10112                10102
+#   web(API)  10311                10301
+#   공개 호스트 wigvo-v2-api        wigvo-api
+name: wigvo-demo
 
 services:
-  wigvo-postgres:
+  wigvo-demo-postgres:
     image: postgres:16
-    container_name: wigvo-postgres
+    container_name: wigvo-demo-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wigvo}
@@ -11,9 +19,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-wigvo}
       TZ: UTC
     ports:
-      - "127.0.0.1:10201:5432"
+      - "127.0.0.1:10211:5432"
     volumes:
-      - wigvo-pgdata:/var/lib/postgresql/data
+      - wigvo-demo-pgdata:/var/lib/postgresql/data
       - ./scripts/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wigvo} -d ${POSTGRES_DB:-wigvo}"]
@@ -21,25 +29,28 @@ services:
       timeout: 5s
       retries: 20
 
-  wigvo-relay:
+  wigvo-demo-relay:
     platform: linux/amd64
     build:
       context: apps/relay-server
       dockerfile: Dockerfile
-    container_name: wigvo-relay
+    container_name: wigvo-demo-relay
     restart: unless-stopped
     env_file:
       - .env
     environment:
       PORT: "8080"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wigvo}:${POSTGRES_PASSWORD}@wigvo-postgres:5432/${POSTGRES_DB:-wigvo}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wigvo}:${POSTGRES_PASSWORD}@wigvo-demo-postgres:5432/${POSTGRES_DB:-wigvo}
     ports:
-      - "10102:8080"
+      - "10112:8080"
     depends_on:
-      wigvo-postgres:
+      wigvo-demo-postgres:
         condition: service_healthy
 
-  wigvo-web:
+  # 화면은 Vercel이 그린다. 이 컨테이너는 DB를 만지는 /api/* 라우트만
+  # 실행한다. API_PROXY_ORIGIN을 여기에 넣으면 자기 자신에게 프록시하는
+  # 무한 루프가 되므로 절대 넣지 말 것 — 그 값은 Vercel에만 있어야 한다.
+  wigvo-demo-data-api:
     build:
       context: apps/web
       dockerfile: Dockerfile
@@ -48,21 +59,21 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         NEXT_PUBLIC_RELAY_WS_URL: ${NEXT_PUBLIC_RELAY_WS_URL}
         NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
-    container_name: wigvo-web
+    container_name: wigvo-demo-data-api
     restart: unless-stopped
     env_file:
       - .env
     environment:
       PORT: "3000"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wigvo}:${POSTGRES_PASSWORD}@wigvo-postgres:5432/${POSTGRES_DB:-wigvo}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wigvo}:${POSTGRES_PASSWORD}@wigvo-demo-postgres:5432/${POSTGRES_DB:-wigvo}
       # Server-side relay calls go via docker DNS, not the public URL.
-      RELAY_SERVER_URL: http://wigvo-relay:8080
+      RELAY_SERVER_URL: http://wigvo-demo-relay:8080
     ports:
-      - "10301:3000"
+      - "10311:3000"
     depends_on:
-      wigvo-postgres:
+      wigvo-demo-postgres:
         condition: service_healthy
 
 volumes:
-  wigvo-pgdata:
-    name: wigvo-pgdata
+  wigvo-demo-pgdata:
+    name: wigvo-demo-pgdata
