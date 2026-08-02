@@ -68,6 +68,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-wigvo}:${POSTGRES_PASSWORD}@wigvo-demo-postgres:5432/${POSTGRES_DB:-wigvo}
       # Server-side relay calls go via docker DNS, not the public URL.
       RELAY_SERVER_URL: http://wigvo-demo-relay:8080
+      # 주석에만 의존하지 않도록 여기서 강제로 비운다. env_file(.env)에 실수로
+      # 값이 들어가도 이 줄이 이긴다. 값이 살아 있으면 Next가 /api/*를 공개
+      # 호스트로 되보내고 nginx가 다시 이 컨테이너로 보내 무한 루프가 된다.
+      API_PROXY_ORIGIN: ""
     ports:
       - "10311:3000"
     depends_on:
